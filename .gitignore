@@ -47,6 +47,7 @@ yarn-error.log*
 
 # Claude Code (user-specific)
 .claude/
+CLAUDE.md
 
 # Planning docs (internal)
 /planning/
