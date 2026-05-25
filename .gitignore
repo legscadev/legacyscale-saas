@@ -48,6 +48,9 @@ yarn-error.log*
 # Claude Code (user-specific)
 .claude/
 
+# Planning docs (internal)
+/planning/
+
 # Prisma
 prisma/*.db
 prisma/*.db-journal
