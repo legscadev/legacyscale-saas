@@ -14,10 +14,10 @@ async function main() {
 
   // Create admin user (matches Supabase Auth user)
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@legacyscale.co' },
+    where: { email: 'ruel@legacyscale.co' },
     update: {},
     create: {
-      email: 'admin@legacyscale.co',
+      email: 'ruel@legacyscale.co',
       name: 'Keanu Vasquez',
       role: 'ADMIN',
       isActive: true,
