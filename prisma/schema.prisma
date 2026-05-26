@@ -1,0 +1,325 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LessonType {
+  VIDEO
+  QUIZ
+  RESOURCE
+}
+
+enum LessonStatus {
+  DRAFT
+  PROCESSING
+  READY
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum EnrollmentStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum EnrollmentSource {
+  MANUAL
+  GHL_WEBHOOK
+  ADMIN
+  SELF_ENROLL
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  authId        String?   @unique @map("auth_id") // Supabase auth.users.id
+  email         String    @unique
+  name          String?
+  avatarUrl     String?   @map("avatar_url")
+  role          Role      @default(MEMBER)
+  isActive      Boolean   @default(true) @map("is_active")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  // Relations
+  enrollments       Enrollment[]
+  lessonProgress    LessonProgress[]
+  quizAttempts      QuizAttempt[]
+  notes             Note[]
+  announcementReads AnnouncementRead[]
+
+  @@index([role])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// ============================================
+// COURSE STRUCTURE
+// ============================================
+
+model Course {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?
+  thumbnailUrl String?      @map("thumbnail_url")
+  status       CourseStatus @default(DRAFT)
+  orderIndex   Int          @default(0) @map("order_index")
+  accessDays   Int?         @map("access_days") // null = forever
+  publishedAt  DateTime?    @map("published_at")
+  createdBy    String?      @map("created_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  deletedAt    DateTime?    @map("deleted_at")
+
+  // Relations
+  chapters    Chapter[]
+  enrollments Enrollment[]
+
+  @@index([status])
+  @@index([deletedAt])
+  @@index([orderIndex])
+  @@map("courses")
+}
+
+model Chapter {
+  id         String    @id @default(uuid())
+  courseId   String    @map("course_id")
+  title      String
+  orderIndex Int       @default(0) @map("order_index")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  // Relations
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId, orderIndex])
+  @@map("chapters")
+}
+
+model Lesson {
+  id          String       @id @default(uuid())
+  chapterId   String       @map("chapter_id")
+  title       String
+  type        LessonType
+  status      LessonStatus @default(DRAFT)
+  orderIndex  Int          @default(0) @map("order_index")
+  description String?
+
+  // Video fields (type = VIDEO)
+  muxAssetId      String? @map("mux_asset_id")
+  muxPlaybackId   String? @map("mux_playback_id")
+  durationSeconds Int?    @map("duration_seconds")
+
+  // Resource fields (type = RESOURCE)
+  resourceUrl  String? @map("resource_url")
+  resourceName String? @map("resource_name")
+  resourceSize Int?    @map("resource_size")
+
+  // Quiz settings (type = QUIZ)
+  passingScore Int? @map("passing_score")  // Minimum % to pass (e.g., 70)
+  maxAttempts  Int? @map("max_attempts")   // null = unlimited
+  timeLimitMin Int? @map("time_limit_min") // null = no limit
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  chapter        Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  quizQuestions  QuizQuestion[]
+  lessonProgress LessonProgress[]
+  quizAttempts   QuizAttempt[]
+  notes          Note[]
+
+  @@index([chapterId, orderIndex])
+  @@index([type])
+  @@index([status])
+  @@map("lessons")
+}
+
+// ============================================
+// QUIZ SYSTEM
+// ============================================
+
+model QuizQuestion {
+  id           String       @id @default(uuid())
+  lessonId     String       @map("lesson_id")
+  questionText String       @map("question_text")
+  type         QuestionType
+  options      Json         // ["Option A", "Option B", ...] or ["True", "False"]
+  correctIndex Int          @map("correct_index") // Index of correct option
+  explanation  String?      // Shown after answering
+  orderIndex   Int          @default(0) @map("order_index")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId, orderIndex])
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  lessonId  String   @map("lesson_id")
+  score     Int      // Number correct
+  total     Int      // Total questions
+  passed    Boolean  @default(false)
+  answers   Json     // { questionId: selectedIndex, ... }
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([userId, lessonId, createdAt])
+  @@map("quiz_attempts")
+}
+
+// ============================================
+// USER PROGRESS
+// ============================================
+
+model Enrollment {
+  id              String           @id @default(uuid())
+  userId          String           @map("user_id")
+  courseId        String           @map("course_id")
+  status          EnrollmentStatus @default(ACTIVE)
+  source          EnrollmentSource @default(MANUAL)
+  progressPercent Int              @default(0) @map("progress_percent") // Cached 0-100
+  enrolledAt      DateTime         @default(now()) @map("enrolled_at")
+  lastAccessedAt  DateTime?        @map("last_accessed_at")
+  expiresAt       DateTime?        @map("expires_at")
+  completedAt     DateTime?        @map("completed_at")
+  revokedAt       DateTime?        @map("revoked_at")
+  revokedReason   String?          @map("revoked_reason")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId, status])
+  @@index([courseId, status])
+  @@index([expiresAt])
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  lessonId        String    @map("lesson_id")
+  completed       Boolean   @default(false)
+  completedAt     DateTime? @map("completed_at")
+  watchedPercent  Int       @default(0) @map("watched_percent") // 0-100
+  lastPositionSec Int       @default(0) @map("last_position_sec") // Resume position
+  watchCount      Int       @default(0) @map("watch_count")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId, completed])
+  @@map("lesson_progress")
+}
+
+// ============================================
+// LESSON NOTES
+// ============================================
+
+model Note {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  lessonId  String   @map("lesson_id")
+  content   String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("notes")
+}
+
+// ============================================
+// ANNOUNCEMENTS
+// ============================================
+
+model Announcement {
+  id          String             @id @default(uuid())
+  title       String
+  body        String
+  status      AnnouncementStatus @default(DRAFT)
+  publishedAt DateTime?          @map("published_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  deletedAt   DateTime?          @map("deleted_at")
+
+  // Relations
+  reads AnnouncementRead[]
+
+  @@index([status])
+  @@index([deletedAt])
+  @@map("announcements")
+}
+
+model AnnouncementRead {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  announcementId String   @map("announcement_id")
+  readAt         DateTime @default(now()) @map("read_at")
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, announcementId])
+  @@index([userId])
+  @@map("announcement_reads")
+}
