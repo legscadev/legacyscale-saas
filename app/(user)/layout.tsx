@@ -1,6 +1,5 @@
-import { TopNav } from '@/components/layout'
+import { AppShell } from '@/components/layout'
 import { requireActiveUser } from '@/lib/auth'
-import { userNavItems } from '@/lib/config/navigation'
 
 export default async function UserLayout({
   children,
@@ -11,9 +10,16 @@ export default async function UserLayout({
   const user = await requireActiveUser()
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <TopNav navItems={userNavItems} user={user} />
-      <main className="flex-1 p-6">{children}</main>
-    </div>
+    <AppShell
+      role="member"
+      user={{
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        role: user.role,
+      }}
+    >
+      {children}
+    </AppShell>
   )
 }

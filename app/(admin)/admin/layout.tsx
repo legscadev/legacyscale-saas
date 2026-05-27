@@ -1,6 +1,5 @@
-import { TopNav } from '@/components/layout'
+import { AppShell } from '@/components/layout'
 import { requireAdmin } from '@/lib/auth'
-import { adminNavItems } from '@/lib/config/navigation'
 
 export default async function AdminLayout({
   children,
@@ -11,9 +10,16 @@ export default async function AdminLayout({
   const user = await requireAdmin()
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <TopNav navItems={adminNavItems} user={user} />
-      <main className="flex-1 p-6">{children}</main>
-    </div>
+    <AppShell
+      role="admin"
+      user={{
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        role: user.role,
+      }}
+    >
+      {children}
+    </AppShell>
   )
 }

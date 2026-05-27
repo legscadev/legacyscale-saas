@@ -8,5 +8,5 @@ export default async function HomePage() {
     redirect('/login')
   }
 
-  redirect(user.role === 'ADMIN' ? '/admin' : '/dashboard')
+  redirect(user.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard')
 }

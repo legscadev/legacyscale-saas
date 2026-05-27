@@ -28,7 +28,8 @@ export async function signIn(
   }
 
   if (data.user) {
-    await syncUserToDatabase(data.user)
+    const dbUser = await syncUserToDatabase(data.user)
+    redirect(dbUser.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard')
   }
 
   redirect('/dashboard')
