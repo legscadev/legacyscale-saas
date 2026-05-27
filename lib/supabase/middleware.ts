@@ -29,8 +29,11 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // Refresh session if expired
-  await supabase.auth.getUser()
+  // IMPORTANT: Avoid logic between createServerClient and getUser() —
+  // it can cause users to be unexpectedly logged out.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  return supabaseResponse
+  return { user, supabaseResponse }
 }
