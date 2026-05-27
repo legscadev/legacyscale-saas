@@ -143,7 +143,7 @@ export default function AdminRoadmap() {
           </p>
           <p className="text-sm text-muted-foreground">
             The MVP wins on content and a rock-solid learning experience first.
-            Each feature below layers on once it's needed — keeping the initial
+            Each feature below layers on once it&apos;s needed — keeping the initial
             build lean, cheap to run, and fast to validate.
           </p>
         </div>

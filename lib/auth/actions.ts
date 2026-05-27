@@ -10,7 +10,10 @@ export type AuthActionState =
   | { success: true }
   | undefined
 
-export async function signIn(formData: FormData): Promise<AuthActionState> {
+export async function signIn(
+  _prevState: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
   const email = String(formData.get('email') ?? '')
   const password = String(formData.get('password') ?? '')
 
@@ -31,7 +34,10 @@ export async function signIn(formData: FormData): Promise<AuthActionState> {
   redirect('/dashboard')
 }
 
-export async function signUp(formData: FormData): Promise<AuthActionState> {
+export async function signUp(
+  _prevState: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
   const email = String(formData.get('email') ?? '')
   const password = String(formData.get('password') ?? '')
   const name = String(formData.get('name') ?? '')
@@ -61,6 +67,7 @@ export async function signOut(): Promise<void> {
 }
 
 export async function resetPassword(
+  _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
   const email = String(formData.get('email') ?? '')
@@ -78,6 +85,7 @@ export async function resetPassword(
 }
 
 export async function updatePassword(
+  _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
   const password = String(formData.get('password') ?? '')
