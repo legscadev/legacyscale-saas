@@ -1,5 +1,6 @@
 export { PageHeader } from './page-header'
 export { EmptyState } from './empty-state'
+export { PageLoadingSkeleton } from './page-loading-skeleton'
 export {
   BadgeStatus,
   BadgePublished,
