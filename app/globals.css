@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 :root {
   --background: 0 0% 100%;
@@ -7,7 +8,7 @@
   --card-foreground: 222.2 84% 4.9%;
   --popover: 0 0% 100%;
   --popover-foreground: 222.2 84% 4.9%;
-  --primary: 243 75% 59%;
+  --primary: 0 78% 46%;
   --primary-foreground: 210 40% 98%;
   --secondary: 210 40% 96.1%;
   --secondary-foreground: 222.2 47.4% 11.2%;
@@ -19,7 +20,7 @@
   --destructive-foreground: 210 40% 98%;
   --border: 214.3 31.8% 91.4%;
   --input: 214.3 31.8% 91.4%;
-  --ring: 243 75% 59%;
+  --ring: 0 78% 46%;
   --radius: 0.5rem;
 }
 
@@ -30,7 +31,7 @@
   --card-foreground: 210 40% 98%;
   --popover: 222.2 84% 4.9%;
   --popover-foreground: 210 40% 98%;
-  --primary: 243 75% 59%;
+  --primary: 0 78% 46%;
   --primary-foreground: 210 40% 98%;
   --secondary: 217.2 32.6% 17.5%;
   --secondary-foreground: 210 40% 98%;
@@ -42,22 +43,22 @@
   --destructive-foreground: 210 40% 98%;
   --border: 217.2 32.6% 17.5%;
   --input: 217.2 32.6% 17.5%;
-  --ring: 243 75% 59%;
+  --ring: 0 78% 46%;
 }
 
 @theme inline {
-  /* Brand Colors */
-  --color-brand-50: #f0f4ff;
-  --color-brand-100: #e0e9ff;
-  --color-brand-200: #c7d5fe;
-  --color-brand-300: #a4b8fc;
-  --color-brand-400: #8093f8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
-  --color-brand-800: #3730a3;
-  --color-brand-900: #312e81;
-  --color-brand-950: #1e1b4b;
+  /* Brand Colors — Legacy Scale red (sampled from brand logo) */
+  --color-brand-50: #fef2f2;
+  --color-brand-100: #fde0e0;
+  --color-brand-200: #fabdbd;
+  --color-brand-300: #f18c8c;
+  --color-brand-400: #e93d3d;
+  --color-brand-500: #d11a1a;
+  --color-brand-600: #b41818;
+  --color-brand-700: #8e1212;
+  --color-brand-800: #6f1d1d;
+  --color-brand-900: #500d0d;
+  --color-brand-950: #2a0606;
 
   /* Semantic Colors */
   --color-success: #22c55e;
