@@ -72,7 +72,7 @@ export function MarketingNav() {
         {/* RIGHT — login */}
         <div className="hidden items-center justify-end md:flex">
           <GlowButton
-            href="/login"
+            href="#"
             variant="solid"
             className="px-4 py-1.5 text-sm font-medium"
             magnetic={false}
@@ -113,7 +113,7 @@ export function MarketingNav() {
           ))}
           <div className="mt-3 flex items-center justify-end">
             <GlowButton
-              href="/login"
+              href="#"
               variant="ghost"
               className="px-4 py-1.5 text-sm font-medium"
               magnetic={false}

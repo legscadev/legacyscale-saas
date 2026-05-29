@@ -14,12 +14,12 @@ const FOOTER_LINKS = [
     title: 'Company',
     links: [
       { label: 'Founder', href: '#founder' },
-      { label: 'Contact', href: '/login' },
+      { label: 'Contact', href: '#' },
     ],
   },
   {
     title: 'Access',
-    links: [{ label: 'Login', href: '/login' }],
+    links: [{ label: 'Login', href: '#' }],
   },
 ]
 

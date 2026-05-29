@@ -64,7 +64,7 @@ export function HeroSection() {
           transition={{ duration: 0.8, delay: 0.4, ease: easeOut }}
           className="mt-10 flex flex-col items-center gap-3 sm:flex-row"
         >
-          <GlowButton href="/login" magnetic={false}>
+          <GlowButton href="#" magnetic={false}>
             Login
             <ArrowRight className="h-4 w-4" />
           </GlowButton>
