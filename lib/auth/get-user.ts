@@ -34,23 +34,23 @@ export async function requireUser(): Promise<User> {
   return user
 }
 
-/** Requires an admin; redirects non-admins to /dashboard. */
-export async function requireAdmin(): Promise<User> {
+/** Requires an active (non-paused) user; redirects to /account-paused. */
+export async function requireActiveUser(): Promise<User> {
   const user = await requireUser()
 
-  if (user.role !== 'ADMIN') {
-    redirect('/dashboard')
+  if (!user.isActive) {
+    redirect('/account-paused')
   }
 
   return user
 }
 
-/** Requires an active (non-revoked) user; redirects to /access-revoked. */
-export async function requireActiveUser(): Promise<User> {
-  const user = await requireUser()
+/** Requires an active admin; redirects non-admins to /dashboard. */
+export async function requireAdmin(): Promise<User> {
+  const user = await requireActiveUser()
 
-  if (!user.isActive) {
-    redirect('/access-revoked')
+  if (user.role !== 'ADMIN') {
+    redirect('/dashboard')
   }
 
   return user

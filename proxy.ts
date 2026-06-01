@@ -8,7 +8,7 @@ const PUBLIC_PREFIXES = [
   '/forgot-password',
   '/reset-password',
   '/auth', // OAuth / email callback + error pages
-  '/access-revoked',
+  '/account-paused',
   '/unauthorized',
   '/maintenance',
   '/prototype', // static UI mockups (no auth)
