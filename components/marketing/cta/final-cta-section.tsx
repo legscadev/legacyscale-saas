@@ -48,7 +48,7 @@ export function FinalCtaSection() {
             </ScrollReveal>
             <ScrollReveal delay={0.24}>
               <div className="mt-10 inline-flex flex-col items-center gap-3 sm:flex-row">
-                <GlowButton href="#" magnetic={false}>
+                <GlowButton href="/login" magnetic={false}>
                   Login to your account
                   <ArrowRight className="h-4 w-4" />
                 </GlowButton>
