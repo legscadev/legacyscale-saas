@@ -37,22 +37,21 @@ export async function proxy(request: NextRequest) {
   // Public pages: allow. Bounce signed-in users away from auth screens.
   if (isPublicPath(pathname)) {
     if (user && (pathname === '/login' || pathname === '/signup')) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      const role = user.app_metadata?.role
+      const target = role === 'ADMIN' ? '/admin/dashboard' : '/dashboard'
+      return NextResponse.redirect(new URL(target, request.url))
     }
     return supabaseResponse
   }
 
   // Protected pages: require an authenticated session.
   if (!user) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('redirectTo', pathname)
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // NOTE: Our admin role lives in the database, not the Supabase JWT, so it
-  // can't be checked here (Prisma is unavailable on the Edge runtime).
-  // Admin RBAC is enforced in the (admin) route-group layout via
-  // requireAdmin() once admin routes land in 0.11.
+  // RBAC is enforced at the (admin) route-group layout via requireAdmin().
+  // The mirrored app_metadata.role above is a UX hint for redirects only,
+  // not a security boundary — Prisma is the source of truth.
   return supabaseResponse
 }
 

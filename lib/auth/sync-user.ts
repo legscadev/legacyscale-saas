@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { sendWelcomeEmail } from '@/lib/resend'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import type { User } from '@prisma/client'
@@ -49,11 +50,33 @@ export async function syncUserToDatabase(
     },
   })
 
+  // Mirror role into Supabase Auth app_metadata so the Edge proxy can
+  // make role-aware redirect decisions without a Prisma lookup.
+  if (authUser.app_metadata?.role !== user.role) {
+    await syncRoleToAuthMetadata(authUser.id, user.role)
+  }
+
   if (isNewUser && user.role === 'MEMBER') {
     await tryDeliverWelcome(user)
   }
 
   return user
+}
+
+async function syncRoleToAuthMetadata(
+  authId: string,
+  role: User['role']
+): Promise<void> {
+  try {
+    const admin = createAdminClient()
+    await admin.auth.admin.updateUserById(authId, {
+      app_metadata: { role },
+    })
+  } catch (err) {
+    // Role mirror is a UX optimization, not a security boundary —
+    // RBAC still enforced by requireAdmin() at the layout.
+    console.error('Failed to mirror role to auth metadata:', err)
+  }
 }
 
 function readStringMetadata(
