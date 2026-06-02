@@ -12,6 +12,9 @@ interface PasswordInputProps {
   required?: boolean
   autoComplete?: string
   defaultValue?: string
+  value?: string
+  onChange?: (value: string) => void
+  minLength?: number
 }
 
 export function PasswordInput({
@@ -21,6 +24,9 @@ export function PasswordInput({
   required,
   autoComplete,
   defaultValue,
+  value,
+  onChange,
+  minLength,
 }: PasswordInputProps) {
   const [show, setShow] = useState(false)
 
@@ -35,6 +41,9 @@ export function PasswordInput({
         required={required}
         autoComplete={autoComplete}
         defaultValue={defaultValue}
+        value={value}
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+        minLength={minLength}
         className="px-8"
       />
       <button
