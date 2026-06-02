@@ -79,7 +79,7 @@ export function AppShell({ role, user, children }: AppShellProps) {
       <div className="flex min-h-screen flex-col lg:pl-64">
         <TopBar onMenuClick={() => setDrawerOpen(true)} />
         <main className="flex-1">
-          <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">{children}</div>
+          <div className="p-4 sm:p-6 lg:p-8">{children}</div>
         </main>
       </div>
     </div>
