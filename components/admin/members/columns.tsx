@@ -142,7 +142,10 @@ export function getMemberColumns(
       accessorKey: 'createdAt',
       header: ({ column }) => <SortHeader column={column}>Joined</SortHeader>,
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <span
+          className="text-sm text-muted-foreground"
+          suppressHydrationWarning
+        >
           {formatDate(row.original.createdAt)}
         </span>
       ),
