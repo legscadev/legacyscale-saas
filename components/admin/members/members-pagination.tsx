@@ -1,4 +1,5 @@
-import Link from 'next/link'
+'use client'
+
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -8,6 +9,7 @@ interface MembersPaginationProps {
   totalPages: number
   total: number
   limit: number
+  onPageChange: (page: number) => void
 }
 
 export function MembersPagination({
@@ -15,6 +17,7 @@ export function MembersPagination({
   totalPages,
   total,
   limit,
+  onPageChange,
 }: MembersPaginationProps) {
   if (totalPages <= 1) return null
 
@@ -29,53 +32,53 @@ export function MembersPagination({
         <span className="font-medium text-foreground">{total}</span>
       </p>
       <div className="flex items-center gap-1">
-        <PageLink page={page - 1} disabled={page <= 1} aria-label="Previous page">
+        <PageButton
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          aria-label="Previous page"
+        >
           <ChevronLeft className="size-4" />
-        </PageLink>
+        </PageButton>
         <span className="px-2 tabular-nums">
           Page {page} of {totalPages}
         </span>
-        <PageLink
-          page={page + 1}
+        <PageButton
+          onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
           aria-label="Next page"
         >
           <ChevronRight className="size-4" />
-        </PageLink>
+        </PageButton>
       </div>
     </div>
   )
 }
 
-function PageLink({
-  page,
+function PageButton({
+  onClick,
   disabled,
   children,
   ...rest
 }: {
-  page: number
+  onClick: () => void
   disabled?: boolean
   children: React.ReactNode
   'aria-label'?: string
 }) {
-  const className = cn(
-    'grid size-8 place-items-center rounded-md border transition-colors',
-    disabled
-      ? 'cursor-not-allowed border-border/50 text-muted-foreground/50'
-      : 'border-border hover:bg-muted hover:text-foreground'
-  )
-
-  if (disabled) {
-    return (
-      <span className={className} {...rest}>
-        {children}
-      </span>
-    )
-  }
-
   return (
-    <Link href={`/admin/members?page=${page}`} className={className} {...rest}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'grid size-8 place-items-center rounded-md border transition-colors',
+        disabled
+          ? 'cursor-not-allowed border-border/50 text-muted-foreground/50'
+          : 'border-border hover:bg-muted hover:text-foreground',
+      )}
+      {...rest}
+    >
       {children}
-    </Link>
+    </button>
   )
 }

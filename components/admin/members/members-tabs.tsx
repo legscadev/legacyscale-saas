@@ -1,12 +1,15 @@
-import Link from 'next/link'
+'use client'
 
 import { cn } from '@/lib/utils'
-import type { MemberCounts } from '@/lib/services/member-service'
-import type { MemberTab } from '@/lib/services/member-service'
+import type {
+  MemberCounts,
+  MemberTab,
+} from '@/lib/services/member-service'
 
 interface MembersTabsProps {
   active: MemberTab
   counts: MemberCounts
+  onChange: (tab: MemberTab) => void
 }
 
 const TABS: { id: MemberTab; label: string }[] = [
@@ -32,18 +35,24 @@ function countFor(id: MemberTab, counts: MemberCounts): number {
   }
 }
 
-export function MembersTabs({ active, counts }: MembersTabsProps) {
+export function MembersTabs({ active, counts, onChange }: MembersTabsProps) {
   return (
     <div className="overflow-x-auto border-b">
-      <nav className="-mb-px flex min-w-max items-center gap-1" aria-label="Member tabs">
+      <nav
+        className="-mb-px flex min-w-max items-center gap-1"
+        aria-label="Member tabs"
+        role="tablist"
+      >
         {TABS.map((t) => {
           const isActive = t.id === active
           const n = countFor(t.id, counts)
-          const href = t.id === 'all' ? '/admin/members' : `/admin/members?tab=${t.id}`
           return (
-            <Link
+            <button
               key={t.id}
-              href={href}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onChange(t.id)}
               className={cn(
                 'group inline-flex items-center gap-2 border-b-2 px-3 pb-3 pt-2 text-sm font-medium transition-colors',
                 isActive
@@ -62,7 +71,7 @@ export function MembersTabs({ active, counts }: MembersTabsProps) {
               >
                 {n.toLocaleString()}
               </span>
-            </Link>
+            </button>
           )
         })}
       </nav>

@@ -1,8 +1,6 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -23,11 +21,15 @@ import { BulkActionBar } from './bulk-action-bar'
 import type {
   MemberListItem,
   MemberSortField,
+  SortDirection,
 } from '@/lib/services/member-service'
 
 interface MembersTableProps {
   members: MemberListItem[]
   currentUserId: string
+  sort: MemberSortField
+  direction: SortDirection
+  onSortChange: (sort: MemberSortField, direction: SortDirection) => void
 }
 
 function getInitials(name: string | null, email: string): string {
@@ -60,7 +62,13 @@ function formatRelative(date: Date | null): string {
   return formatDate(date)
 }
 
-export function MembersTable({ members, currentUserId }: MembersTableProps) {
+export function MembersTable({
+  members,
+  currentUserId,
+  sort,
+  direction,
+  onSortChange,
+}: MembersTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [drawerMemberId, setDrawerMemberId] = useState<string | null>(null)
 
@@ -101,11 +109,32 @@ export function MembersTable({ members, currentUserId }: MembersTableProps) {
                   aria-label="Select all on this page"
                 />
               </TableHead>
-              <SortableHead field="name">Member</SortableHead>
+              <SortableHead
+                field="name"
+                sort={sort}
+                direction={direction}
+                onSortChange={onSortChange}
+              >
+                Member
+              </SortableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
-              <SortableHead field="createdAt">Joined</SortableHead>
-              <SortableHead field="lastLoginAt">Last active</SortableHead>
+              <SortableHead
+                field="createdAt"
+                sort={sort}
+                direction={direction}
+                onSortChange={onSortChange}
+              >
+                Joined
+              </SortableHead>
+              <SortableHead
+                field="lastLoginAt"
+                sort={sort}
+                direction={direction}
+                onSortChange={onSortChange}
+              >
+                Last active
+              </SortableHead>
               <TableHead className="w-12 text-right pr-4" />
             </TableRow>
           </TableHeader>
@@ -204,29 +233,26 @@ export function MembersTable({ members, currentUserId }: MembersTableProps) {
 
 function SortableHead({
   field,
+  sort,
+  direction,
+  onSortChange,
   children,
 }: {
   field: MemberSortField
+  sort: MemberSortField
+  direction: SortDirection
+  onSortChange: (sort: MemberSortField, direction: SortDirection) => void
   children: React.ReactNode
 }) {
-  const params = useSearchParams()
-  const currentSort = params.get('sort') ?? 'createdAt'
-  const currentDir = params.get('direction') ?? 'desc'
-  const active = currentSort === field
-
-  const nextDir = active && currentDir === 'desc' ? 'asc' : 'desc'
-
-  const next = new URLSearchParams(params)
-  next.set('sort', field)
-  next.set('direction', nextDir)
-  next.delete('page')
+  const active = sort === field
+  const nextDir: SortDirection =
+    active && direction === 'desc' ? 'asc' : 'desc'
 
   return (
     <TableHead>
-      <Link
-        href={`?${next.toString()}`}
-        replace
-        scroll={false}
+      <button
+        type="button"
+        onClick={() => onSortChange(field, nextDir)}
         className={cn(
           'group inline-flex items-center gap-1.5 transition-colors',
           active ? 'text-foreground' : 'hover:text-foreground',
@@ -234,7 +260,7 @@ function SortableHead({
       >
         {children}
         {active ? (
-          currentDir === 'desc' ? (
+          direction === 'desc' ? (
             <ChevronDown className="size-3.5" />
           ) : (
             <ChevronUp className="size-3.5" />
@@ -242,7 +268,7 @@ function SortableHead({
         ) : (
           <ArrowUpDown className="size-3.5 opacity-50 group-hover:opacity-100" />
         )}
-      </Link>
+      </button>
     </TableHead>
   )
 }

@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
+import type { Role } from '@prisma/client'
 
 import { Input } from '@/components/ui/input'
 import {
@@ -26,72 +26,60 @@ const STATUSES = [
   { value: 'suspended', label: 'Suspended' },
 ]
 
-export function MembersToolbar() {
-  const router = useRouter()
-  const params = useSearchParams()
-  const [isPending, startTransition] = useTransition()
+interface MembersToolbarProps {
+  search: string
+  role: Role | null
+  status: 'active' | 'suspended' | null
+  onSearchChange: (value: string) => void
+  onRoleChange: (role: Role | null) => void
+  onStatusChange: (status: 'active' | 'suspended' | null) => void
+  onClearAll: () => void
+  isPending: boolean
+}
 
-  const initialQ = params.get('q') ?? ''
-  const role = params.get('role') ?? 'all'
-  const status = params.get('status') ?? 'all'
+export function MembersToolbar({
+  search,
+  role,
+  status,
+  onSearchChange,
+  onRoleChange,
+  onStatusChange,
+  onClearAll,
+  isPending,
+}: MembersToolbarProps) {
+  // Local search state with debounce so we don't refetch on every keystroke.
+  const [draft, setDraft] = useState(search)
 
-  const [q, setQ] = useState(initialQ)
-
-  // Keep local search state in sync if the URL changes from elsewhere
-  // (e.g. clicking a tab clears filters).
+  // Re-sync if parent clears search (e.g. Clear all).
   useEffect(() => {
-    setQ(initialQ)
-  }, [initialQ])
+    setDraft(search)
+  }, [search])
 
-  const replaceWith = useCallback(
-    (next: URLSearchParams) => {
-      // Reset page on any filter change to avoid landing on an empty page.
-      next.delete('page')
-      const qs = next.toString()
-      startTransition(() => {
-        router.replace(qs ? `?${qs}` : '?')
-      })
-    },
-    [router],
-  )
-
-  // Debounce search submissions so we don't fire on every keystroke.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (q === initialQ) return
-    const t = setTimeout(() => {
-      const next = new URLSearchParams(params)
-      if (q.trim()) next.set('q', q.trim())
-      else next.delete('q')
-      replaceWith(next)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (draft === search) return
+    debounceRef.current = setTimeout(() => {
+      onSearchChange(draft.trim())
     }, 250)
-    return () => clearTimeout(t)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q])
+  }, [draft])
 
-  const setParam = (key: string, value: string | null) => {
-    const next = new URLSearchParams(params)
-    if (!value || value === 'all') next.delete(key)
-    else next.set(key, value)
-    replaceWith(next)
-  }
-
+  const roleValue = role ?? 'all'
+  const statusValue = status ?? 'all'
   const hasActiveFilters =
-    initialQ.length > 0 || role !== 'all' || status !== 'all'
-
-  const clearAll = () => {
-    const tab = params.get('tab')
-    const next = new URLSearchParams()
-    if (tab) next.set('tab', tab)
-    replaceWith(next)
-  }
+    search.length > 0 || role !== null || status !== null
 
   return (
     <div className="sticky top-0 z-10 -mx-px flex flex-col gap-3 border-b bg-background/95 px-px py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
       <div className="relative w-full sm:max-w-xs">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
           placeholder="Search by name or email…"
           className="pl-8"
           data-pending={isPending}
@@ -99,10 +87,17 @@ export function MembersToolbar() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={role} onValueChange={(v) => setParam('role', v)}>
+        <Select
+          value={roleValue}
+          onValueChange={(v) =>
+            onRoleChange(!v || v === 'all' ? null : (v as Role))
+          }
+        >
           <SelectTrigger className="h-9 w-[140px]">
             <SelectValue>
-              {(v: string) => ROLES.find((r) => r.value === v)?.label ?? 'Any role'}
+              {(v: string) =>
+                ROLES.find((r) => r.value === v)?.label ?? 'Any role'
+              }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -114,7 +109,18 @@ export function MembersToolbar() {
           </SelectContent>
         </Select>
 
-        <Select value={status} onValueChange={(v) => setParam('status', v)}>
+        <Select
+          value={statusValue}
+          onValueChange={(v) =>
+            onStatusChange(
+              !v || v === 'all'
+                ? null
+                : v === 'active'
+                  ? 'active'
+                  : 'suspended',
+            )
+          }
+        >
           <SelectTrigger className="h-9 w-[140px]">
             <SelectValue>
               {(v: string) =>
@@ -135,7 +141,7 @@ export function MembersToolbar() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={clearAll}
+            onClick={onClearAll}
             className="text-muted-foreground"
           >
             <X className="size-3.5" />
