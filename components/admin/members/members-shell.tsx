@@ -21,6 +21,7 @@ import { PageHeader, EmptyState } from '@/components/shared'
 import { MembersMetrics } from './members-metrics'
 import { MembersToolbar } from './members-toolbar'
 import { BulkActionBar } from './bulk-action-bar'
+import { MemberCreateDialog } from './member-create-dialog'
 import { getMemberColumns } from './columns'
 import {
   fetchMembers,
@@ -57,6 +58,10 @@ export function MembersShell({
   const [isPending, startTransition] = useTransition()
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [createOpen, setCreateOpen] = useState(false)
+  // Bumped to trigger an out-of-band refetch (e.g. after creating a
+  // member via the dialog) without changing the query state.
+  const [refetchKey, setRefetchKey] = useState(0)
 
   // Skip the very first effect run — the server-fetched initialData
   // already matches DEFAULT_QUERY_STATE, no need to refetch. After that,
@@ -76,7 +81,7 @@ export function MembersShell({
     return () => {
       cancelled = true
     }
-  }, [query])
+  }, [query, refetchKey])
 
   // Drop any selections that no longer exist in the current data (e.g.
   // after filtering or paging).
@@ -144,7 +149,7 @@ export function MembersShell({
           data.counts.all === 1 ? 'person' : 'people'
         } across your platform.`}
         actions={
-          <Button disabled>
+          <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
             Add member
           </Button>
@@ -204,6 +209,12 @@ export function MembersShell({
       <BulkActionBar
         selectedCount={selectedIds.length}
         onClear={() => setRowSelection({})}
+      />
+
+      <MemberCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => setRefetchKey((k) => k + 1)}
       />
     </div>
   )
