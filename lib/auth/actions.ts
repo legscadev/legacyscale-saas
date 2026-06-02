@@ -78,8 +78,11 @@ export async function resetPassword(
     redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
   })
 
+  // Always return the same success response to prevent email enumeration.
+  // Real failures (Supabase outage, bad config) get logged but never reach
+  // the user — matching the UI copy ("If that email exists...").
   if (error) {
-    return { error: error.message }
+    console.error('resetPasswordForEmail failed:', error.message)
   }
 
   return { success: true }

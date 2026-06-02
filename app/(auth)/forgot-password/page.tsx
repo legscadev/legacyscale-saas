@@ -49,9 +49,6 @@ export default function ForgotPasswordPage() {
             If that email exists, a reset link is on its way.
           </p>
         )}
-        {state && 'error' in state && (
-          <p className="text-sm text-destructive">{state.error}</p>
-        )}
 
         <Button type="submit" className="w-full" size="lg" disabled={pending}>
           {pending ? 'Sending…' : 'Send reset link'}
