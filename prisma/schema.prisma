@@ -83,11 +83,33 @@ model User {
   quizAttempts      QuizAttempt[]
   notes             Note[]
   announcementReads AnnouncementRead[]
+  invites           Invite[]
 
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
   @@map("users")
+}
+
+// ============================================
+// INVITES
+// ============================================
+
+/// Admin-issued onboarding tokens. New members receive a link that
+/// embeds the token; the onboarding flow consumes it once to set
+/// their initial password.
+model Invite {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([token])
+  @@map("invites")
 }
 
 // ============================================

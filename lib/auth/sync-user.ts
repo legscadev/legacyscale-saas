@@ -12,10 +12,13 @@ import type { User } from '@prisma/client'
  * Supabase auth id is stored in `authId`, which the RLS policies match
  * against via `auth.uid()`. Existing role/name are preserved on update.
  *
- * Fires a welcome email on first-time creation of MEMBER accounts.
+ * Fires a welcome email on first-time creation of MEMBER accounts,
+ * unless the caller opts out (e.g. the admin invite flow sends its
+ * own invite-variant email and shouldn't double up).
  */
 export async function syncUserToDatabase(
-  authUser: SupabaseUser
+  authUser: SupabaseUser,
+  options: { suppressWelcomeEmail?: boolean } = {}
 ): Promise<User> {
   if (!authUser.email) {
     throw new Error('Cannot sync user without an email')
@@ -56,7 +59,7 @@ export async function syncUserToDatabase(
     await syncRoleToAuthMetadata(authUser.id, user.role)
   }
 
-  if (isNewUser && user.role === 'MEMBER') {
+  if (isNewUser && user.role === 'MEMBER' && !options.suppressWelcomeEmail) {
     await tryDeliverWelcome(user)
   }
 
@@ -93,7 +96,7 @@ async function tryDeliverWelcome(user: User): Promise<void> {
   const displayName = user.name ?? user.email.split('@')[0]
 
   try {
-    await sendWelcomeEmail(user.email, displayName, loginUrl)
+    await sendWelcomeEmail(user.email, displayName, { ctaUrl: loginUrl })
   } catch (err) {
     // Never fail signup over an email problem — just log and move on.
     console.error('Welcome email send failed:', err)

@@ -13,10 +13,21 @@ import {
 
 interface WelcomeEmailProps {
   name: string
-  loginUrl: string
+  /** Where the primary CTA points. */
+  ctaUrl: string
+  /** Variant: invite emails surface a password-set CTA; returning users
+   *  (post-onboarding) get the dashboard link. */
+  variant?: 'invite' | 'dashboard'
 }
 
-export function WelcomeEmail({ name, loginUrl }: WelcomeEmailProps) {
+export function WelcomeEmail({
+  name,
+  ctaUrl,
+  variant = 'dashboard',
+}: WelcomeEmailProps) {
+  const isInvite = variant === 'invite'
+  const ctaLabel = isInvite ? 'Set your password' : 'Access your dashboard'
+
   return (
     <Html>
       <Head />
@@ -34,25 +45,38 @@ export function WelcomeEmail({ name, loginUrl }: WelcomeEmailProps) {
               excited to have you on board and can&apos;t wait to see you
               succeed.
             </Text>
-            <Text style={paragraph}>
-              Your journey to building a 7-figure agency starts now. Access
-              your courses, connect with the community, and start learning
-              today.
-            </Text>
+            {isInvite ? (
+              <Text style={paragraph}>
+                To get started, set your password using the link below. This
+                link is valid for 7 days.
+              </Text>
+            ) : (
+              <Text style={paragraph}>
+                Your journey to building a 7-figure agency starts now. Access
+                your courses, connect with the community, and start learning
+                today.
+              </Text>
+            )}
 
             <Section style={buttonSection}>
-              <Button style={button} href={loginUrl}>
-                Access Your Dashboard
+              <Button style={button} href={ctaUrl}>
+                {ctaLabel}
               </Button>
             </Section>
 
-            <Text style={paragraph}>Here&apos;s what you can do next:</Text>
-            <ul style={list}>
-              <li style={listItem}>Complete your profile</li>
-              <li style={listItem}>Browse available courses</li>
-              <li style={listItem}>Start the 7-Figure Agency Program</li>
-              <li style={listItem}>Check out the latest announcements</li>
-            </ul>
+            {!isInvite && (
+              <>
+                <Text style={paragraph}>
+                  Here&apos;s what you can do next:
+                </Text>
+                <ul style={list}>
+                  <li style={listItem}>Complete your profile</li>
+                  <li style={listItem}>Browse available courses</li>
+                  <li style={listItem}>Start the 7-Figure Agency Program</li>
+                  <li style={listItem}>Check out the latest announcements</li>
+                </ul>
+              </>
+            )}
           </Section>
 
           <Section style={footer}>

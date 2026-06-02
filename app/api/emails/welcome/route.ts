@@ -30,7 +30,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const { id } = await sendWelcomeEmail(
     validation.data.email,
     validation.data.name,
-    `${appUrl}/dashboard`
+    { ctaUrl: `${appUrl}/dashboard` }
   )
 
   return successResponse({ id })

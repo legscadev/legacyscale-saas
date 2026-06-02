@@ -1,7 +1,13 @@
 import { defineConfig } from "prisma/config"
 import { config } from "dotenv"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
-config({ path: ".env.local" })
+// Resolve .env.local relative to the project root (one level up from
+// this file). Prisma changes cwd when loading the config, so a bare
+// relative path doesn't work.
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
+config({ path: resolve(projectRoot, ".env.local") })
 
 const databaseUrl = process.env.DATABASE_URL
 
@@ -10,9 +16,9 @@ if (!databaseUrl) {
 }
 
 export default defineConfig({
-  schema: "prisma/schema.prisma",
+  schema: resolve(projectRoot, "prisma/schema.prisma"),
   migrations: {
-    path: "prisma/migrations",
+    path: resolve(projectRoot, "prisma/migrations"),
   },
   datasource: {
     url: databaseUrl,

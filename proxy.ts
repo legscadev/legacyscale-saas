@@ -7,6 +7,7 @@ const PUBLIC_PREFIXES = [
   '/signup',
   '/forgot-password',
   '/reset-password',
+  '/onboarding', // admin-invited members landing here to set their password
   '/auth', // OAuth / email callback + error pages
   '/account-paused',
   '/unauthorized',

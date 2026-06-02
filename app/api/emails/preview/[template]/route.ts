@@ -12,7 +12,7 @@ const templates: Record<string, () => React.ReactElement> = {
   welcome: () =>
     WelcomeEmail({
       name: 'John Doe',
-      loginUrl: 'http://localhost:3000/dashboard',
+      ctaUrl: 'http://localhost:3000/dashboard',
     }),
   'password-reset': () =>
     PasswordResetEmail({

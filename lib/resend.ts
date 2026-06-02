@@ -60,15 +60,29 @@ export async function sendEmail({
 
 // ───────── typed helpers per template ─────────
 
+interface WelcomeEmailOptions {
+  /** CTA target. For invites, this is the onboarding link; for
+   *  returning members, the dashboard. */
+  ctaUrl: string
+  variant?: 'invite' | 'dashboard'
+}
+
 export async function sendWelcomeEmail(
   to: string,
   name: string,
-  loginUrl: string
+  options: WelcomeEmailOptions
 ) {
+  const isInvite = options.variant === 'invite'
   return sendEmail({
     to,
-    subject: 'Welcome to Legacy Scale!',
-    react: WelcomeEmail({ name, loginUrl }),
+    subject: isInvite
+      ? 'Welcome to Legacy Scale — set your password'
+      : 'Welcome to Legacy Scale!',
+    react: WelcomeEmail({
+      name,
+      ctaUrl: options.ctaUrl,
+      variant: options.variant,
+    }),
   })
 }
 
