@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { BadgeStatus } from '@/components/shared/badge-status'
+import { SectionCard, StatusBadge } from '@/components/shared'
 import { MemberActionsMenu } from './member-actions-menu'
 import type { MemberListItem } from '@/lib/services/member-service'
 
@@ -33,7 +33,7 @@ function formatJoined(date: Date): string {
 
 export function MembersTable({ members, currentUserId }: MembersTableProps) {
   return (
-    <div className="rounded-lg border bg-card">
+    <SectionCard flush>
       <Table>
         <TableHeader>
           <TableRow>
@@ -68,14 +68,10 @@ export function MembersTable({ members, currentUserId }: MembersTableProps) {
                 </div>
               </TableCell>
               <TableCell>
-                <BadgeStatus status={m.role === 'ADMIN' ? 'info' : 'default'}>
-                  {m.role === 'ADMIN' ? 'Admin' : 'Member'}
-                </BadgeStatus>
+                <StatusBadge status={m.role} />
               </TableCell>
               <TableCell>
-                <BadgeStatus status={m.isActive ? 'success' : 'error'}>
-                  {m.isActive ? 'Active' : 'Paused'}
-                </BadgeStatus>
+                <StatusBadge status={m.isActive ? 'ACTIVE' : 'PAUSED'} />
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
                 {formatJoined(m.createdAt)}
@@ -91,6 +87,6 @@ export function MembersTable({ members, currentUserId }: MembersTableProps) {
           ))}
         </TableBody>
       </Table>
-    </div>
+    </SectionCard>
   )
 }
