@@ -6,9 +6,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { requireActiveUser } from '@/lib/auth'
+import { AvatarUpload } from './avatar-upload'
 import { ProfileForm } from './profile-form'
 
 function getInitials(name: string | null, email: string): string {
@@ -36,17 +35,13 @@ export default async function UserProfilePage() {
           <CardDescription>Update your personal details</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={user.avatarUrl ?? undefined} />
-              <AvatarFallback className="text-lg">
-                {getInitials(user.name, user.email)}
-              </AvatarFallback>
-            </Avatar>
-            <Button variant="outline" size="sm" disabled>
-              Upload photo
-            </Button>
-          </div>
+          {user.authId ? (
+            <AvatarUpload
+              authId={user.authId}
+              initialAvatarUrl={user.avatarUrl}
+              fallbackText={getInitials(user.name, user.email)}
+            />
+          ) : null}
           <ProfileForm initialName={user.name ?? ''} email={user.email} />
         </CardContent>
       </Card>

@@ -51,3 +51,47 @@ export async function updateProfileName(
 
   return { success: true, name: parsed.data }
 }
+
+export type UpdateAvatarResult =
+  | { success: true; avatarUrl: string }
+  | { success: false; error: string }
+
+/**
+ * Persist a new avatar URL. The actual upload happens client-side
+ * directly to Supabase Storage (RLS enforces path = auth.uid()), so
+ * this server action only confirms the URL points at our bucket
+ * before writing it to the DB.
+ */
+export async function updateAvatarUrl(
+  rawUrl: string,
+): Promise<UpdateAvatarResult> {
+  const user = await requireActiveUser()
+
+  const expectedPrefix = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/`
+  if (!rawUrl.startsWith(expectedPrefix)) {
+    return { success: false, error: 'Invalid avatar URL' }
+  }
+
+  // The Storage path is everything after the bucket prefix. RLS made
+  // sure the client could only upload under their own auth uid, but we
+  // double-check here so a stolen client session can't switch the URL
+  // to point at someone else's folder.
+  const objectPath = rawUrl.slice(expectedPrefix.length)
+  const firstFolder = objectPath.split('/')[0]
+  if (!user.authId || firstFolder !== user.authId) {
+    return {
+      success: false,
+      error: "Avatar must be in your own folder",
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { avatarUrl: rawUrl },
+  })
+
+  revalidatePath('/profile')
+  revalidatePath('/', 'layout')
+
+  return { success: true, avatarUrl: rawUrl }
+}
