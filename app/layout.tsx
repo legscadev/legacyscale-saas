@@ -15,13 +15,31 @@ export const metadata: Metadata = {
   description: "Agency Education Platform",
 }
 
+// Runs before React hydration. Reads the persisted theme and applies
+// the `dark` class so the first paint matches the user's preference
+// (no flash). Defaults to dark when no preference is stored.
+const themeInitScript = `
+(function(){
+  try {
+    var t = localStorage.getItem('theme');
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    document.documentElement.classList.toggle('dark', t === 'dark');
+  } catch (e) {
+    document.documentElement.classList.add('dark');
+  }
+})();
+`
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body
         className={cn(
           "min-h-screen bg-background font-sans antialiased",

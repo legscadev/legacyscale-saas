@@ -1,22 +1,34 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
+const STORAGE_KEY = 'theme'
+
 /**
- * Toggles the `dark` class on <html>. The app ships dark-by-default
- * (set on the root layout), so this avoids a theme provider while still
- * staying correct across client navigation by reading the live DOM state.
+ * Toggles the `dark` class on <html> and persists the choice in
+ * localStorage. The actual first-paint class is set by an inline
+ * script in the root layout — see app/layout.tsx — so we only need to
+ * mirror that state into React after mount.
  */
 export function ThemeToggle() {
   const [isDark, setIsDark] = useState(true)
 
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'))
+  }, [])
+
   const toggle = () => {
-    const root = document.documentElement
-    const next = !root.classList.contains('dark')
-    root.classList.toggle('dark', next)
+    const next = !isDark
+    document.documentElement.classList.toggle('dark', next)
     setIsDark(next)
+    try {
+      localStorage.setItem(STORAGE_KEY, next ? 'dark' : 'light')
+    } catch {
+      // Storage might be unavailable (private mode, quota full) —
+      // the in-memory toggle still works this session.
+    }
   }
 
   return (
