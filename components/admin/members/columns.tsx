@@ -73,6 +73,7 @@ function SortHeader({
 
 export function getMemberColumns(
   currentUserId: string,
+  onRefetch: () => void,
 ): ColumnDef<MemberListItem>[] {
   return [
     {
@@ -171,8 +172,10 @@ export function getMemberColumns(
         <div className="flex justify-end">
           <MemberActionsMenu
             memberId={row.original.id}
+            memberName={row.original.name ?? row.original.email}
             isActive={row.original.isActive}
             isSelf={row.original.id === currentUserId}
+            onRefetch={onRefetch}
           />
         </div>
       ),

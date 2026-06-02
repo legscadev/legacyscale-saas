@@ -130,9 +130,11 @@ export function MembersShell({
     [sorting, patch],
   )
 
+  const refetch = useCallback(() => setRefetchKey((k) => k + 1), [])
+
   const columns = useMemo(
-    () => getMemberColumns(currentUserId),
-    [currentUserId],
+    () => getMemberColumns(currentUserId, refetch),
+    [currentUserId, refetch],
   )
 
   const selectedIds = Object.keys(rowSelection)
@@ -214,7 +216,7 @@ export function MembersShell({
       <MemberCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={() => setRefetchKey((k) => k + 1)}
+        onCreated={refetch}
       />
     </div>
   )
