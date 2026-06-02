@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ChevronsUpDown, LogOut, Settings, UserRound } from 'lucide-react'
+import { ChevronsUpDown, LogOut, UserRound } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -25,7 +25,6 @@ export interface ShellUser {
 interface UserMenuProps {
   user: ShellUser
   profileHref: string
-  settingsHref: string
   /** "sidebar" = full-width row, "topbar" = avatar-only button. */
   variant?: 'sidebar' | 'topbar'
 }
@@ -42,7 +41,6 @@ function getInitials(name: string | null, email: string): string {
 export function UserMenu({
   user,
   profileHref,
-  settingsHref,
   variant = 'sidebar',
 }: UserMenuProps) {
   const initials = getInitials(user.name, user.email)
@@ -110,10 +108,6 @@ export function UserMenu({
           <DropdownMenuItem render={<Link href={profileHref} />}>
             <UserRound />
             Profile
-          </DropdownMenuItem>
-          <DropdownMenuItem render={<Link href={settingsHref} />}>
-            <Settings />
-            Settings
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

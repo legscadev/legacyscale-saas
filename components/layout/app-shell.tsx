@@ -24,7 +24,6 @@ export function AppShell({ role, user, children }: AppShellProps) {
   const context = isAdmin ? 'Admin Console' : 'Member'
   const homeHref = isAdmin ? '/admin/dashboard' : '/dashboard'
   const profileHref = isAdmin ? '/admin/profile' : '/profile'
-  const settingsHref = isAdmin ? '/admin/settings' : '/profile'
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,7 +75,6 @@ export function AppShell({ role, user, children }: AppShellProps) {
           onMenuClick={() => setDrawerOpen(true)}
           user={user}
           profileHref={profileHref}
-          settingsHref={settingsHref}
         />
         <main className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">{children}</div>
