@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { requireActiveUser } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
+import { changePasswordSchema } from '@/lib/validations/auth'
 import { nameSchema } from '@/lib/validations/common'
 
 export type UpdateProfileResult =
@@ -94,4 +96,91 @@ export async function updateAvatarUrl(
   revalidatePath('/', 'layout')
 
   return { success: true, avatarUrl: rawUrl }
+}
+
+export type ChangePasswordResult =
+  | { success: true }
+  | {
+      success: false
+      error?: string
+      fieldErrors?: Partial<
+        Record<'currentPassword' | 'newPassword' | 'confirmPassword', string[]>
+      >
+    }
+
+/**
+ * Re-authenticates via signInWithPassword (so we don't trust the
+ * existing session for a high-security change), then updates the
+ * password through the same cookie-aware client.
+ */
+export async function updatePassword(
+  formData: FormData,
+): Promise<ChangePasswordResult> {
+  const user = await requireActiveUser()
+
+  const raw = {
+    currentPassword: String(formData.get('currentPassword') ?? ''),
+    newPassword: String(formData.get('newPassword') ?? ''),
+    confirmPassword: String(formData.get('confirmPassword') ?? ''),
+  }
+
+  const parsed = changePasswordSchema.safeParse(raw)
+  if (!parsed.success) {
+    const fieldErrors: NonNullable<
+      Extract<ChangePasswordResult, { success: false }>['fieldErrors']
+    > = {}
+    for (const issue of parsed.error.issues) {
+      const key = issue.path[0]
+      if (
+        key === 'currentPassword' ||
+        key === 'newPassword' ||
+        key === 'confirmPassword'
+      ) {
+        if (!fieldErrors[key]) fieldErrors[key] = []
+        fieldErrors[key]!.push(issue.message)
+      }
+    }
+    return { success: false, fieldErrors }
+  }
+
+  const supabase = await createClient()
+
+  // 1. Verify the current password by re-authenticating. signInWithPassword
+  //    returns 400 with "Invalid login credentials" when the password
+  //    doesn't match — surface that as a field-level error.
+  const { error: signInErr } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: parsed.data.currentPassword,
+  })
+  if (signInErr) {
+    return {
+      success: false,
+      fieldErrors: {
+        currentPassword: ['Current password is incorrect'],
+      },
+    }
+  }
+
+  // 2. Set the new password. Supabase rejects setting the same value as
+  //    the existing one with a specific message — pass that through to
+  //    the new-password field.
+  const { error: updateErr } = await supabase.auth.updateUser({
+    password: parsed.data.newPassword,
+  })
+  if (updateErr) {
+    if (/same|different/i.test(updateErr.message)) {
+      return {
+        success: false,
+        fieldErrors: {
+          newPassword: [
+            'New password must be different from your current password',
+          ],
+        },
+      }
+    }
+    console.error('updateUser failed:', updateErr.message)
+    return { success: false, error: 'Could not update password — try again' }
+  }
+
+  return { success: true }
 }

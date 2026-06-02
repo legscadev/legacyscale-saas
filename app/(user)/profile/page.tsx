@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/card'
 import { requireActiveUser } from '@/lib/auth'
 import { AvatarUpload } from './avatar-upload'
+import { ChangePasswordForm } from './change-password-form'
 import { ProfileForm } from './profile-form'
 
 function getInitials(name: string | null, email: string): string {
@@ -43,6 +44,18 @@ export default async function UserProfilePage() {
             />
           ) : null}
           <ProfileForm initialName={user.name ?? ''} email={user.email} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Security</CardTitle>
+          <CardDescription>
+            Change the password you use to sign in.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangePasswordForm />
         </CardContent>
       </Card>
     </div>
