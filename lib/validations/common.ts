@@ -6,10 +6,13 @@ import { z } from 'zod'
 
 export const idSchema = z.uuid('Invalid ID format')
 
+// Empty check first so users see "Email is required" before the format
+// error. z.email() with `error` only fires on non-empty, malformed input.
 export const emailSchema = z
-  .email('Invalid email address')
+  .string()
   .min(1, 'Email is required')
   .max(255, 'Email is too long')
+  .pipe(z.email('Invalid email address'))
 
 export const passwordSchema = z
   .string()
