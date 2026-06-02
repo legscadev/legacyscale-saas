@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import type { Role } from '@prisma/client'
 
+import type { MemberStatusFilter } from '@/lib/services/member-service'
+
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -24,15 +26,16 @@ const STATUSES = [
   { value: 'all', label: 'Any status' },
   { value: 'active', label: 'Active' },
   { value: 'suspended', label: 'Suspended' },
+  { value: 'archived', label: 'Archived' },
 ]
 
 interface MembersToolbarProps {
   search: string
   role: Role | null
-  status: 'active' | 'suspended' | null
+  status: MemberStatusFilter | null
   onSearchChange: (value: string) => void
   onRoleChange: (role: Role | null) => void
-  onStatusChange: (status: 'active' | 'suspended' | null) => void
+  onStatusChange: (status: MemberStatusFilter | null) => void
   onClearAll: () => void
   isPending: boolean
 }
@@ -113,11 +116,7 @@ export function MembersToolbar({
           value={statusValue}
           onValueChange={(v) =>
             onStatusChange(
-              !v || v === 'all'
-                ? null
-                : v === 'active'
-                  ? 'active'
-                  : 'suspended',
+              !v || v === 'all' ? null : (v as MemberStatusFilter),
             )
           }
         >

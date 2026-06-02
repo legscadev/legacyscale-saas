@@ -5,7 +5,6 @@ import { fetchMembers } from './actions'
 export default async function AdminMembersPage() {
   const admin = await requireAdmin()
   const initialData = await fetchMembers({
-    tab: 'all',
     search: '',
     role: null,
     status: null,

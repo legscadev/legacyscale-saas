@@ -8,15 +8,14 @@ import {
   type MemberCounts,
   type MemberListItem,
   type MemberSortField,
-  type MemberTab,
+  type MemberStatusFilter,
   type SortDirection,
 } from '@/lib/services/member-service'
 
 export interface MembersQueryState {
-  tab: MemberTab
   search: string
   role: Role | null
-  status: 'active' | 'suspended' | null
+  status: MemberStatusFilter | null
   sort: MemberSortField
   direction: SortDirection
   page: number
@@ -39,7 +38,6 @@ export async function fetchMembers(
   const [counts, result] = await Promise.all([
     memberService.counts(),
     memberService.list({
-      tab: state.tab,
       search: state.search || undefined,
       role: state.role,
       status: state.status,

@@ -2,16 +2,14 @@ import type { Prisma, Role } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
-export type MemberTab = 'all' | 'admins' | 'members' | 'suspended' | 'archived'
+export type MemberStatusFilter = 'active' | 'suspended' | 'archived'
 export type MemberSortField = 'name' | 'createdAt' | 'lastLoginAt'
 export type SortDirection = 'asc' | 'desc'
 
 interface ListMembersOptions {
-  tab?: MemberTab
   search?: string
   role?: Role | null
-  /** null = any status; 'active' or 'suspended' map to isActive boolean. */
-  status?: 'active' | 'suspended' | null
+  status?: MemberStatusFilter | null
   sort?: MemberSortField
   direction?: SortDirection
   page: number
@@ -21,19 +19,14 @@ interface ListMembersOptions {
 const DEFAULT_PAGE_SIZE = 20
 
 function buildWhere(opts: ListMembersOptions): Prisma.UserWhereInput {
-  const { tab = 'all', search, role, status } = opts
+  const { search, role, status } = opts
 
-  // Archived tab pulls soft-deleted rows; every other tab excludes them.
-  const tabWhere: Prisma.UserWhereInput =
-    tab === 'archived'
+  // The archived view explicitly pulls soft-deleted rows; every other
+  // view excludes them.
+  const baseWhere: Prisma.UserWhereInput =
+    status === 'archived'
       ? { deletedAt: { not: null } }
-      : tab === 'admins'
-        ? { deletedAt: null, role: 'ADMIN' }
-        : tab === 'members'
-          ? { deletedAt: null, role: 'MEMBER' }
-          : tab === 'suspended'
-            ? { deletedAt: null, isActive: false }
-            : { deletedAt: null }
+      : { deletedAt: null }
 
   const filters: Prisma.UserWhereInput = {}
   if (role) filters.role = role
@@ -50,7 +43,7 @@ function buildWhere(opts: ListMembersOptions): Prisma.UserWhereInput {
     : undefined
 
   return {
-    AND: [tabWhere, filters, ...(searchWhere ? [searchWhere] : [])],
+    AND: [baseWhere, filters, ...(searchWhere ? [searchWhere] : [])],
   }
 }
 
@@ -99,11 +92,7 @@ async function listMembers(options: ListMembersOptions) {
   }
 }
 
-/**
- * Returns counts used by the tab bar + KPI cards in one round trip.
- * Group-by gives us role + isActive splits for active users; a separate
- * count covers the soft-deleted (archived) bucket.
- */
+/** Returns counts used by the KPI cards in one round trip. */
 async function getCounts() {
   const [groups, archived] = await Promise.all([
     prisma.user.groupBy({

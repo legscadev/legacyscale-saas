@@ -1,23 +1,33 @@
 'use client'
 
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import type {
+  OnChangeFn,
+  RowSelectionState,
+  SortingState,
+} from '@tanstack/react-table'
 import { Plus, Users } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { DataTable } from '@/components/ui/data-table'
 import { PageHeader, EmptyState } from '@/components/shared'
 import { MembersMetrics } from './members-metrics'
-import { MembersTabs } from './members-tabs'
 import { MembersToolbar } from './members-toolbar'
-import { MembersTable } from './members-table'
-import { MembersPagination } from './members-pagination'
+import { MemberDrawer } from './member-drawer'
+import { BulkActionBar } from './bulk-action-bar'
+import { getMemberColumns } from './columns'
 import {
   fetchMembers,
   type MembersData,
   type MembersQueryState,
 } from '@/app/(admin)/admin/members/actions'
+import type {
+  MemberListItem,
+  MemberSortField,
+  SortDirection,
+} from '@/lib/services/member-service'
 
 export const DEFAULT_QUERY_STATE: MembersQueryState = {
-  tab: 'all',
   search: '',
   role: null,
   status: null,
@@ -25,6 +35,8 @@ export const DEFAULT_QUERY_STATE: MembersQueryState = {
   direction: 'desc',
   page: 1,
 }
+
+const PAGE_SIZE = 20
 
 interface MembersShellProps {
   currentUserId: string
@@ -39,8 +51,9 @@ export function MembersShell({
   const [data, setData] = useState<MembersData>(initialData)
   const [isPending, startTransition] = useTransition()
 
-  // Refetch whenever query changes — except on first render, where the
-  // server-provided initialData already matches the default state.
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [drawerMember, setDrawerMember] = useState<MemberListItem | null>(null)
+
   useEffect(() => {
     if (query === DEFAULT_QUERY_STATE) return
     let cancelled = false
@@ -54,27 +67,59 @@ export function MembersShell({
     }
   }, [query])
 
-  const patch = useCallback(
-    (updates: Partial<MembersQueryState>) => {
-      setQuery((prev) => {
-        const resetsPage = 'page' in updates ? false : true
-        return {
-          ...prev,
-          ...updates,
-          ...(resetsPage ? { page: 1 } : {}),
-        }
-      })
-    },
-    [],
-  )
+  // Drop any selections that no longer exist in the current data (e.g.
+  // after filtering or paging).
+  useEffect(() => {
+    setRowSelection((prev) => {
+      const visible = new Set(data.items.map((m) => m.id))
+      const next: RowSelectionState = {}
+      for (const id of Object.keys(prev)) {
+        if (visible.has(id)) next[id] = prev[id]!
+      }
+      return next
+    })
+  }, [data.items])
 
-  const clearFilters = useCallback(() => {
-    setQuery((prev) => ({
-      ...DEFAULT_QUERY_STATE,
-      tab: prev.tab,
-    }))
+  const patch = useCallback((updates: Partial<MembersQueryState>) => {
+    setQuery((prev) => {
+      const resetsPage = !('page' in updates)
+      return {
+        ...prev,
+        ...updates,
+        ...(resetsPage ? { page: 1 } : {}),
+      }
+    })
   }, [])
 
+  const clearFilters = useCallback(() => {
+    setQuery(DEFAULT_QUERY_STATE)
+  }, [])
+
+  // TanStack sorting state ↔ our server-side sort/direction pair.
+  const sorting: SortingState = useMemo(
+    () => [{ id: query.sort, desc: query.direction === 'desc' }],
+    [query.sort, query.direction],
+  )
+  const onSortingChange: OnChangeFn<SortingState> = useCallback(
+    (updater) => {
+      const next =
+        typeof updater === 'function' ? updater(sorting) : updater
+      const first = next[0]
+      if (!first) return
+      patch({
+        sort: first.id as MemberSortField,
+        direction: (first.desc ? 'desc' : 'asc') as SortDirection,
+      })
+    },
+    [sorting, patch],
+  )
+
+  const columns = useMemo(
+    () => getMemberColumns(currentUserId),
+    [currentUserId],
+  )
+
+  const selectedIds = Object.keys(rowSelection)
   const hasActiveFilters =
     query.search.length > 0 || query.role !== null || query.status !== null
   const showEmpty = data.items.length === 0
@@ -98,11 +143,6 @@ export function MembersShell({
       <MembersMetrics counts={data.counts} />
 
       <div className="space-y-4">
-        <MembersTabs
-          active={query.tab}
-          counts={data.counts}
-          onChange={(tab) => patch({ tab })}
-        />
         <MembersToolbar
           search={query.search}
           role={query.role}
@@ -122,35 +162,47 @@ export function MembersShell({
                 ? 'No members match these filters'
                 : onlyAdminInPlatform
                   ? 'No members yet'
-                  : 'Nothing in this tab'
+                  : 'No results'
             }
             description={
               hasActiveFilters
                 ? 'Try widening your search or clearing filters.'
                 : onlyAdminInPlatform
                   ? "Add your first member to get started — they'll show up here once created."
-                  : 'Members will appear here when they match this tab.'
+                  : 'Members will appear here when they match these filters.'
             }
           />
         ) : (
-          <>
-            <MembersTable
-              members={data.items}
-              currentUserId={currentUserId}
-              sort={query.sort}
-              direction={query.direction}
-              onSortChange={(sort, direction) => patch({ sort, direction })}
-            />
-            <MembersPagination
-              page={data.page}
-              totalPages={data.totalPages}
-              total={data.total}
-              limit={data.limit}
-              onPageChange={(page) => patch({ page })}
-            />
-          </>
+          <DataTable
+            columns={columns}
+            data={data.items}
+            page={data.page}
+            pageCount={data.totalPages}
+            total={data.total}
+            pageSize={PAGE_SIZE}
+            onPageChange={(page) => patch({ page })}
+            sorting={sorting}
+            onSortingChange={onSortingChange}
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            onRowClick={setDrawerMember}
+            getRowId={(row) => row.id}
+          />
         )}
       </div>
+
+      <MemberDrawer
+        member={drawerMember}
+        open={drawerMember !== null}
+        onOpenChange={(open) => {
+          if (!open) setDrawerMember(null)
+        }}
+      />
+
+      <BulkActionBar
+        selectedCount={selectedIds.length}
+        onClear={() => setRowSelection({})}
+      />
     </div>
   )
 }
