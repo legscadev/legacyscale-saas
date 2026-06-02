@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { syncUserToDatabase } from '@/lib/auth/sync-user'
+import { issueInvite } from '@/lib/invites'
 import { prisma } from '@/lib/prisma'
 import { sendWelcomeEmail } from '@/lib/resend'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -13,28 +14,10 @@ import {
 } from '@/lib/api/helpers'
 import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
 
-const INVITE_TTL_DAYS = 7
-const INVITE_TTL_MS = INVITE_TTL_DAYS * 24 * 60 * 60 * 1000
-
 function emailConflictResponse() {
   return errorResponse('A member with this email already exists', 409, {
     email: ['A member with this email already exists'],
   })
-}
-
-/**
- * Generates a 32-char URL-safe random token for invite links.
- * Members never type this — it's only ever clicked from the welcome
- * email, so length favors entropy over readability.
- */
-function generateInviteToken(): string {
-  const bytes = new Uint8Array(24)
-  crypto.getRandomValues(bytes)
-  return Buffer.from(bytes)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
 }
 
 /**
@@ -107,15 +90,10 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 3. Issue the onboarding invite token.
-    const token = generateInviteToken()
-    await prisma.invite.create({
-      data: {
-        token,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
-      },
-    })
+    // 3. Issue the onboarding invite token (also invalidates any
+    //    prior unused invites for safety, though there shouldn't be
+    //    any for a fresh user).
+    const token = await issueInvite(user.id)
 
     // 4. Send the invite-variant welcome email.
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'

@@ -25,6 +25,8 @@ export const adminUpdateMemberSchema = z
     name: nameSchema.optional(),
     role: userRoleSchema.optional(),
     isActive: z.boolean().optional(),
+    /** true: soft-delete (sets deletedAt). false: restore from archive. */
+    archive: z.boolean().optional(),
   })
   .refine(
     (data) => Object.values(data).some((v) => v !== undefined),

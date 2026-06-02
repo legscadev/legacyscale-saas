@@ -25,11 +25,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const validation = await validateBody(request, adminUpdateMemberSchema)
   if (validation.error) return validation.error
 
-  const { name, role, isActive } = validation.data
+  const { name, role, isActive, archive } = validation.data
 
   // Self-modification guards. Admins can update their own name freely,
   // but they can't change their own role (could lock themselves out of
-  // admin) or deactivate themselves.
+  // admin), deactivate themselves, or archive themselves.
   if (id === admin.id) {
     if (role !== undefined && role !== admin.role) {
       return errorResponse("You can't change your own role", 400)
@@ -37,15 +37,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (isActive !== undefined) {
       return errorResponse("You can't change your own access status", 400)
     }
+    if (archive !== undefined) {
+      return errorResponse("You can't archive yourself", 400)
+    }
   }
 
+  // Archiving is mutually exclusive with the other fields in this
+  // request — admins shouldn't pile changes onto a delete. We allow
+  // restoring (archive: false) on its own too.
+  // Allow editing while restoring? Skip for simplicity — restore-only.
   try {
     const user = await prisma.user.update({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: archive === false ? { not: null } : null },
       data: {
         ...(name !== undefined ? { name } : {}),
         ...(role !== undefined ? { role } : {}),
         ...(isActive !== undefined ? { isActive } : {}),
+        ...(archive === true ? { deletedAt: new Date() } : {}),
+        ...(archive === false ? { deletedAt: null } : {}),
       },
       select: {
         id: true,
@@ -54,6 +63,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         name: true,
         role: true,
         isActive: true,
+        deletedAt: true,
       },
     })
 
@@ -89,6 +99,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         name: user.name,
         role: user.role,
         isActive: user.isActive,
+        archived: user.deletedAt !== null,
       },
     })
   } catch (err) {
