@@ -1,6 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
 import type {
   OnChangeFn,
   RowSelectionState,
@@ -54,8 +61,15 @@ export function MembersShell({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [drawerMember, setDrawerMember] = useState<MemberListItem | null>(null)
 
+  // Skip the very first effect run — the server-fetched initialData
+  // already matches DEFAULT_QUERY_STATE, no need to refetch. After that,
+  // every query change (including "Clear" → back to defaults) refetches.
+  const isFirstRender = useRef(true)
   useEffect(() => {
-    if (query === DEFAULT_QUERY_STATE) return
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
     let cancelled = false
     startTransition(() => {
       fetchMembers(query).then((next) => {
