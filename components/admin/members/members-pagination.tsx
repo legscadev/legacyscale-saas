@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 interface MembersPaginationProps {
   page: number
@@ -32,53 +32,28 @@ export function MembersPagination({
         <span className="font-medium text-foreground">{total}</span>
       </p>
       <div className="flex items-center gap-1">
-        <PageButton
+        <Button
+          variant="outline"
+          size="icon-sm"
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           aria-label="Previous page"
         >
-          <ChevronLeft className="size-4" />
-        </PageButton>
+          <ChevronLeft />
+        </Button>
         <span className="px-2 tabular-nums">
           Page {page} of {totalPages}
         </span>
-        <PageButton
+        <Button
+          variant="outline"
+          size="icon-sm"
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
           aria-label="Next page"
         >
-          <ChevronRight className="size-4" />
-        </PageButton>
+          <ChevronRight />
+        </Button>
       </div>
     </div>
-  )
-}
-
-function PageButton({
-  onClick,
-  disabled,
-  children,
-  ...rest
-}: {
-  onClick: () => void
-  disabled?: boolean
-  children: React.ReactNode
-  'aria-label'?: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'grid size-8 place-items-center rounded-md border transition-colors',
-        disabled
-          ? 'cursor-not-allowed border-border/50 text-muted-foreground/50'
-          : 'border-border hover:bg-muted hover:text-foreground',
-      )}
-      {...rest}
-    >
-      {children}
-    </button>
   )
 }

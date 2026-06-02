@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type {
   MemberCounts,
   MemberTab,
@@ -37,28 +38,20 @@ function countFor(id: MemberTab, counts: MemberCounts): number {
 
 export function MembersTabs({ active, counts, onChange }: MembersTabsProps) {
   return (
-    <div className="overflow-x-auto border-b">
-      <nav
-        className="-mb-px flex min-w-max items-center gap-1"
-        aria-label="Member tabs"
-        role="tablist"
-      >
+    <Tabs
+      value={active}
+      onValueChange={(v) => onChange(v as MemberTab)}
+      className="border-b"
+    >
+      <TabsList variant="line" className="h-auto w-full justify-start overflow-x-auto">
         {TABS.map((t) => {
-          const isActive = t.id === active
           const n = countFor(t.id, counts)
+          const isActive = t.id === active
           return (
-            <button
+            <TabsTrigger
               key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => onChange(t.id)}
-              className={cn(
-                'group inline-flex items-center gap-2 border-b-2 px-3 pb-3 pt-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground',
-              )}
+              value={t.id}
+              className="h-9 flex-none gap-2 px-3 data-active:after:bg-primary data-active:text-foreground"
             >
               {t.label}
               <span
@@ -66,15 +59,15 @@ export function MembersTabs({ active, counts, onChange }: MembersTabsProps) {
                   'inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs tabular-nums transition-colors',
                   isActive
                     ? 'bg-primary/10 text-primary'
-                    : 'bg-muted text-muted-foreground group-hover:bg-muted-foreground/10',
+                    : 'bg-muted text-muted-foreground',
                 )}
               >
                 {n.toLocaleString()}
               </span>
-            </button>
+            </TabsTrigger>
           )
         })}
-      </nav>
-    </div>
+      </TabsList>
+    </Tabs>
   )
 }

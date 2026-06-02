@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { Card } from '@/components/ui/card'
 import type { MemberCounts } from '@/lib/services/member-service'
 
 interface MembersMetricsProps {
@@ -75,18 +76,18 @@ function MetricCard({ label, value, helper, icon: Icon, trend }: Card) {
         : 'text-muted-foreground'
 
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <Card size="sm" className="gap-2 px-4">
       <div className="flex items-start justify-between">
         <p className="text-sm text-muted-foreground">{label}</p>
         <Icon className="size-4 text-muted-foreground" />
       </div>
-      <div className="mt-2 flex items-baseline gap-2">
+      <div className="flex items-baseline gap-2">
         <p className="text-2xl font-semibold tabular-nums tracking-tight">
           {value.toLocaleString()}
         </p>
         <TrendIcon className={cn('size-3.5', trendClass)} />
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
-    </div>
+      <p className="-mt-1 text-xs text-muted-foreground">{helper}</p>
+    </Card>
   )
 }
