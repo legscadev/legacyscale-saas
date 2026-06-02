@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { AvatarLightbox } from '@/components/shared'
 import { createClient } from '@/lib/supabase/client'
-import { updateAvatarUrl } from './actions'
+import { updateAvatarUrl } from '@/lib/actions/profile'
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB

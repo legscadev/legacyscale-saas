@@ -23,6 +23,7 @@ export function AppShell({ role, user, children }: AppShellProps) {
   const sections = isAdmin ? adminNav : memberNav
   const context = isAdmin ? 'Admin Console' : 'Member'
   const homeHref = isAdmin ? '/admin/dashboard' : '/dashboard'
+  const profileHref = isAdmin ? '/admin/profile' : '/profile'
   const settingsHref = isAdmin ? '/admin/settings' : '/profile'
 
   return (
@@ -38,7 +39,11 @@ export function AppShell({ role, user, children }: AppShellProps) {
           <SidebarNav sections={sections} />
         </div>
         <div className="border-t p-2">
-          <UserMenu user={user} settingsHref={settingsHref} />
+          <UserMenu
+            user={user}
+            profileHref={profileHref}
+            settingsHref={settingsHref}
+          />
         </div>
       </aside>
 
@@ -69,7 +74,11 @@ export function AppShell({ role, user, children }: AppShellProps) {
               />
             </div>
             <div className="border-t p-2">
-              <UserMenu user={user} settingsHref={settingsHref} />
+              <UserMenu
+            user={user}
+            profileHref={profileHref}
+            settingsHref={settingsHref}
+          />
             </div>
           </div>
         </div>

@@ -23,6 +23,7 @@ export interface ShellUser {
 
 interface UserMenuProps {
   user: ShellUser
+  profileHref: string
   settingsHref: string
 }
 
@@ -35,7 +36,11 @@ function getInitials(name: string | null, email: string): string {
   return source.slice(0, 2).toUpperCase()
 }
 
-export function UserMenu({ user, settingsHref }: UserMenuProps) {
+export function UserMenu({
+  user,
+  profileHref,
+  settingsHref,
+}: UserMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -62,7 +67,7 @@ export function UserMenu({ user, settingsHref }: UserMenuProps) {
           <DropdownMenuLabel>
             {user.role === 'ADMIN' ? 'Administrator' : 'Member'}
           </DropdownMenuLabel>
-          <DropdownMenuItem render={<Link href={settingsHref} />}>
+          <DropdownMenuItem render={<Link href={profileHref} />}>
             <UserRound />
             Profile
           </DropdownMenuItem>

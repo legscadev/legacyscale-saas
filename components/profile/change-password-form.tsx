@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/auth/password-input'
 import { changePasswordSchema } from '@/lib/validations/auth'
-import { updatePassword } from './actions'
+import { updatePassword } from '@/lib/actions/profile'
 
 type FieldErrors = Partial<
   Record<'currentPassword' | 'newPassword' | 'confirmPassword', string[]>

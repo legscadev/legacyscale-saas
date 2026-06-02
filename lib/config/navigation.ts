@@ -40,6 +40,10 @@ export const adminNav: NavSection[] = [
     items: [{ label: 'Members', href: '/admin/members', icon: Users }],
   },
   {
+    label: 'Account',
+    items: [{ label: 'Profile', href: '/admin/profile', icon: User }],
+  },
+  {
     label: 'System',
     items: [{ label: 'Settings', href: '/admin/settings', icon: Settings }],
   },
