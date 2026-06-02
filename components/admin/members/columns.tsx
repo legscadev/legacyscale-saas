@@ -153,7 +153,10 @@ export function getMemberColumns(
         <SortHeader column={column}>Last active</SortHeader>
       ),
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <span
+          className="text-sm text-muted-foreground"
+          suppressHydrationWarning
+        >
           {formatRelative(row.original.lastLoginAt)}
         </span>
       ),
