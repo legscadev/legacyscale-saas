@@ -6,7 +6,7 @@ import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Checkbox } from '@/components/ui/checkbox'
-import { StatusBadge } from '@/components/shared'
+import { AvatarLightbox, StatusBadge } from '@/components/shared'
 import { MemberActionsMenu } from './member-actions-menu'
 import type { MemberListItem } from '@/lib/services/member-service'
 
@@ -104,10 +104,18 @@ export function getMemberColumns(
         const m = row.original
         return (
           <div className="flex items-center gap-3">
-            <Avatar size="sm">
-              {m.avatarUrl ? <AvatarImage src={m.avatarUrl} alt="" /> : null}
-              <AvatarFallback>{getInitials(m.name, m.email)}</AvatarFallback>
-            </Avatar>
+            <AvatarLightbox
+              photoUrl={m.avatarUrl}
+              label={`View ${m.name ?? m.email}'s photo`}
+              alt={`${m.name ?? m.email}'s photo`}
+            >
+              <Avatar size="sm">
+                {m.avatarUrl ? <AvatarImage src={m.avatarUrl} alt="" /> : null}
+                <AvatarFallback>
+                  {getInitials(m.name, m.email)}
+                </AvatarFallback>
+              </Avatar>
+            </AvatarLightbox>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">
                 {m.name ?? m.email.split('@')[0]}

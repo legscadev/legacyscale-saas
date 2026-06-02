@@ -6,11 +6,7 @@ import { toast } from 'sonner'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { AvatarLightbox } from '@/components/shared'
 import { createClient } from '@/lib/supabase/client'
 import { updateAvatarUrl } from './actions'
 
@@ -42,7 +38,6 @@ export function AvatarUpload({
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [lightboxOpen, setLightboxOpen] = useState(false)
   const [_isPending, startTransition] = useTransition()
 
   const pickFile = () => inputRef.current?.click()
@@ -104,28 +99,18 @@ export function AvatarUpload({
 
   const displayUrl = previewUrl ?? avatarUrl ?? undefined
 
-  const canOpenLightbox = !!avatarUrl && !uploading
+  // Only the persisted URL opens the lightbox; the local preview blob
+  // is short-lived and not worth zooming into.
+  const lightboxUrl = uploading ? null : avatarUrl
 
   return (
     <div className="flex items-center gap-4">
-      {canOpenLightbox ? (
-        <button
-          type="button"
-          onClick={() => setLightboxOpen(true)}
-          aria-label="View profile photo"
-          className="rounded-full ring-offset-background transition focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:opacity-90"
-        >
-          <Avatar className="h-16 w-16 cursor-zoom-in">
-            <AvatarImage src={displayUrl} alt="" />
-            <AvatarFallback className="text-lg">{fallbackText}</AvatarFallback>
-          </Avatar>
-        </button>
-      ) : (
+      <AvatarLightbox photoUrl={lightboxUrl} label="View profile photo" alt="Profile photo">
         <Avatar className="h-16 w-16">
           {displayUrl ? <AvatarImage src={displayUrl} alt="" /> : null}
           <AvatarFallback className="text-lg">{fallbackText}</AvatarFallback>
         </Avatar>
-      )}
+      </AvatarLightbox>
       <div className="space-y-2">
         <Button
           type="button"
@@ -161,25 +146,6 @@ export function AvatarUpload({
           if (file) handleFile(file)
         }}
       />
-
-      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
-        <DialogContent
-          className="max-w-[min(90vw,640px)] gap-0 overflow-hidden border-none bg-transparent p-0 ring-0 shadow-none"
-          showCloseButton={false}
-        >
-          {/* Visually hidden — satisfies the dialog accessibility
-              contract without showing a header on the lightbox. */}
-          <DialogTitle className="sr-only">Profile photo</DialogTitle>
-          {avatarUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={avatarUrl}
-              alt="Profile photo"
-              className="block max-h-[80vh] w-full rounded-xl object-contain"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
