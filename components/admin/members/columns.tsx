@@ -23,6 +23,8 @@ function formatDate(date: Date | null): string {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
   }).format(date)
 }
 
