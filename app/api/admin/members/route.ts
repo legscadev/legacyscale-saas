@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { syncUserToDatabase } from '@/lib/auth/sync-user'
+import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   errorResponse,
@@ -10,6 +11,14 @@ import {
   validateBody,
 } from '@/lib/api/helpers'
 import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
+
+function emailConflictResponse() {
+  return errorResponse(
+    'A member with this email already exists',
+    409,
+    { email: ['A member with this email already exists'] },
+  )
+}
 
 /**
  * Generates a 16-char URL-safe random temporary password.
@@ -40,6 +49,16 @@ export async function POST(request: NextRequest) {
   const normalizedEmail = email.toLowerCase().trim()
   const temporaryPassword = generateTempPassword()
 
+  // Pre-check: bail early on duplicate (including soft-deleted rows —
+  // an archived user with the same email still owns it). We rely on
+  // the DB-level @unique constraint as the source of truth, but this
+  // gives us a clean field-level error before touching Supabase Auth.
+  const existing = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true },
+  })
+  if (existing) return emailConflictResponse()
+
   const admin = createAdminClient()
 
   // 1. Create the Supabase Auth user. email_confirm: true skips the
@@ -57,8 +76,10 @@ export async function POST(request: NextRequest) {
     // Supabase returns a duplicate-email error when the email already
     // belongs to an auth user.
     const message = createErr?.message ?? 'Failed to create user'
+    // Catches the race where the Prisma pre-check passes but a parallel
+    // request (or an orphaned auth user not yet synced) collides here.
     if (/already (been )?registered|exists/i.test(message)) {
-      return errorResponse('A member with this email already exists', 409)
+      return emailConflictResponse()
     }
     console.error('admin.createUser failed:', message)
     return serverErrorResponse()
@@ -73,7 +94,6 @@ export async function POST(request: NextRequest) {
       // syncUserToDatabase preserves the existing role on update,
       // but for a brand-new row the default is MEMBER. If the admin
       // picked ADMIN, promote them here.
-      const { prisma } = await import('@/lib/prisma')
       await prisma.user.update({
         where: { id: user.id },
         data: { role },

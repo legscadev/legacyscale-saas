@@ -54,6 +54,9 @@ export function MemberCreateDialog({
   const [role, setRole] = useState<Role>('MEMBER')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<
+    Record<string, string[]> | null
+  >(null)
   const [created, setCreated] = useState<CreatedMember | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -62,6 +65,7 @@ export function MemberCreateDialog({
     setEmail('')
     setRole('MEMBER')
     setError(null)
+    setFieldErrors(null)
     setCreated(null)
     setSubmitting(false)
     setCopied(false)
@@ -77,6 +81,7 @@ export function MemberCreateDialog({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
+    setFieldErrors(null)
     setSubmitting(true)
     try {
       const res = await fetch('/api/admin/members', {
@@ -86,7 +91,12 @@ export function MemberCreateDialog({
       })
       const json = await res.json()
       if (!res.ok || !json.success) {
-        setError(json.error?.message ?? 'Failed to create member')
+        const details = json.error?.details
+        if (details && typeof details === 'object') {
+          setFieldErrors(details)
+        } else {
+          setError(json.error?.message ?? 'Failed to create member')
+        }
         return
       }
       setCreated({
@@ -179,8 +189,14 @@ export function MemberCreateDialog({
                   autoComplete="name"
                   className="pl-8"
                   disabled={submitting}
+                  aria-invalid={!!fieldErrors?.name}
                 />
               </div>
+              {fieldErrors?.name?.[0] && (
+                <p className="text-xs text-destructive" role="alert">
+                  {fieldErrors.name[0]}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -197,8 +213,14 @@ export function MemberCreateDialog({
                   autoComplete="email"
                   className="pl-8"
                   disabled={submitting}
+                  aria-invalid={!!fieldErrors?.email}
                 />
               </div>
+              {fieldErrors?.email?.[0] && (
+                <p className="text-xs text-destructive" role="alert">
+                  {fieldErrors.email[0]}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
