@@ -20,7 +20,6 @@ import { DataTable } from '@/components/ui/data-table'
 import { PageHeader, EmptyState } from '@/components/shared'
 import { MembersMetrics } from './members-metrics'
 import { MembersToolbar } from './members-toolbar'
-import { MemberDrawer } from './member-drawer'
 import { BulkActionBar } from './bulk-action-bar'
 import { getMemberColumns } from './columns'
 import {
@@ -29,7 +28,6 @@ import {
   type MembersQueryState,
 } from '@/app/(admin)/admin/members/actions'
 import type {
-  MemberListItem,
   MemberSortField,
   SortDirection,
 } from '@/lib/services/member-service'
@@ -59,7 +57,6 @@ export function MembersShell({
   const [isPending, startTransition] = useTransition()
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
-  const [drawerMember, setDrawerMember] = useState<MemberListItem | null>(null)
 
   // Skip the very first effect run — the server-fetched initialData
   // already matches DEFAULT_QUERY_STATE, no need to refetch. After that,
@@ -199,19 +196,10 @@ export function MembersShell({
             onSortingChange={onSortingChange}
             rowSelection={rowSelection}
             onRowSelectionChange={setRowSelection}
-            onRowClick={setDrawerMember}
             getRowId={(row) => row.id}
           />
         )}
       </div>
-
-      <MemberDrawer
-        member={drawerMember}
-        open={drawerMember !== null}
-        onOpenChange={(open) => {
-          if (!open) setDrawerMember(null)
-        }}
-      />
 
       <BulkActionBar
         selectedCount={selectedIds.length}

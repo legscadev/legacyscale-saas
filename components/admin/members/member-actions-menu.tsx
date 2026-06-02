@@ -1,6 +1,14 @@
 'use client'
 
-import { MoreHorizontal } from 'lucide-react'
+import {
+  Archive,
+  Edit3,
+  KeyRound,
+  Mail,
+  MoreHorizontal,
+  ShieldCheck,
+  UserX,
+} from 'lucide-react'
 
 import {
   DropdownMenu,
@@ -17,8 +25,9 @@ interface MemberActionsMenuProps {
 }
 
 /**
- * Per-row actions menu. Items are stubbed until the next two tickets
- * land — 1.11 (edit) and 1.12 (activate/deactivate).
+ * Per-row actions menu. Items are stubbed until the related tickets
+ * land — 1.11 (edit / create), 1.12 (suspend / reactivate),
+ * 1.13 (archive).
  */
 export function MemberActionsMenu({
   isActive,
@@ -36,17 +45,40 @@ export function MemberActionsMenu({
       >
         <MoreHorizontal className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem disabled>Edit details</DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem disabled>
+          <Edit3 />
+          Edit details
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled>
+          <KeyRound />
+          Send password reset
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled>
+          <Mail />
+          Resend welcome email
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {isSelf ? (
           <DropdownMenuItem disabled>You</DropdownMenuItem>
-        ) : isActive ? (
-          <DropdownMenuItem disabled className="text-destructive">
-            Deactivate
-          </DropdownMenuItem>
         ) : (
-          <DropdownMenuItem disabled>Reactivate</DropdownMenuItem>
+          <>
+            {isActive ? (
+              <DropdownMenuItem disabled className="text-destructive">
+                <UserX />
+                Suspend access
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled>
+                <ShieldCheck />
+                Reactivate
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem disabled className="text-destructive">
+              <Archive />
+              Archive
+            </DropdownMenuItem>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

@@ -77,7 +77,7 @@ export function MembersToolbar({
     search.length > 0 || role !== null || status !== null
 
   return (
-    <div className="sticky top-0 z-10 -mx-px flex flex-col gap-3 border-b bg-background/95 px-px py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+    <div className="sticky top-0 z-10 -mx-px flex flex-col gap-3 bg-background/95 px-px py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
       <div className="relative w-full sm:max-w-xs">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
