@@ -19,21 +19,34 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = createClient()
 
-    // The browser client processes the recovery token from the URL hash
-    // before firing INITIAL_SESSION. A non-null session here means either
-    // the token was valid (just-established) or the user was already
-    // signed in. Either way, updateUser() will accept the new password.
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' || session) {
-        setStatus('ready')
-      } else if (event === 'INITIAL_SESSION') {
-        setStatus('invalid')
-      }
-    })
+    // The recovery flow lands here with implicit tokens in the URL hash.
+    // @supabase/ssr defaults to PKCE and doesn't auto-process them, so
+    // we read the hash ourselves and call setSession. If no hash, fall
+    // back to whatever cookie session already exists.
+    const params = new URLSearchParams(window.location.hash.slice(1))
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
 
-    return () => subscription.unsubscribe()
+    if (accessToken && refreshToken) {
+      supabase.auth
+        .setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ error }) => {
+          if (error) {
+            setStatus('invalid')
+          } else {
+            // Strip tokens from the URL so they're not exposed in history
+            // or shared if the user copies the link.
+            window.history.replaceState(null, '', window.location.pathname)
+            setStatus('ready')
+          }
+        })
+    } else {
+      supabase.auth
+        .getSession()
+        .then(({ data: { session } }) =>
+          setStatus(session ? 'ready' : 'invalid')
+        )
+    }
   }, [])
 
   return (
