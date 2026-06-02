@@ -1,20 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/auth/password-input'
-import { completeOnboardingSchema } from '@/lib/validations/onboarding'
+import { onboardingFormSchema } from '@/lib/validations/onboarding'
 
 interface OnboardingFormProps {
   token: string
 }
 
 export function OnboardingForm({ token }: OnboardingFormProps) {
-  const router = useRouter()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -28,7 +26,7 @@ export function OnboardingForm({ token }: OnboardingFormProps) {
     setError(null)
     setFieldErrors({})
 
-    const parsed = completeOnboardingSchema.safeParse({ password, confirm })
+    const parsed = onboardingFormSchema.safeParse({ password, confirm })
     if (!parsed.success) {
       const next: typeof fieldErrors = {}
       for (const issue of parsed.error.issues) {
@@ -44,10 +42,10 @@ export function OnboardingForm({ token }: OnboardingFormProps) {
 
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/onboarding/${token}`, {
+      const res = await fetch('/api/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify({ ...parsed.data, token }),
       })
       const json = await res.json()
       if (!res.ok || !json.success) {

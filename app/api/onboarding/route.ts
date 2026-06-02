@@ -11,15 +11,11 @@ import {
 } from '@/lib/api/helpers'
 import { completeOnboardingSchema } from '@/lib/validations/onboarding'
 
-interface RouteContext {
-  params: Promise<{ token: string }>
-}
-
-export async function POST(request: NextRequest, context: RouteContext) {
-  const { token } = await context.params
-
+export async function POST(request: NextRequest) {
   const validation = await validateBody(request, completeOnboardingSchema)
   if (validation.error) return validation.error
+
+  const { token, password } = validation.data
 
   const invite = await prisma.invite.findUnique({
     where: { token },
@@ -27,10 +23,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   })
 
   if (!invite || invite.usedAt || invite.expiresAt < new Date()) {
-    return errorResponse(
-      'This invite link is invalid or has expired',
-      410,
-    )
+    return errorResponse('This invite link is invalid or has expired', 410)
   }
 
   if (!invite.user.authId) {
@@ -44,7 +37,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // 1. Set the new password through Supabase Auth admin.
   const { error: updateErr } = await admin.auth.admin.updateUserById(
     invite.user.authId,
-    { password: validation.data.password },
+    { password },
   )
   if (updateErr) {
     console.error('Password update failed:', updateErr.message)
@@ -52,12 +45,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   // 2. Sign the user in by establishing a session in this request. We
-  //    use the public client (cookie-aware) with the just-set password
-  //    so the session cookie persists on the response.
+  //    use the cookie-aware server client with the just-set password so
+  //    the session cookie persists on the response.
   const supabase = await createClient()
   const { error: signInErr } = await supabase.auth.signInWithPassword({
     email: invite.user.email,
-    password: validation.data.password,
+    password,
   })
   if (signInErr) {
     console.error('Auto-sign-in after onboarding failed:', signInErr.message)
@@ -77,6 +70,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   })
 
   return successResponse({
-    redirectTo: invite.user.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard',
+    redirectTo:
+      invite.user.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard',
   })
 }

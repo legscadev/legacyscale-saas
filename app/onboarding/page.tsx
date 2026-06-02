@@ -7,16 +7,20 @@ import { prisma } from '@/lib/prisma'
 import { OnboardingForm } from './onboarding-form'
 
 interface OnboardingPageProps {
-  params: Promise<{ token: string }>
+  searchParams: Promise<{ token?: string }>
 }
 
-export default async function OnboardingPage({ params }: OnboardingPageProps) {
-  const { token } = await params
+export default async function OnboardingPage({
+  searchParams,
+}: OnboardingPageProps) {
+  const { token } = await searchParams
 
-  const invite = await prisma.invite.findUnique({
-    where: { token },
-    include: { user: { select: { name: true, email: true } } },
-  })
+  const invite = token
+    ? await prisma.invite.findUnique({
+        where: { token },
+        include: { user: { select: { name: true, email: true } } },
+      })
+    : null
 
   const isValid =
     !!invite && !invite.usedAt && invite.expiresAt > new Date()
@@ -36,7 +40,7 @@ export default async function OnboardingPage({ params }: OnboardingPageProps) {
                 Set a password to finish creating your account.
               </p>
             </div>
-            <OnboardingForm token={token} />
+            <OnboardingForm token={token!} />
           </>
         ) : (
           <>

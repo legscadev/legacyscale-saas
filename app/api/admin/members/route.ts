@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     // 4. Send the invite-variant welcome email.
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-    const onboardingUrl = `${appUrl}/onboarding/${token}`
+    const onboardingUrl = `${appUrl}/onboarding?token=${token}`
     try {
       await sendWelcomeEmail(user.email, name, {
         ctaUrl: onboardingUrl,
