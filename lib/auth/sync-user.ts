@@ -66,7 +66,7 @@ export async function syncUserToDatabase(
   return user
 }
 
-async function syncRoleToAuthMetadata(
+export async function syncRoleToAuthMetadata(
   authId: string,
   role: User['role']
 ): Promise<void> {

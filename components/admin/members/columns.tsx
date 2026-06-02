@@ -173,6 +173,8 @@ export function getMemberColumns(
           <MemberActionsMenu
             memberId={row.original.id}
             memberName={row.original.name ?? row.original.email}
+            memberEmail={row.original.email}
+            memberRole={row.original.role}
             isActive={row.original.isActive}
             isSelf={row.original.id === currentUserId}
             onRefetch={onRefetch}

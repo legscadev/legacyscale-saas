@@ -13,4 +13,23 @@ export const adminCreateMemberSchema = z.object({
   role: userRoleSchema.default('MEMBER'),
 })
 
+/**
+ * Body shape for PATCH /api/admin/members/[id]. All fields are
+ * optional so callers can update any subset (status toggle, edit
+ * details, etc.) through the same endpoint. Email is intentionally
+ * absent — that needs supabase.auth.admin.updateUserById and a
+ * separate ticket.
+ */
+export const adminUpdateMemberSchema = z
+  .object({
+    name: nameSchema.optional(),
+    role: userRoleSchema.optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine(
+    (data) => Object.values(data).some((v) => v !== undefined),
+    { message: 'Nothing to update' },
+  )
+
 export type AdminCreateMemberInput = z.infer<typeof adminCreateMemberSchema>
+export type AdminUpdateMemberInput = z.infer<typeof adminUpdateMemberSchema>

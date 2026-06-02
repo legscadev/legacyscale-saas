@@ -29,10 +29,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { MemberEditDialog } from './member-edit-dialog'
 
 interface MemberActionsMenuProps {
   memberId: string
   memberName: string
+  memberEmail: string
+  memberRole: 'ADMIN' | 'MEMBER'
   isActive: boolean
   isSelf: boolean
   onRefetch: () => void
@@ -41,11 +44,14 @@ interface MemberActionsMenuProps {
 export function MemberActionsMenu({
   memberId,
   memberName,
+  memberEmail,
+  memberRole,
   isActive,
   isSelf,
   onRefetch,
 }: MemberActionsMenuProps) {
   const [confirmingSuspend, setConfirmingSuspend] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [pending, setPending] = useState(false)
 
   const setActive = async (nextIsActive: boolean) => {
@@ -90,7 +96,7 @@ export function MemberActionsMenu({
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem onClick={() => setEditing(true)}>
             <Edit3 />
             Edit details
           </DropdownMenuItem>
@@ -160,6 +166,19 @@ export function MemberActionsMenu({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <MemberEditDialog
+        open={editing}
+        onOpenChange={setEditing}
+        member={{
+          id: memberId,
+          name: memberName,
+          email: memberEmail,
+          role: memberRole,
+        }}
+        canChangeRole={!isSelf}
+        onSaved={onRefetch}
+      />
     </>
   )
 }
