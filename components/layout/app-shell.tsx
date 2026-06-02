@@ -8,7 +8,7 @@ import { adminNav, memberNav } from '@/lib/config/navigation'
 import { BrandMark } from './brand-mark'
 import { SidebarNav } from './sidebar-nav'
 import { TopBar } from './top-bar'
-import { UserMenu, type ShellUser } from './user-menu'
+import { type ShellUser } from './user-menu'
 
 interface AppShellProps {
   role: 'admin' | 'member'
@@ -38,13 +38,6 @@ export function AppShell({ role, user, children }: AppShellProps) {
         <div className="flex-1 overflow-y-auto py-3">
           <SidebarNav sections={sections} />
         </div>
-        <div className="border-t p-2">
-          <UserMenu
-            user={user}
-            profileHref={profileHref}
-            settingsHref={settingsHref}
-          />
-        </div>
       </aside>
 
       {/* Mobile drawer */}
@@ -73,20 +66,18 @@ export function AppShell({ role, user, children }: AppShellProps) {
                 onNavigate={() => setDrawerOpen(false)}
               />
             </div>
-            <div className="border-t p-2">
-              <UserMenu
-            user={user}
-            profileHref={profileHref}
-            settingsHref={settingsHref}
-          />
-            </div>
           </div>
         </div>
       )}
 
       {/* Main column */}
       <div className="flex min-h-screen flex-col lg:pl-64">
-        <TopBar onMenuClick={() => setDrawerOpen(true)} />
+        <TopBar
+          onMenuClick={() => setDrawerOpen(true)}
+          user={user}
+          profileHref={profileHref}
+          settingsHref={settingsHref}
+        />
         <main className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">{children}</div>
         </main>

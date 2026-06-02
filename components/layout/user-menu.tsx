@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
 import { signOut } from '@/lib/auth/actions'
 
 export interface ShellUser {
@@ -25,6 +26,8 @@ interface UserMenuProps {
   user: ShellUser
   profileHref: string
   settingsHref: string
+  /** "sidebar" = full-width row, "topbar" = avatar-only button. */
+  variant?: 'sidebar' | 'topbar'
 }
 
 function getInitials(name: string | null, email: string): string {
@@ -40,29 +43,66 @@ export function UserMenu({
   user,
   profileHref,
   settingsHref,
+  variant = 'sidebar',
 }: UserMenuProps) {
+  const initials = getInitials(user.name, user.email)
+  const displayName = user.name ?? user.email
+  const compact = variant === 'topbar'
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <button className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-muted/60" />
+          <button
+            className={cn(
+              'text-left transition-colors',
+              compact
+                ? 'rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background hover:opacity-90'
+                : 'flex w-full items-center gap-2.5 rounded-lg p-1.5 hover:bg-muted/60',
+            )}
+            aria-label={compact ? `Account menu — ${displayName}` : undefined}
+          />
         }
       >
-        <Avatar size="sm">
-          {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
-          <AvatarFallback>{getInitials(user.name, user.email)}</AvatarFallback>
-        </Avatar>
-        <div className="flex min-w-0 flex-1 flex-col leading-tight">
-          <span className="truncate text-sm font-medium">
-            {user.name ?? user.email}
-          </span>
-          <span className="truncate text-xs text-muted-foreground">
-            {user.email}
-          </span>
-        </div>
-        <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+        {compact ? (
+          <Avatar size="sm">
+            {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
+            <AvatarFallback>{initials}</AvatarFallback>
+          </Avatar>
+        ) : (
+          <>
+            <Avatar size="sm">
+              {user.avatarUrl ? (
+                <AvatarImage src={user.avatarUrl} alt="" />
+              ) : null}
+              <AvatarFallback>{initials}</AvatarFallback>
+            </Avatar>
+            <div className="flex min-w-0 flex-1 flex-col leading-tight">
+              <span className="truncate text-sm font-medium">{displayName}</span>
+              <span className="truncate text-xs text-muted-foreground">
+                {user.email}
+              </span>
+            </div>
+            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+          </>
+        )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-64">
+        {/* Always show the identity card at the top — useful in compact
+            mode (no name in the trigger) and unobtrusive in sidebar mode. */}
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          <Avatar size="sm">
+            {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
+            <AvatarFallback>{initials}</AvatarFallback>
+          </Avatar>
+          <div className="flex min-w-0 flex-1 flex-col leading-tight">
+            <span className="truncate text-sm font-medium">{displayName}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {user.email}
+            </span>
+          </div>
+        </div>
+        <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>
             {user.role === 'ADMIN' ? 'Administrator' : 'Member'}
