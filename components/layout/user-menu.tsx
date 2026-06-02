@@ -65,9 +65,9 @@ export function UserMenu({
         }
       >
         {compact ? (
-          <Avatar size="sm">
+          <Avatar>
             {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
-            <AvatarFallback>{initials}</AvatarFallback>
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
           </Avatar>
         ) : (
           <>
