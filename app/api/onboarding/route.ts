@@ -17,36 +17,55 @@ export async function POST(request: NextRequest) {
 
   const { token, password } = validation.data
 
+  // Atomically claim the invite. updateMany with a WHERE that guards
+  // against double-redemption gives us a compare-and-set: if another
+  // request beat us to it, count will be 0 and we bail with 410 — no
+  // races, no need for an explicit transaction.
+  const claim = await prisma.invite.updateMany({
+    where: {
+      token,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    data: { usedAt: new Date() },
+  })
+
+  if (claim.count === 0) {
+    return errorResponse('This invite link is invalid or has expired', 410)
+  }
+
+  // We own this invite now — fetch it and the user it points to.
   const invite = await prisma.invite.findUnique({
     where: { token },
     include: { user: true },
   })
 
-  if (!invite || invite.usedAt || invite.expiresAt < new Date()) {
-    return errorResponse('This invite link is invalid or has expired', 410)
-  }
-
-  if (!invite.user.authId) {
-    // Sanity check — shouldn't happen since admin create flow sets authId.
-    console.error('Invite user has no authId:', invite.userId)
+  if (!invite || !invite.user.authId) {
+    console.error(
+      'Claimed invite is missing user/authId — releasing',
+      invite?.id,
+    )
+    await releaseInvite(token)
     return serverErrorResponse()
   }
 
   const admin = createAdminClient()
 
-  // 1. Set the new password through Supabase Auth admin.
+  // 1. Set the password. If this fails, release the claim so the
+  //    member can retry from the same link.
   const { error: updateErr } = await admin.auth.admin.updateUserById(
     invite.user.authId,
     { password },
   )
   if (updateErr) {
     console.error('Password update failed:', updateErr.message)
+    await releaseInvite(token)
     return serverErrorResponse()
   }
 
-  // 2. Sign the user in by establishing a session in this request. We
-  //    use the cookie-aware server client with the just-set password so
-  //    the session cookie persists on the response.
+  // 2. Establish a session in this request using the cookie-aware
+  //    client. Failure here is non-fatal — the password is set; the
+  //    user can sign in manually.
   const supabase = await createClient()
   const { error: signInErr } = await supabase.auth.signInWithPassword({
     email: invite.user.email,
@@ -54,16 +73,9 @@ export async function POST(request: NextRequest) {
   })
   if (signInErr) {
     console.error('Auto-sign-in after onboarding failed:', signInErr.message)
-    // Mark used anyway — the password was set; they can log in manually.
   }
 
-  // 3. Mark the invite consumed.
-  await prisma.invite.update({
-    where: { id: invite.id },
-    data: { usedAt: new Date() },
-  })
-
-  // 4. Update lastLoginAt so the welcome state on the dashboard is fresh.
+  // 3. Bump lastLoginAt so the dashboard greets them as just-signed-in.
   await prisma.user.update({
     where: { id: invite.userId },
     data: { lastLoginAt: new Date() },
@@ -73,4 +85,20 @@ export async function POST(request: NextRequest) {
     redirectTo:
       invite.user.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard',
   })
+}
+
+/**
+ * Undo a previously-claimed invite. Called when a post-claim step
+ * (password update) fails so the member can click the link again
+ * and try once more.
+ */
+async function releaseInvite(token: string): Promise<void> {
+  try {
+    await prisma.invite.update({
+      where: { token },
+      data: { usedAt: null },
+    })
+  } catch (err) {
+    console.error('Failed to release invite after error:', err)
+  }
 }
