@@ -23,8 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
 
 type Role = 'ADMIN' | 'MEMBER'
+type FieldErrors = Partial<Record<'name' | 'email' | 'role', string[]>>
 
 interface MemberCreateDialogProps {
   open: boolean
@@ -44,6 +46,14 @@ const ROLES: { value: Role; label: string }[] = [
   { value: 'ADMIN', label: 'Admin' },
 ]
 
+function RequiredMark() {
+  return (
+    <span aria-hidden="true" className="ml-0.5 text-destructive">
+      *
+    </span>
+  )
+}
+
 export function MemberCreateDialog({
   open,
   onOpenChange,
@@ -54,9 +64,7 @@ export function MemberCreateDialog({
   const [role, setRole] = useState<Role>('MEMBER')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [fieldErrors, setFieldErrors] = useState<
-    Record<string, string[]> | null
-  >(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [created, setCreated] = useState<CreatedMember | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -65,7 +73,7 @@ export function MemberCreateDialog({
     setEmail('')
     setRole('MEMBER')
     setError(null)
-    setFieldErrors(null)
+    setFieldErrors({})
     setCreated(null)
     setSubmitting(false)
     setCopied(false)
@@ -81,13 +89,31 @@ export function MemberCreateDialog({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
-    setFieldErrors(null)
+    setFieldErrors({})
+
+    // Client-side validation via Zod — same schema the API uses, so the
+    // two stay in sync. If the user gets past this, the server still
+    // re-validates (defense in depth).
+    const parsed = adminCreateMemberSchema.safeParse({ name, email, role })
+    if (!parsed.success) {
+      const next: FieldErrors = {}
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0]
+        if (key === 'name' || key === 'email' || key === 'role') {
+          if (!next[key]) next[key] = []
+          next[key]!.push(issue.message)
+        }
+      }
+      setFieldErrors(next)
+      return
+    }
+
     setSubmitting(true)
     try {
       const res = await fetch('/api/admin/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, role }),
+        body: JSON.stringify(parsed.data),
       })
       const json = await res.json()
       if (!res.ok || !json.success) {
@@ -167,7 +193,7 @@ export function MemberCreateDialog({
             </DialogFooter>
           </>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <DialogHeader>
               <DialogTitle>Add member</DialogTitle>
               <DialogDescription>
@@ -177,7 +203,10 @@ export function MemberCreateDialog({
             </DialogHeader>
 
             <div className="space-y-2">
-              <Label htmlFor="member-name">Full name</Label>
+              <Label htmlFor="member-name">
+                Full name
+                <RequiredMark />
+              </Label>
               <div className="relative">
                 <User className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -185,14 +214,14 @@ export function MemberCreateDialog({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Jane Doe"
-                  required
                   autoComplete="name"
                   className="pl-8"
                   disabled={submitting}
-                  aria-invalid={!!fieldErrors?.name}
+                  aria-invalid={!!fieldErrors.name}
+                  aria-required="true"
                 />
               </div>
-              {fieldErrors?.name?.[0] && (
+              {fieldErrors.name?.[0] && (
                 <p className="text-xs text-destructive" role="alert">
                   {fieldErrors.name[0]}
                 </p>
@@ -200,7 +229,10 @@ export function MemberCreateDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="member-email">Email</Label>
+              <Label htmlFor="member-email">
+                Email
+                <RequiredMark />
+              </Label>
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -209,14 +241,14 @@ export function MemberCreateDialog({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="jane@agency.com"
-                  required
                   autoComplete="email"
                   className="pl-8"
                   disabled={submitting}
-                  aria-invalid={!!fieldErrors?.email}
+                  aria-invalid={!!fieldErrors.email}
+                  aria-required="true"
                 />
               </div>
-              {fieldErrors?.email?.[0] && (
+              {fieldErrors.email?.[0] && (
                 <p className="text-xs text-destructive" role="alert">
                   {fieldErrors.email[0]}
                 </p>
