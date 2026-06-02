@@ -184,6 +184,7 @@ export function getMemberColumns(
             memberEmail={row.original.email}
             memberRole={row.original.role}
             isActive={row.original.isActive}
+            isArchived={!!row.original.deletedAt}
             isSelf={row.original.id === currentUserId}
             onRefetch={onRefetch}
           />

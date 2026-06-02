@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import {
   Archive,
+  ArchiveRestore,
   Edit3,
   Mail,
   MoreHorizontal,
@@ -36,6 +37,7 @@ interface MemberActionsMenuProps {
   memberEmail: string
   memberRole: 'ADMIN' | 'MEMBER'
   isActive: boolean
+  isArchived: boolean
   isSelf: boolean
   onRefetch: () => void
 }
@@ -46,6 +48,7 @@ export function MemberActionsMenu({
   memberEmail,
   memberRole,
   isActive,
+  isArchived,
   isSelf,
   onRefetch,
 }: MemberActionsMenuProps) {
@@ -55,6 +58,7 @@ export function MemberActionsMenu({
   const [pending, setPending] = useState(false)
   const [resending, setResending] = useState(false)
   const [archiving, setArchiving] = useState(false)
+  const [restoring, setRestoring] = useState(false)
 
   const resendInvite = async () => {
     setResending(true)
@@ -75,6 +79,31 @@ export function MemberActionsMenu({
       toast.error('Network error — please try again')
     } finally {
       setResending(false)
+    }
+  }
+
+  const restore = async () => {
+    setRestoring(true)
+    try {
+      const res = await fetch(`/api/admin/members/${memberId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archive: false }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        toast.error(json.error?.message ?? 'Could not restore member')
+        return
+      }
+      toast.success(`${memberName} restored`, {
+        description: 'They&apos;re back on the active roster.',
+      })
+      onRefetch()
+    } catch (err) {
+      console.error(err)
+      toast.error('Network error — please try again')
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -146,48 +175,57 @@ export function MemberActionsMenu({
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem onClick={() => setEditing(true)}>
-            <Edit3 />
-            Edit details
-          </DropdownMenuItem>
-          {!isSelf && (
-            <DropdownMenuItem
-              onClick={resendInvite}
-              disabled={resending}
-            >
-              <Mail />
-              Resend welcome email
+          {isArchived ? (
+            <DropdownMenuItem onClick={restore} disabled={restoring}>
+              <ArchiveRestore />
+              Restore member
             </DropdownMenuItem>
-          )}
-          <DropdownMenuSeparator />
-          {isSelf ? (
-            <DropdownMenuItem disabled>You</DropdownMenuItem>
           ) : (
             <>
-              {isActive ? (
+              <DropdownMenuItem onClick={() => setEditing(true)}>
+                <Edit3 />
+                Edit details
+              </DropdownMenuItem>
+              {!isSelf && (
                 <DropdownMenuItem
-                  onClick={() => setConfirmingSuspend(true)}
-                  className="text-destructive"
+                  onClick={resendInvite}
+                  disabled={resending}
                 >
-                  <UserX />
-                  Suspend access
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem
-                  onClick={() => setActive(true)}
-                  disabled={pending}
-                >
-                  <ShieldCheck />
-                  Reactivate
+                  <Mail />
+                  Resend welcome email
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem
-                onClick={() => setConfirmingArchive(true)}
-                className="text-destructive"
-              >
-                <Archive />
-                Archive
-              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {isSelf ? (
+                <DropdownMenuItem disabled>You</DropdownMenuItem>
+              ) : (
+                <>
+                  {isActive ? (
+                    <DropdownMenuItem
+                      onClick={() => setConfirmingSuspend(true)}
+                      className="text-destructive"
+                    >
+                      <UserX />
+                      Suspend access
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={() => setActive(true)}
+                      disabled={pending}
+                    >
+                      <ShieldCheck />
+                      Reactivate
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    onClick={() => setConfirmingArchive(true)}
+                    className="text-destructive"
+                  >
+                    <Archive />
+                    Archive
+                  </DropdownMenuItem>
+                </>
+              )}
             </>
           )}
         </DropdownMenuContent>
