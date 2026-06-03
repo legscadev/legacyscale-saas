@@ -34,8 +34,7 @@ export default async function EditCoursePage({ params }: EditCoursePageProps) {
           status: course.status,
           accessDays: course.accessDays,
         }}
-        onSubmit={(fd) => updateCourseAction(id, fd)}
-        redirectTo={() => `/admin/courses/${id}`}
+        onSubmit={updateCourseAction.bind(null, id)}
         destructiveAction={
           <CourseDeleteButton courseId={id} courseTitle={course.title} />
         }

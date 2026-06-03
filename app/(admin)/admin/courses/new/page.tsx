@@ -16,7 +16,6 @@ export default async function NewCoursePage() {
         mode="create"
         submitLabel="Create course"
         onSubmit={createCourseAction}
-        redirectTo={(r) => (r.id ? `/admin/courses/${r.id}` : '/admin/courses')}
       />
     </div>
   )

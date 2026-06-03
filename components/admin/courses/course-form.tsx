@@ -51,8 +51,6 @@ interface CourseFormProps {
   submitLabel: string
   /** Server action that takes FormData. */
   onSubmit: (formData: FormData) => Promise<CourseFormSubmitResult>
-  /** Where to navigate on success. */
-  redirectTo: (result: CourseFormSubmitResult) => string
   /** Optional destructive action — only used by edit (soft delete). */
   destructiveAction?: React.ReactNode
 }
@@ -72,7 +70,6 @@ export function CourseForm({
   defaults,
   submitLabel,
   onSubmit,
-  redirectTo,
   destructiveAction,
 }: CourseFormProps) {
   const router = useRouter()
@@ -185,8 +182,13 @@ export function CourseForm({
       } else {
         toast.success(mode === 'create' ? 'Course created' : 'Course updated')
       }
-      router.push(redirectTo(result))
-      router.refresh()
+      if (mode === 'create') {
+        // Phase C will host /admin/courses/[id] (course detail). For now
+        // land on the list, which already shows the new row.
+        router.push('/admin/courses')
+      } else {
+        router.refresh()
+      }
     } catch (err) {
       console.error(err)
       setFormError('Network error — please try again')
