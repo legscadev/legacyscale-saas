@@ -208,7 +208,7 @@ export function CourseForm({
           id="course-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. The Founder Operating System"
+          placeholder="e.g. The 7-Figure Agency Program"
           disabled={submitting}
           aria-invalid={!!fieldErrors.title}
           aria-required="true"
