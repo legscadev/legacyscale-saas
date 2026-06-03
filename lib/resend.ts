@@ -76,7 +76,7 @@ export async function sendWelcomeEmail(
   return sendEmail({
     to,
     subject: isInvite
-      ? 'Welcome to Legacy Scale — set your password'
+      ? "Welcome to Legacy Scale — Let's Get Started"
       : 'Welcome to Legacy Scale!',
     react: WelcomeEmail({
       name,

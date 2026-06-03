@@ -26,7 +26,7 @@ export function WelcomeEmail({
   variant = 'dashboard',
 }: WelcomeEmailProps) {
   const isInvite = variant === 'invite'
-  const ctaLabel = isInvite ? 'Set your password' : 'Access your dashboard'
+  const ctaLabel = isInvite ? "Let's Get Started" : 'Access your dashboard'
 
   return (
     <Html>
@@ -47,8 +47,8 @@ export function WelcomeEmail({
             </Text>
             {isInvite ? (
               <Text style={paragraph}>
-                To get started, set your password using the link below. This
-                link is valid for 7 days.
+                Your account is ready — click the link below to finish setting
+                it up. The link is valid for 7 days.
               </Text>
             ) : (
               <Text style={paragraph}>
