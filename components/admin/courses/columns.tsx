@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpDown, ChevronDown, ChevronUp, ImageIcon } from 'lucide-react'
 
@@ -71,7 +72,12 @@ export function getCourseColumns(
               )}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{c.title}</p>
+              <Link
+                href={`/admin/courses/${c.id}`}
+                className="block truncate text-sm font-medium transition-colors hover:text-primary hover:underline underline-offset-2"
+              >
+                {c.title}
+              </Link>
               {c.description ? (
                 <p className="truncate text-xs text-muted-foreground">
                   {c.description}
