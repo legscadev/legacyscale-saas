@@ -209,8 +209,11 @@ export function MembersShell({
       </div>
 
       <BulkActionBar
-        selectedCount={selectedIds.length}
+        selectedIds={selectedIds}
+        members={data.items}
+        currentUserId={currentUserId}
         onClear={() => setRowSelection({})}
+        onRefetch={refetch}
       />
 
       <MemberCreateDialog
