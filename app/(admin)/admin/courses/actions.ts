@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import type { CourseStatus } from '@prisma/client'
 
 import { requireAdmin } from '@/lib/auth/get-user'
@@ -11,6 +12,16 @@ import {
   type CourseView,
   type SortDirection,
 } from '@/lib/services/course-service'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { createCourseSchema } from '@/lib/validations/course'
+
+const THUMBNAIL_BUCKET = 'course-thumbnails'
+const THUMBNAIL_MAX_BYTES = 5 * 1024 * 1024 // 5 MB
+const THUMBNAIL_MIMES: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+}
 
 export interface CoursesQueryState {
   search: string
@@ -56,4 +67,134 @@ export async function fetchCourses(
     limit: result.limit,
     totalPages: result.totalPages,
   }
+}
+
+// ===========================================================
+// CREATE
+// ===========================================================
+
+export interface CreateCourseResult {
+  ok: boolean
+  id?: string
+  error?: string
+  fieldErrors?: Record<string, string[]>
+}
+
+/**
+ * Single-roundtrip create flow: validates → creates the course row →
+ * (optionally) uploads thumbnail and patches the URL.
+ *
+ * If the thumbnail upload fails after the row is created, we keep the
+ * course (admin can re-upload from the edit screen) and surface a
+ * warning toast via `error`.
+ */
+export async function createCourseAction(
+  formData: FormData,
+): Promise<CreateCourseResult> {
+  const admin = await requireAdmin()
+
+  // Pull primitives off the FormData and re-shape into the schema input.
+  const accessDaysRaw = formData.get('accessDays')
+  const accessDays =
+    accessDaysRaw === null || accessDaysRaw === ''
+      ? null
+      : Number(accessDaysRaw)
+
+  const parsed = createCourseSchema.safeParse({
+    title: formData.get('title') ?? '',
+    description: (formData.get('description') as string) || undefined,
+    status: (formData.get('status') as string) || 'DRAFT',
+    accessDays,
+    // thumbnailUrl is set in step 2 after upload — never trusted off the form.
+  })
+
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {}
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.join('.')
+      if (!fieldErrors[key]) fieldErrors[key] = []
+      fieldErrors[key]!.push(issue.message)
+    }
+    return { ok: false, fieldErrors }
+  }
+
+  // Validate the optional thumbnail before we touch the DB so a bad
+  // file fails the request cleanly with no orphan row.
+  const file = formData.get('thumbnail')
+  const thumbnailFile =
+    file instanceof File && file.size > 0 ? file : null
+
+  if (thumbnailFile) {
+    if (!THUMBNAIL_MIMES[thumbnailFile.type]) {
+      return {
+        ok: false,
+        fieldErrors: { thumbnail: ['Thumbnail must be a PNG, JPEG, or WebP image'] },
+      }
+    }
+    if (thumbnailFile.size > THUMBNAIL_MAX_BYTES) {
+      return {
+        ok: false,
+        fieldErrors: { thumbnail: ['Thumbnail must be 5 MB or smaller'] },
+      }
+    }
+  }
+
+  // 1. Create the row.
+  const course = await courseService.create(parsed.data, admin.id)
+
+  // 2. Upload + patch thumbnail (best-effort — row already exists).
+  if (thumbnailFile) {
+    try {
+      const url = await uploadThumbnail(course.id, thumbnailFile)
+      await courseService.update(course.id, { thumbnailUrl: url })
+    } catch (err) {
+      console.error('Thumbnail upload failed:', err)
+      revalidatePath('/admin/courses')
+      return {
+        ok: true,
+        id: course.id,
+        error:
+          'Course created, but the thumbnail upload failed. You can retry from the edit screen.',
+      }
+    }
+  }
+
+  revalidatePath('/admin/courses')
+  return { ok: true, id: course.id }
+}
+
+// ===========================================================
+// STORAGE
+// ===========================================================
+
+async function uploadThumbnail(courseId: string, file: File): Promise<string> {
+  const ext = THUMBNAIL_MIMES[file.type]
+  if (!ext) throw new Error('Unsupported mime type')
+
+  const supabase = createAdminClient()
+  const folder = courseId
+  const path = `${folder}/thumbnail.${ext}`
+
+  // Remove stale files so changing format (jpg → png) doesn't leave
+  // both lying around.
+  const { data: existing } = await supabase.storage
+    .from(THUMBNAIL_BUCKET)
+    .list(folder)
+  if (existing && existing.length > 0) {
+    await supabase.storage
+      .from(THUMBNAIL_BUCKET)
+      .remove(existing.map((f) => `${folder}/${f.name}`))
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const { error } = await supabase.storage
+    .from(THUMBNAIL_BUCKET)
+    .upload(path, buffer, {
+      contentType: file.type,
+      upsert: true,
+    })
+  if (error) throw error
+
+  const { data } = supabase.storage.from(THUMBNAIL_BUCKET).getPublicUrl(path)
+  return data.publicUrl
 }
