@@ -13,7 +13,10 @@ import {
   type SortDirection,
 } from '@/lib/services/course-service'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createCourseSchema } from '@/lib/validations/course'
+import {
+  createCourseSchema,
+  updateCourseSchema,
+} from '@/lib/validations/course'
 
 const THUMBNAIL_BUCKET = 'course-thumbnails'
 const THUMBNAIL_MAX_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -164,6 +167,123 @@ export async function createCourseAction(
 }
 
 // ===========================================================
+// UPDATE
+// ===========================================================
+
+export interface UpdateCourseResult {
+  ok: boolean
+  error?: string
+  fieldErrors?: Record<string, string[]>
+}
+
+export async function updateCourseAction(
+  courseId: string,
+  formData: FormData,
+): Promise<UpdateCourseResult> {
+  await requireAdmin()
+
+  const accessDaysRaw = formData.get('accessDays')
+  const accessDays =
+    accessDaysRaw === null || accessDaysRaw === ''
+      ? null
+      : Number(accessDaysRaw)
+
+  const parsed = updateCourseSchema.safeParse({
+    title: formData.get('title') ?? '',
+    description: (formData.get('description') as string) || undefined,
+    status: (formData.get('status') as string) || undefined,
+    accessDays,
+  })
+
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {}
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.join('.')
+      if (!fieldErrors[key]) fieldErrors[key] = []
+      fieldErrors[key]!.push(issue.message)
+    }
+    return { ok: false, fieldErrors }
+  }
+
+  const file = formData.get('thumbnail')
+  const thumbnailFile = file instanceof File && file.size > 0 ? file : null
+  const clearThumbnail = formData.get('clearThumbnail') === '1'
+
+  if (thumbnailFile) {
+    if (!THUMBNAIL_MIMES[thumbnailFile.type]) {
+      return {
+        ok: false,
+        fieldErrors: { thumbnail: ['Thumbnail must be a PNG, JPEG, or WebP image'] },
+      }
+    }
+    if (thumbnailFile.size > THUMBNAIL_MAX_BYTES) {
+      return {
+        ok: false,
+        fieldErrors: { thumbnail: ['Thumbnail must be 5 MB or smaller'] },
+      }
+    }
+  }
+
+  // Apply primitive updates first.
+  try {
+    await courseService.update(courseId, parsed.data)
+  } catch (err) {
+    console.error('Course update failed:', err)
+    return { ok: false, error: 'Could not update course' }
+  }
+
+  // Then handle the thumbnail side-effects.
+  if (thumbnailFile) {
+    try {
+      const url = await uploadThumbnail(courseId, thumbnailFile)
+      await courseService.update(courseId, { thumbnailUrl: url })
+    } catch (err) {
+      console.error('Thumbnail upload failed:', err)
+      revalidatePath('/admin/courses')
+      revalidatePath(`/admin/courses/${courseId}`)
+      return {
+        ok: true,
+        error: 'Course updated, but the thumbnail upload failed.',
+      }
+    }
+  } else if (clearThumbnail) {
+    try {
+      await deleteThumbnailFolder(courseId)
+      await courseService.update(courseId, { thumbnailUrl: '' })
+    } catch (err) {
+      console.error('Thumbnail delete failed:', err)
+    }
+  }
+
+  revalidatePath('/admin/courses')
+  revalidatePath(`/admin/courses/${courseId}`)
+  return { ok: true }
+}
+
+// ===========================================================
+// DELETE / RESTORE
+// ===========================================================
+
+export interface SimpleResult {
+  ok: boolean
+  error?: string
+}
+
+export async function softDeleteCourseAction(
+  courseId: string,
+): Promise<SimpleResult> {
+  await requireAdmin()
+  try {
+    await courseService.softDelete(courseId)
+    revalidatePath('/admin/courses')
+    return { ok: true }
+  } catch (err) {
+    console.error('Course soft-delete failed:', err)
+    return { ok: false, error: 'Could not delete course' }
+  }
+}
+
+// ===========================================================
 // STORAGE
 // ===========================================================
 
@@ -197,4 +317,15 @@ async function uploadThumbnail(courseId: string, file: File): Promise<string> {
 
   const { data } = supabase.storage.from(THUMBNAIL_BUCKET).getPublicUrl(path)
   return data.publicUrl
+}
+
+async function deleteThumbnailFolder(courseId: string): Promise<void> {
+  const supabase = createAdminClient()
+  const { data: existing } = await supabase.storage
+    .from(THUMBNAIL_BUCKET)
+    .list(courseId)
+  if (!existing || existing.length === 0) return
+  await supabase.storage
+    .from(THUMBNAIL_BUCKET)
+    .remove(existing.map((f) => `${courseId}/${f.name}`))
 }
