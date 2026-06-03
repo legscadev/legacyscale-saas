@@ -7,7 +7,7 @@ export default async function NewCoursePage() {
   await requireAdmin()
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="New course"
         description="Set up the shell here. You'll add chapters and lessons on the next screen."
