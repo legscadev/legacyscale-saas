@@ -21,11 +21,20 @@ function getResend(): Resend {
 
 const FROM_NAME = 'Legacy Scale'
 
-function getFromAddress(): string {
-  // Sandbox default works without a verified domain but only delivers to
-  // the Resend account holder's own email. Swap RESEND_FROM_EMAIL to your
-  // verified address once 0.7 + DNS verification is done.
-  const email = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
+type EmailPurpose = 'welcome' | 'security' | 'notifications' | 'billing'
+
+function getFromAddress(purpose: EmailPurpose): string {
+  // Per-mailstream from-addresses so reputation issues stay isolated
+  // (e.g. a flagged notification doesn't poison the welcome stream).
+  // Falls back to RESEND_FROM_EMAIL, then Resend's sandbox sender.
+  const purposeEnv = {
+    welcome: process.env.RESEND_FROM_WELCOME,
+    security: process.env.RESEND_FROM_SECURITY,
+    notifications: process.env.RESEND_FROM_NOTIFICATIONS,
+    billing: process.env.RESEND_FROM_BILLING,
+  }[purpose]
+  const email =
+    purposeEnv ?? process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
   return `${FROM_NAME} <${email}>`
 }
 
@@ -33,6 +42,8 @@ interface SendEmailOptions {
   to: string | string[]
   subject: string
   react: ReactElement
+  purpose: EmailPurpose
+  /** Override default reply-to (RESEND_REPLY_TO env var). */
   replyTo?: string
 }
 
@@ -40,15 +51,16 @@ export async function sendEmail({
   to,
   subject,
   react,
+  purpose,
   replyTo,
 }: SendEmailOptions): Promise<{ id: string | undefined }> {
   const resend = getResend()
   const { data, error } = await resend.emails.send({
-    from: getFromAddress(),
+    from: getFromAddress(purpose),
     to: Array.isArray(to) ? to : [to],
     subject,
     react,
-    replyTo,
+    replyTo: replyTo ?? process.env.RESEND_REPLY_TO,
   })
 
   if (error) {
@@ -75,6 +87,7 @@ export async function sendWelcomeEmail(
   const isInvite = options.variant === 'invite'
   return sendEmail({
     to,
+    purpose: 'welcome',
     subject: isInvite
       ? "Welcome to Legacy Scale — Let's Get Started"
       : 'Welcome to Legacy Scale!',
@@ -93,6 +106,7 @@ export async function sendPasswordResetEmail(
 ) {
   return sendEmail({
     to,
+    purpose: 'security',
     subject: 'Reset Your Password — Legacy Scale',
     react: PasswordResetEmail({ name, resetUrl }),
   })
@@ -106,6 +120,7 @@ export async function sendAnnouncementEmail(
 ) {
   return sendEmail({
     to,
+    purpose: 'notifications',
     subject: `New Announcement: ${title}`,
     react: AnnouncementEmail({ title, body, viewUrl }),
   })

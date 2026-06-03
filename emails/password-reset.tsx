@@ -45,8 +45,10 @@ export function PasswordResetEmail({
             </Section>
 
             <Text style={paragraph}>
-              This link will expire in 1 hour. If you didn&apos;t request a
-              password reset, you can safely ignore this email.
+              This link is valid for 1 hour and is single-use — clicking it
+              opens a secure form where you can choose your new password.
+              If you didn&apos;t request a password reset, you can safely
+              ignore this email.
             </Text>
             <Text style={paragraphSmall}>
               If the button doesn&apos;t work, copy and paste this link into
