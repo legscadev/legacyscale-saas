@@ -89,7 +89,23 @@ export function OnboardingWizard({
     go(step + 1)
   }
 
-  const handleFinish = () => {
+  const [finishing, setFinishing] = useState(false)
+
+  const handleFinish = async () => {
+    if (finishing) return
+    setFinishing(true)
+    // Mark the invite consumed now that the user reached the final
+    // step. Best-effort: a network failure shouldn't trap them on the
+    // success screen, so we navigate either way.
+    try {
+      await fetch('/api/onboarding/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      })
+    } catch (err) {
+      console.error('Failed to mark invite complete:', err)
+    }
     // Hard navigation so the new session cookie is picked up by the
     // server-rendered shell.
     window.location.href = redirectTo ?? '/dashboard'
@@ -132,7 +148,12 @@ export function OnboardingWizard({
               ) : null}
               {step === 3 ? <GoalStep selected={goal} onSelect={setGoal} /> : null}
               {step === 4 ? (
-                <DoneStep name={name} goal={goal} onFinish={handleFinish} />
+                <DoneStep
+                  name={name}
+                  goal={goal}
+                  onFinish={handleFinish}
+                  busy={finishing}
+                />
               ) : null}
             </div>
 
@@ -360,9 +381,10 @@ interface DoneStepProps {
   name: string
   goal: string | null
   onFinish: () => void
+  busy: boolean
 }
 
-function DoneStep({ name, goal, onFinish }: DoneStepProps) {
+function DoneStep({ name, goal, onFinish, busy }: DoneStepProps) {
   const goalLabel = GOALS.find((g) => g.id === goal)?.label
   return (
     <div className="space-y-6 text-center">
@@ -386,9 +408,14 @@ function DoneStep({ name, goal, onFinish }: DoneStepProps) {
             : 'Your personalized dashboard is ready.'}
         </p>
       </div>
-      <Button className="w-full" size="lg" onClick={onFinish}>
-        Go to dashboard
-        <ArrowRight />
+      <Button
+        className="w-full"
+        size="lg"
+        onClick={onFinish}
+        disabled={busy}
+      >
+        {busy ? 'Finishing…' : 'Go to dashboard'}
+        {!busy && <ArrowRight />}
       </Button>
     </div>
   )

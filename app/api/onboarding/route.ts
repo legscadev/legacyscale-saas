@@ -17,55 +17,55 @@ export async function POST(request: NextRequest) {
 
   const { token, password } = validation.data
 
-  // Atomically claim the invite. updateMany with a WHERE that guards
-  // against double-redemption gives us a compare-and-set: if another
-  // request beat us to it, count will be 0 and we bail with 410 — no
-  // races, no need for an explicit transaction.
-  const claim = await prisma.invite.updateMany({
-    where: {
-      token,
-      usedAt: null,
-      expiresAt: { gt: new Date() },
-    },
-    data: { usedAt: new Date() },
-  })
-
-  if (claim.count === 0) {
-    return errorResponse('This invite link is invalid or has expired', 410)
-  }
-
-  // We own this invite now — fetch it and the user it points to.
   const invite = await prisma.invite.findUnique({
     where: { token },
     include: { user: true },
   })
 
-  if (!invite || !invite.user.authId) {
-    console.error(
-      'Claimed invite is missing user/authId — releasing',
-      invite?.id,
-    )
-    await releaseInvite(token)
-    return serverErrorResponse()
+  if (
+    !invite ||
+    invite.usedAt ||
+    invite.expiresAt <= new Date() ||
+    !invite.user.authId
+  ) {
+    return errorResponse('This invite link is invalid or has expired', 410)
+  }
+
+  // Re-entry after a previous successful password set (e.g. wizard
+  // reload). Only the originally-onboarding user is allowed to re-set
+  // the password — anyone else with the link is locked out.
+  if (invite.passwordSetAt) {
+    const supabase = await createClient()
+    const {
+      data: { user: sessionUser },
+    } = await supabase.auth.getUser()
+    if (!sessionUser || sessionUser.id !== invite.user.authId) {
+      return errorResponse('This invite link is invalid or has expired', 410)
+    }
+  } else {
+    // First-time claim. Compare-and-set on passwordSetAt prevents two
+    // racing clicks from both setting (potentially different) passwords.
+    const claim = await prisma.invite.updateMany({
+      where: { token, passwordSetAt: null },
+      data: { passwordSetAt: new Date() },
+    })
+    if (claim.count === 0) {
+      return errorResponse('This invite link is invalid or has expired', 410)
+    }
   }
 
   const admin = createAdminClient()
-
-  // 1. Set the password. If this fails, release the claim so the
-  //    member can retry from the same link.
   const { error: updateErr } = await admin.auth.admin.updateUserById(
     invite.user.authId,
     { password },
   )
   if (updateErr) {
     console.error('Password update failed:', updateErr.message)
-    await releaseInvite(token)
     return serverErrorResponse()
   }
 
-  // 2. Establish a session in this request using the cookie-aware
-  //    client. Failure here is non-fatal — the password is set; the
-  //    user can sign in manually.
+  // Establish a session in this request via the cookie-aware client.
+  // Non-fatal if it fails — the password is set; manual sign-in works.
   const supabase = await createClient()
   const { error: signInErr } = await supabase.auth.signInWithPassword({
     email: invite.user.email,
@@ -75,7 +75,6 @@ export async function POST(request: NextRequest) {
     console.error('Auto-sign-in after onboarding failed:', signInErr.message)
   }
 
-  // 3. Bump lastLoginAt so the dashboard greets them as just-signed-in.
   await prisma.user.update({
     where: { id: invite.userId },
     data: { lastLoginAt: new Date() },
@@ -85,20 +84,4 @@ export async function POST(request: NextRequest) {
     redirectTo:
       invite.user.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard',
   })
-}
-
-/**
- * Undo a previously-claimed invite. Called when a post-claim step
- * (password update) fails so the member can click the link again
- * and try once more.
- */
-async function releaseInvite(token: string): Promise<void> {
-  try {
-    await prisma.invite.update({
-      where: { token },
-      data: { usedAt: null },
-    })
-  } catch (err) {
-    console.error('Failed to release invite after error:', err)
-  }
 }
