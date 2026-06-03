@@ -19,20 +19,55 @@ export type QuestionType = z.infer<typeof questionTypeSchema>
 // COURSE
 // ============================================
 
+// `accessDays`: null means lifetime access; positive int means days
+// granted from enrollment date. The form's "Forever" toggle maps to
+// null.
+export const accessDaysSchema = z
+  .number()
+  .int()
+  .min(1, 'Access days must be at least 1')
+  .max(36500, 'Access days is too large')
+  .nullable()
+
 export const createCourseSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title is too long'),
   description: z.string().max(5000, 'Description is too long').optional(),
   thumbnailUrl: optionalUrlSchema,
   status: courseStatusSchema.default('DRAFT'),
+  accessDays: accessDaysSchema.default(null),
 })
 
-export const updateCourseSchema = z.object({
-  title: z.string().min(1).max(200).optional(),
-  description: z.string().max(5000).optional(),
-  thumbnailUrl: optionalUrlSchema,
+export const updateCourseSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    description: z.string().max(5000).optional(),
+    thumbnailUrl: optionalUrlSchema,
+    status: courseStatusSchema.optional(),
+    accessDays: accessDaysSchema.optional(),
+    orderIndex: z.number().int().min(0).optional(),
+  })
+  .refine(
+    (data) => Object.values(data).some((v) => v !== undefined),
+    { message: 'Nothing to update' },
+  )
+
+// Query params for GET /api/admin/courses. Coerces strings off the
+// URL into the right primitives.
+export const listCoursesQuerySchema = z.object({
+  search: z.string().max(100).optional(),
   status: courseStatusSchema.optional(),
-  orderIndex: z.number().int().min(0).optional(),
+  /**
+   * 'active' (default) = exclude soft-deleted.
+   * 'deleted' = show only soft-deleted.
+   */
+  view: z.enum(['active', 'deleted']).default('active'),
+  sort: z.enum(['createdAt', 'title', 'orderIndex']).default('createdAt'),
+  direction: z.enum(['asc', 'desc']).default('desc'),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
 })
+
+export type ListCoursesQuery = z.infer<typeof listCoursesQuerySchema>
 
 export const courseResponseSchema = z.object({
   id: idSchema,
