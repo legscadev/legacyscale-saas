@@ -1,52 +1,17 @@
-import { GraduationCap, Plus } from 'lucide-react'
-import { PageHeader, EmptyState, CourseCard } from '@/components/shared'
-import { Button } from '@/components/ui/button'
-import { prisma } from '@/lib/prisma'
+import { requireAdmin } from '@/lib/auth/get-user'
+import { CoursesShell } from '@/components/admin/courses/courses-shell'
+import { fetchCourses } from './actions'
 
 export default async function AdminCoursesPage() {
-  const courses = await prisma.course.findMany({
-    where: { deletedAt: null },
-    orderBy: { orderIndex: 'asc' },
-    include: { _count: { select: { chapters: true } } },
+  await requireAdmin()
+  const initialData = await fetchCourses({
+    search: '',
+    status: null,
+    view: 'active',
+    sort: 'createdAt',
+    direction: 'desc',
+    page: 1,
   })
 
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Courses" description="Manage your course content">
-        <Button>
-          <Plus className="h-4 w-4" />
-          Create Course
-        </Button>
-      </PageHeader>
-
-      {courses.length === 0 ? (
-        <EmptyState
-          icon={GraduationCap}
-          title="No courses yet"
-          description="Create your first course to get started."
-        >
-          <Button>
-            <Plus className="h-4 w-4" />
-            Create Course
-          </Button>
-        </EmptyState>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {courses.map((course) => (
-            <CourseCard
-              key={course.id}
-              course={{
-                id: course.id,
-                title: course.title,
-                description: course.description,
-                thumbnailUrl: course.thumbnailUrl,
-                status: course.status,
-                chaptersCount: course._count.chapters,
-              }}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+  return <CoursesShell initialData={initialData} />
 }
