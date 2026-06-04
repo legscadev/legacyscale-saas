@@ -11,7 +11,7 @@ import {
   Sliders,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { CourseStatus } from '@prisma/client'
+import type { CourseStatus, LessonType } from '@prisma/client'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -33,9 +33,13 @@ import { cn } from '@/lib/utils'
 import { updateCourseAction } from '@/app/(admin)/admin/courses/actions'
 import {
   createChapterAction,
+  createLessonAction,
   deleteChapterAction,
+  deleteLessonAction,
   reorderChaptersAction,
+  reorderLessonsAction,
   updateChapterAction,
+  updateLessonAction,
 } from '@/app/(admin)/admin/courses/[id]/actions'
 import type { CourseDetail } from '@/lib/services/course-service'
 import type { ChapterListItem } from '@/lib/services/chapter-service'
@@ -47,7 +51,7 @@ const STATUSES: { value: CourseStatus; label: string }[] = [
   { value: 'ARCHIVED', label: 'Archived' },
 ]
 
-const CHAPTER_RENAME_DEBOUNCE_MS = 500
+const RENAME_DEBOUNCE_MS = 500
 
 interface CourseBuilderProps {
   course: CourseDetail
@@ -86,7 +90,9 @@ export function CourseBuilder({
     status: course.status,
   })
 
-  // Per-chapter rename debounce timers, keyed by chapter id.
+  // Per-row rename debounce timers, keyed by chapter or lesson id.
+  // Chapter and lesson ids never collide (both UUIDs), so a single
+  // map is enough.
   const renameTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   )
@@ -220,7 +226,7 @@ export function CourseBuilder({
             toast.error(result.error ?? 'Could not save chapter title')
             return
           }
-        }, CHAPTER_RENAME_DEBOUNCE_MS),
+        }, RENAME_DEBOUNCE_MS),
       )
     },
     [],
@@ -297,6 +303,139 @@ export function CourseBuilder({
     [chapters, course.id],
   )
 
+  // -------------------------------------------------------
+  // Lesson operations
+  // -------------------------------------------------------
+
+  // Mutates a single chapter's lessons in-place via the setter.
+  const patchChapter = useCallback(
+    (chapterId: string, fn: (chapter: ChapterListItem) => ChapterListItem) => {
+      setChapters((prev) =>
+        prev.map((c) => (c.id === chapterId ? fn(c) : c)),
+      )
+    },
+    [],
+  )
+
+  const addLesson = useCallback(
+    async (chapterId: string, type: LessonType) => {
+      const result = await createLessonAction(course.id, chapterId, type)
+      if (!result.ok || !result.lesson) {
+        toast.error(result.error ?? 'Could not add lesson')
+        return
+      }
+      const created = result.lesson
+      patchChapter(chapterId, (c) => ({ ...c, lessons: [...c.lessons, created] }))
+      router.refresh()
+    },
+    [course.id, patchChapter, router],
+  )
+
+  const renameLesson = useCallback(
+    (chapterId: string, lessonId: string, nextTitle: string) => {
+      patchChapter(chapterId, (c) => ({
+        ...c,
+        lessons: c.lessons.map((l) =>
+          l.id === lessonId ? { ...l, title: nextTitle } : l,
+        ),
+      }))
+
+      const trimmed = nextTitle.trim()
+      const timers = renameTimers.current
+      const existing = timers.get(lessonId)
+      if (existing) clearTimeout(existing)
+      if (trimmed.length === 0) return
+
+      timers.set(
+        lessonId,
+        setTimeout(async () => {
+          timers.delete(lessonId)
+          const result = await updateLessonAction(course.id, lessonId, {
+            title: trimmed,
+          })
+          if (!result.ok) {
+            toast.error(result.error ?? 'Could not save lesson title')
+          }
+        }, RENAME_DEBOUNCE_MS),
+      )
+    },
+    [course.id, patchChapter],
+  )
+
+  const deleteLesson = useCallback(
+    async (chapterId: string, lessonId: string) => {
+      let removed: ChapterListItem['lessons'][number] | undefined
+      patchChapter(chapterId, (c) => {
+        removed = c.lessons.find((l) => l.id === lessonId)
+        return { ...c, lessons: c.lessons.filter((l) => l.id !== lessonId) }
+      })
+      try {
+        const result = await deleteLessonAction(course.id, lessonId)
+        if (!result.ok) {
+          // Rollback — re-insert at the original position based on the
+          // stored orderIndex. New chapter state may have shifted since
+          // the optimistic remove, so we sort after insert to stay
+          // consistent.
+          if (removed) {
+            patchChapter(chapterId, (c) => ({
+              ...c,
+              lessons: [...c.lessons, removed!].sort(
+                (a, b) => a.orderIndex - b.orderIndex,
+              ),
+            }))
+          }
+          toast.error(result.error ?? 'Could not delete lesson')
+          return
+        }
+        router.refresh()
+      } catch (err) {
+        console.error(err)
+        if (removed) {
+          patchChapter(chapterId, (c) => ({
+            ...c,
+            lessons: [...c.lessons, removed!].sort(
+              (a, b) => a.orderIndex - b.orderIndex,
+            ),
+          }))
+        }
+        toast.error('Network error — please try again')
+      }
+    },
+    [course.id, patchChapter, router],
+  )
+
+  const moveLesson = useCallback(
+    async (chapterId: string, from: number, to: number) => {
+      if (from === to) return
+      const chapter = chapters.find((c) => c.id === chapterId)
+      if (!chapter) return
+      if (to < 0 || to >= chapter.lessons.length) return
+
+      const originalLessons = chapter.lessons
+      const next = [...originalLessons]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved!)
+      patchChapter(chapterId, (c) => ({ ...c, lessons: next }))
+
+      try {
+        const result = await reorderLessonsAction(
+          course.id,
+          chapterId,
+          next.map((l) => l.id),
+        )
+        if (!result.ok) {
+          patchChapter(chapterId, (c) => ({ ...c, lessons: originalLessons }))
+          toast.error(result.error ?? 'Could not reorder lessons')
+        }
+      } catch (err) {
+        console.error(err)
+        patchChapter(chapterId, (c) => ({ ...c, lessons: originalLessons }))
+        toast.error('Network error — please try again')
+      }
+    },
+    [chapters, course.id, patchChapter],
+  )
+
   return (
     <div className="space-y-6">
       <Button
@@ -352,6 +491,12 @@ export function CourseBuilder({
                 onRename={(t) => renameChapter(ch.id, t)}
                 onRemove={() => requestDelete(ch)}
                 onMove={(dir) => moveChapter(ch.id, dir)}
+                onAddLesson={(type) => addLesson(ch.id, type)}
+                onRenameLesson={(lessonId, title) =>
+                  renameLesson(ch.id, lessonId, title)
+                }
+                onRemoveLesson={(lessonId) => deleteLesson(ch.id, lessonId)}
+                onMoveLesson={(from, to) => moveLesson(ch.id, from, to)}
               />
             ))
           )}

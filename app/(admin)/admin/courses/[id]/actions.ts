@@ -1,17 +1,22 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { Prisma } from '@prisma/client'
+import { Prisma, type LessonType } from '@prisma/client'
 import { z } from 'zod'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import {
   chapterService,
   type ChapterListItem,
+  type LessonListItem,
 } from '@/lib/services/chapter-service'
+import { lessonService } from '@/lib/services/lesson-service'
 import {
   createChapterSchema,
+  createLessonSchema,
+  lessonTypeSchema,
   updateChapterSchema,
+  updateLessonSchema,
 } from '@/lib/validations/course'
 
 interface BaseResult {
@@ -28,8 +33,22 @@ export interface UpdateChapterResult extends BaseResult {
   chapter?: ChapterListItem
 }
 
+export interface CreateLessonResult extends BaseResult {
+  lesson?: LessonListItem
+}
+
+export interface UpdateLessonResult extends BaseResult {
+  lesson?: LessonListItem
+}
+
 const reorderSchema = z.object({
   courseId: z.uuid(),
+  orderedIds: z.array(z.uuid()).min(1),
+})
+
+const reorderLessonsSchema = z.object({
+  courseId: z.uuid(),
+  chapterId: z.uuid(),
   orderedIds: z.array(z.uuid()).min(1),
 })
 
@@ -146,5 +165,127 @@ export async function reorderChaptersAction(
   } catch (err) {
     console.error('Chapter reorder failed:', err)
     return { ok: false, error: 'Could not reorder chapters' }
+  }
+}
+
+// ===========================================================
+// LESSONS
+// ===========================================================
+
+export async function createLessonAction(
+  courseId: string,
+  chapterId: string,
+  type: LessonType,
+): Promise<CreateLessonResult> {
+  await requireAdmin()
+
+  const typeParsed = lessonTypeSchema.safeParse(type)
+  if (!typeParsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(typeParsed.error) }
+  }
+
+  // Title is service-defaulted per type, so we validate the rest of
+  // the create shape using the existing schema but compute the title
+  // on the service side. Just sanity-check the chapter id here.
+  const parsed = createLessonSchema
+    .pick({ chapterId: true, type: true })
+    .safeParse({ chapterId, type: typeParsed.data })
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  try {
+    const lesson = await lessonService.create({
+      chapterId: parsed.data.chapterId,
+      type: parsed.data.type,
+    })
+    revalidatePath(`/admin/courses/${courseId}`)
+    return { ok: true, lesson }
+  } catch (err) {
+    console.error('Lesson create failed:', err)
+    return { ok: false, error: 'Could not add lesson' }
+  }
+}
+
+export async function updateLessonAction(
+  courseId: string,
+  lessonId: string,
+  input: { title?: string; orderIndex?: number },
+): Promise<UpdateLessonResult> {
+  await requireAdmin()
+
+  // Only the fields supported by the inline rename / reorder flow are
+  // accepted here; the rich lesson editor (Phase D/E) will own the
+  // full updateLessonSchema with description / video / resource bits.
+  const parsed = updateLessonSchema
+    .pick({ title: true, orderIndex: true })
+    .safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  try {
+    const lesson = await lessonService.update(lessonId, parsed.data)
+    revalidatePath(`/admin/courses/${courseId}`)
+    return { ok: true, lesson }
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2025'
+    ) {
+      return { ok: false, error: 'Lesson not found' }
+    }
+    console.error('Lesson update failed:', err)
+    return { ok: false, error: 'Could not save lesson' }
+  }
+}
+
+export async function deleteLessonAction(
+  courseId: string,
+  lessonId: string,
+): Promise<BaseResult> {
+  await requireAdmin()
+  try {
+    await lessonService.delete(lessonId)
+    revalidatePath(`/admin/courses/${courseId}`)
+    return { ok: true }
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2025'
+    ) {
+      return { ok: false, error: 'Lesson not found' }
+    }
+    console.error('Lesson delete failed:', err)
+    return { ok: false, error: 'Could not delete lesson' }
+  }
+}
+
+export async function reorderLessonsAction(
+  courseId: string,
+  chapterId: string,
+  orderedIds: string[],
+): Promise<BaseResult> {
+  await requireAdmin()
+
+  const parsed = reorderLessonsSchema.safeParse({
+    courseId,
+    chapterId,
+    orderedIds,
+  })
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  try {
+    await lessonService.reorder(
+      parsed.data.chapterId,
+      parsed.data.orderedIds,
+    )
+    revalidatePath(`/admin/courses/${courseId}`)
+    return { ok: true }
+  } catch (err) {
+    console.error('Lesson reorder failed:', err)
+    return { ok: false, error: 'Could not reorder lessons' }
   }
 }
