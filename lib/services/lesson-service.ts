@@ -13,6 +13,9 @@ const lessonRowSelect = {
   orderIndex: true,
   durationSeconds: true,
   muxPlaybackId: true,
+  resourceUrl: true,
+  resourceName: true,
+  resourceSize: true,
 } as const
 
 interface CreateLessonInput {

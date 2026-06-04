@@ -22,6 +22,9 @@ const chapterListSelect = {
       orderIndex: true,
       durationSeconds: true,
       muxPlaybackId: true,
+      resourceUrl: true,
+      resourceName: true,
+      resourceSize: true,
     },
   },
 } as const

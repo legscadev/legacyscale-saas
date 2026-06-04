@@ -206,6 +206,9 @@ export function CourseBuilder({
             orderIndex: c.lessons.length,
             durationSeconds: null,
             muxPlaybackId: null,
+            resourceUrl: null,
+            resourceName: null,
+            resourceSize: null,
           },
         ],
       }))
@@ -243,12 +246,10 @@ export function CourseBuilder({
 
   const openLessonEditor = useCallback(
     (chapterId: string, lesson: LocalLesson) => {
-      // Only VIDEO is wired (2.10/2.10b). Other types get a quick
-      // info toast — the editor for those lands in 2.13/2.14.
-      if (lesson.type !== 'VIDEO') {
-        toast.info(
-          `${lesson.type.toLowerCase()} lesson editor lands in a later ticket.`,
-        )
+      // VIDEO (2.10/2.10b) and RESOURCE (2.13) editors are wired.
+      // QUIZ editor lands in a later ticket.
+      if (lesson.type === 'QUIZ') {
+        toast.info('Quiz lesson editor lands in a later ticket.')
         return
       }
       setEditingRef({ chapterId, lessonId: lesson.id })
@@ -531,10 +532,37 @@ export function CourseBuilder({
           if (!open) setEditingRef(null)
         }}
         lesson={editingLesson}
+        courseId={course.id}
         isUnsaved={Boolean(editingLesson && (editingLesson as LocalLesson).tempId)}
         onChange={(changes) => {
           if (!editingRef) return
           patchLesson(editingRef.chapterId, editingRef.lessonId, changes)
+        }}
+        onResourceUploaded={(changes) => {
+          if (!editingRef) return
+          patchChapter(editingRef.chapterId, (c) => ({
+            ...c,
+            lessons: c.lessons.map((l) =>
+              l.id === editingRef.lessonId ? { ...l, ...changes } : l,
+            ),
+          }))
+          // Resource commit also lands on the server (status flips to
+          // READY, resourceUrl is set), so update the saved snapshot in
+          // place — these fields aren't part of isDirty tracking, but
+          // we want re-opens of the dialog to see the new state without
+          // a manual save.
+          setSavedSnapshot((prev) =>
+            prev.map((c) =>
+              c.id === editingRef.chapterId
+                ? {
+                    ...c,
+                    lessons: c.lessons.map((l) =>
+                      l.id === editingRef.lessonId ? { ...l, ...changes } : l,
+                    ),
+                  }
+                : c,
+            ),
+          )
         }}
       />
 

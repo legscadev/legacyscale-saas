@@ -5,6 +5,8 @@ import MuxPlayer from '@mux/mux-player-react'
 import * as UpChunk from '@mux/upchunk'
 import {
   AlertTriangle,
+  Download,
+  FileText,
   Loader2,
   RotateCcw,
   Upload,
@@ -26,16 +28,30 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { createClient as createBrowserSupabase } from '@/lib/supabase/client'
+import {
+  commitResourceUploadAction,
+  getResourceDownloadUrlAction,
+  prepareResourceUploadAction,
+} from '@/app/(admin)/admin/courses/[id]/actions'
 import type { LessonListItem } from '@/lib/services/chapter-service'
 
 interface LessonEditorDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   lesson: LessonListItem | null
+  courseId: string
   /** Set when the row exists locally but hasn't been saved yet. */
   isUnsaved: boolean
   /** Pushes title/description changes back to the builder's local state. */
   onChange: (changes: { title?: string; description?: string | null }) => void
+  /** Pushes resource upload result into the builder's local state. */
+  onResourceUploaded: (changes: {
+    resourceUrl: string
+    resourceName: string
+    resourceSize: number
+    status: 'READY'
+  }) => void
 }
 
 function formatDuration(seconds: number | null): string {
@@ -49,8 +65,10 @@ export function LessonEditorDialog({
   open,
   onOpenChange,
   lesson,
+  courseId,
   isUnsaved,
   onChange,
+  onResourceUploaded,
 }: LessonEditorDialogProps) {
   if (!lesson) return null
 
@@ -89,6 +107,14 @@ export function LessonEditorDialog({
 
           {lesson.type === 'VIDEO' ? (
             <VideoSection lesson={lesson} isUnsaved={isUnsaved} />
+          ) : null}
+          {lesson.type === 'RESOURCE' ? (
+            <ResourceSection
+              lesson={lesson}
+              courseId={courseId}
+              isUnsaved={isUnsaved}
+              onUploaded={onResourceUploaded}
+            />
           ) : null}
         </div>
 
@@ -347,6 +373,216 @@ function Warning({
     <div className="flex items-start gap-2 rounded-md bg-warning/10 p-2 text-xs text-warning">
       <Icon className={cn('mt-0.5 size-3.5 shrink-0', iconClassName)} />
       <span>{text}</span>
+    </div>
+  )
+}
+
+// =====================================================================
+// RESOURCE SECTION — file upload (2.13)
+// =====================================================================
+
+const RESOURCE_MAX_BYTES = 50 * 1024 * 1024 // mirrors server cap
+const RESOURCE_ACCEPT =
+  '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.json,.txt,.csv,.md,.png,.jpg,.jpeg,.webp'
+
+interface ResourceSectionProps {
+  lesson: LessonListItem
+  courseId: string
+  isUnsaved: boolean
+  onUploaded: (changes: {
+    resourceUrl: string
+    resourceName: string
+    resourceSize: number
+    status: 'READY'
+  }) => void
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (bytes === null || bytes <= 0) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function ResourceSection({
+  lesson,
+  courseId,
+  isUnsaved,
+  onUploaded,
+}: ResourceSectionProps) {
+  const [phase, setPhase] = useState<'idle' | 'uploading' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const hasFile = Boolean(lesson.resourceUrl && lesson.resourceName)
+
+  const startUpload = useCallback(
+    async (file: File) => {
+      if (!file) return
+      if (file.size > RESOURCE_MAX_BYTES) {
+        setPhase('error')
+        setErrorMessage('File must be 50 MB or smaller')
+        return
+      }
+      setPhase('uploading')
+      setErrorMessage(null)
+
+      try {
+        const prep = await prepareResourceUploadAction({
+          lessonId: lesson.id,
+          filename: file.name,
+          size: file.size,
+          mimeType: file.type || 'application/octet-stream',
+        })
+        if (!prep.ok || !prep.signedUrl || !prep.token || !prep.path) {
+          throw new Error(prep.error ?? 'Could not start upload')
+        }
+
+        const supabase = createBrowserSupabase()
+        const { error: uploadErr } = await supabase.storage
+          .from('lesson-resources')
+          .uploadToSignedUrl(prep.path, prep.token, file, {
+            contentType: file.type || 'application/octet-stream',
+          })
+        if (uploadErr) throw uploadErr
+
+        const commit = await commitResourceUploadAction(courseId, {
+          lessonId: lesson.id,
+          path: prep.path,
+          filename: file.name,
+          size: file.size,
+        })
+        if (!commit.ok) {
+          throw new Error(commit.error ?? 'Could not save resource')
+        }
+
+        onUploaded({
+          resourceUrl: prep.path,
+          resourceName: file.name,
+          resourceSize: file.size,
+          status: 'READY',
+        })
+        setPhase('idle')
+        toast.success('Resource uploaded')
+      } catch (err) {
+        console.error(err)
+        setPhase('error')
+        setErrorMessage(err instanceof Error ? err.message : 'Upload failed')
+      }
+    },
+    [courseId, lesson.id, onUploaded],
+  )
+
+  const onDownload = useCallback(async () => {
+    const result = await getResourceDownloadUrlAction(lesson.id)
+    if (!result.ok || !result.url) {
+      toast.error(result.error ?? 'Could not generate download link')
+      return
+    }
+    window.open(result.url, '_blank', 'noopener,noreferrer')
+  }, [lesson.id])
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <FileText className="size-3.5" />
+        Resource
+      </div>
+
+      {isUnsaved ? (
+        <Warning
+          icon={AlertTriangle}
+          text="Save your course changes first — uploads need a saved lesson id."
+        />
+      ) : phase === 'uploading' ? (
+        <Warning
+          icon={Loader2}
+          iconClassName="animate-spin"
+          text="Uploading…"
+        />
+      ) : hasFile ? (
+        <FileDisplay
+          name={lesson.resourceName!}
+          size={lesson.resourceSize}
+          onDownload={onDownload}
+          onReplace={() => fileInputRef.current?.click()}
+        />
+      ) : (
+        <EmptyFileState onPick={() => fileInputRef.current?.click()} />
+      )}
+
+      {phase === 'error' && errorMessage ? (
+        <p className="text-xs text-destructive" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={RESOURCE_ACCEPT}
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) void startUpload(file)
+          e.target.value = ''
+        }}
+      />
+    </div>
+  )
+}
+
+function EmptyFileState({ onPick }: { onPick: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-4 text-center">
+      <p className="text-sm text-muted-foreground">No file uploaded yet.</p>
+      <Button type="button" size="sm" onClick={onPick}>
+        <Upload />
+        Upload file
+      </Button>
+      <p className="text-xs text-muted-foreground/70">
+        PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max.
+      </p>
+    </div>
+  )
+}
+
+function FileDisplay({
+  name,
+  size,
+  onDownload,
+  onReplace,
+}: {
+  name: string
+  size: number | null
+  onDownload: () => void
+  onReplace: () => void
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-md border bg-background p-2.5">
+      <FileText className="size-5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{name}</p>
+        <p className="text-xs text-muted-foreground">{formatFileSize(size)}</p>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Download file"
+        onClick={onDownload}
+      >
+        <Download />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Replace file"
+        onClick={onReplace}
+      >
+        <RotateCcw />
+      </Button>
     </div>
   )
 }

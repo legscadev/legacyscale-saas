@@ -15,6 +15,8 @@ import {
   courseStructureService,
   type SyncResult,
 } from '@/lib/services/course-structure-service'
+import { prisma } from '@/lib/prisma'
+import { createAdminClient } from '@/lib/supabase/admin'
 import {
   createChapterSchema,
   createLessonSchema,
@@ -358,4 +360,190 @@ export async function saveCourseStructureAction(
     console.error('Course structure save failed:', err)
     return { ok: false, error: 'Could not save changes' }
   }
+}
+
+// ===========================================================
+// RESOURCE UPLOADS  (2.13)
+// ===========================================================
+//
+// Client uploads directly to the lesson-resources bucket via a
+// signed upload URL — keeps large files off the Server Action body
+// limit (10 MB) and mirrors the Mux direct-upload pattern.
+
+const RESOURCE_BUCKET = 'lesson-resources'
+const RESOURCE_MAX_BYTES = 50 * 1024 * 1024 // 50 MB
+const RESOURCE_ALLOWED_MIMES = new Set<string>([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/zip',
+  'application/json',
+  'text/plain',
+  'text/csv',
+  'text/markdown',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+])
+
+const prepareResourceUploadSchema = z.object({
+  lessonId: z.uuid(),
+  filename: z.string().min(1).max(200),
+  size: z.number().int().positive().max(RESOURCE_MAX_BYTES),
+  mimeType: z.string().min(1).max(150),
+})
+
+const commitResourceUploadSchema = z.object({
+  lessonId: z.uuid(),
+  path: z.string().min(1),
+  filename: z.string().min(1).max(200),
+  size: z.number().int().positive().max(RESOURCE_MAX_BYTES),
+})
+
+function sanitizeFilename(name: string): string {
+  // Strip diacritics / unsafe chars; keep extension dot.
+  const dot = name.lastIndexOf('.')
+  const ext = dot > 0 ? name.slice(dot) : ''
+  const stem = (dot > 0 ? name.slice(0, dot) : name)
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 150)
+  return `${stem || 'file'}${ext}`.slice(0, 200)
+}
+
+export interface PrepareResourceUploadResult extends BaseResult {
+  signedUrl?: string
+  token?: string
+  path?: string
+}
+
+export async function prepareResourceUploadAction(
+  input: unknown,
+): Promise<PrepareResourceUploadResult> {
+  await requireAdmin()
+
+  const parsed = prepareResourceUploadSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+  if (!RESOURCE_ALLOWED_MIMES.has(parsed.data.mimeType)) {
+    return {
+      ok: false,
+      error: `Unsupported file type: ${parsed.data.mimeType}`,
+    }
+  }
+
+  const { lessonId, filename } = parsed.data
+  const safeName = sanitizeFilename(filename)
+  const path = `${lessonId}/${safeName}`
+
+  // Wipe any prior file in this lesson's folder so we don't keep stale
+  // attachments around when the user replaces a resource.
+  const supabase = createAdminClient()
+  const { data: existing } = await supabase.storage
+    .from(RESOURCE_BUCKET)
+    .list(lessonId)
+  if (existing && existing.length > 0) {
+    await supabase.storage
+      .from(RESOURCE_BUCKET)
+      .remove(existing.map((f) => `${lessonId}/${f.name}`))
+  }
+
+  const { data, error } = await supabase.storage
+    .from(RESOURCE_BUCKET)
+    .createSignedUploadUrl(path)
+  if (error || !data) {
+    console.error('Signed upload URL creation failed:', error)
+    return { ok: false, error: 'Could not start upload' }
+  }
+
+  return {
+    ok: true,
+    signedUrl: data.signedUrl,
+    token: data.token,
+    path: data.path,
+  }
+}
+
+export interface CommitResourceUploadResult extends BaseResult {
+  resourceUrl?: string
+  resourceName?: string
+  resourceSize?: number
+}
+
+export async function commitResourceUploadAction(
+  courseId: string,
+  input: unknown,
+): Promise<CommitResourceUploadResult> {
+  await requireAdmin()
+
+  const parsed = commitResourceUploadSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  const { lessonId, path, filename, size } = parsed.data
+
+  try {
+    await prisma.lesson.update({
+      where: { id: lessonId },
+      data: {
+        resourceUrl: path,
+        resourceName: filename,
+        resourceSize: size,
+        status: 'READY',
+      },
+    })
+    revalidatePath(`/admin/courses/${courseId}`)
+    return {
+      ok: true,
+      resourceUrl: path,
+      resourceName: filename,
+      resourceSize: size,
+    }
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2025'
+    ) {
+      return { ok: false, error: 'Lesson not found' }
+    }
+    console.error('Resource commit failed:', err)
+    return { ok: false, error: 'Could not save resource' }
+  }
+}
+
+export interface ResourceDownloadUrlResult extends BaseResult {
+  url?: string
+}
+
+const RESOURCE_DOWNLOAD_EXPIRY_SECONDS = 60
+
+export async function getResourceDownloadUrlAction(
+  lessonId: string,
+): Promise<ResourceDownloadUrlResult> {
+  await requireAdmin()
+
+  const lesson = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    select: { resourceUrl: true },
+  })
+  if (!lesson?.resourceUrl) {
+    return { ok: false, error: 'No file attached to this lesson' }
+  }
+
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.storage
+    .from(RESOURCE_BUCKET)
+    .createSignedUrl(lesson.resourceUrl, RESOURCE_DOWNLOAD_EXPIRY_SECONDS)
+
+  if (error || !data) {
+    console.error('Signed download URL creation failed:', error)
+    return { ok: false, error: 'Could not generate download link' }
+  }
+  return { ok: true, url: data.signedUrl }
 }
