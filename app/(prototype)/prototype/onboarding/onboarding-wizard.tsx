@@ -19,8 +19,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { BrandMark } from "@/components/prototype/shell/brand-mark"
+import { PasswordStep } from "./password-step"
 
-const STEPS = ["Welcome", "Your profile", "Your goal", "All set"] as const
+const STEPS = ["Welcome", "Password", "Your profile", "Your goal", "All set"] as const
 
 const GOALS = [
   { id: "first-client", label: "Land my first client", icon: Target },
@@ -37,10 +38,19 @@ export function OnboardingWizard() {
 
   const progress = ((step + 1) / STEPS.length) * 100
   const isLast = step === STEPS.length - 1
+  // Step 1 is the password step — once it succeeds the "account exists"
+  // (in the real flow) and we don't let the user navigate back into it.
+  // Same gate kept here so the prototype mirrors real navigation rules.
+  const isPostAuth = step >= 2
 
   const go = (next: number) => {
     setDirection(next > step ? 1 : -1)
     setStep(next)
+  }
+
+  const handlePasswordSuccess = () => {
+    setDirection(1)
+    setStep(2)
   }
 
   return (
@@ -64,17 +74,28 @@ export function OnboardingWizard() {
               )}
             >
               {step === 0 ? <WelcomeStep onStart={() => go(1)} /> : null}
-              {step === 1 ? <ProfileStep name={name} onName={setName} /> : null}
-              {step === 2 ? <GoalStep selected={goal} onSelect={setGoal} /> : null}
-              {step === 3 ? <DoneStep name={name} goal={goal} /> : null}
+              {step === 1 ? (
+                <PasswordStep onSuccess={handlePasswordSuccess} />
+              ) : null}
+              {step === 2 ? (
+                <ProfileStep name={name} onName={setName} />
+              ) : null}
+              {step === 3 ? (
+                <GoalStep selected={goal} onSelect={setGoal} />
+              ) : null}
+              {step === 4 ? <DoneStep name={name} goal={goal} /> : null}
             </div>
 
-            {step > 0 && !isLast ? (
+            {isPostAuth && !isLast ? (
               <div className="mt-8 flex items-center justify-between">
-                <Button variant="ghost" onClick={() => go(step - 1)}>
-                  <ArrowLeft />
-                  Back
-                </Button>
+                {step > 2 ? (
+                  <Button variant="ghost" onClick={() => go(step - 1)}>
+                    <ArrowLeft />
+                    Back
+                  </Button>
+                ) : (
+                  <span />
+                )}
                 <Button onClick={() => go(step + 1)}>
                   Next
                   <ArrowRight />
@@ -310,6 +331,7 @@ function DoneStep({ name, goal }: DoneStepProps) {
       </div>
       <Button
         className="w-full"
+        size="lg"
         render={<Link href="/prototype/member/dashboard" />}
       >
         Go to dashboard
