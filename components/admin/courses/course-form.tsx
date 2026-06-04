@@ -9,7 +9,7 @@ import type { CourseStatus } from '@prisma/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
@@ -223,14 +223,12 @@ export function CourseForm({
 
       <div className="space-y-2">
         <Label htmlFor="course-description">Description</Label>
-        <Textarea
+        <RichTextEditor
           id="course-description"
-          value={description ?? ''}
-          onChange={(e) => setDescription(e.target.value)}
+          value={description}
+          onChange={setDescription}
           placeholder="A short summary of what members will learn."
-          rows={4}
           disabled={submitting}
-          aria-invalid={!!fieldErrors.description}
         />
         {fieldErrors.description?.[0] && (
           <p className="text-xs text-destructive" role="alert">

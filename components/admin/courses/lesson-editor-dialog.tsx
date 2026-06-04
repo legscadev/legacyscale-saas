@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/utils'
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client'
 import {
@@ -102,12 +102,12 @@ export function LessonEditorDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="lesson-description">Description</Label>
-            <Textarea
+            <RichTextEditor
               id="lesson-description"
-              value={lesson.description ?? ''}
-              onChange={(e) => onChange({ description: e.target.value })}
+              value={lesson.description}
+              onChange={(html) => onChange({ description: html })}
               placeholder="Optional — what does this lesson cover?"
-              className="min-h-20"
+              size="sm"
             />
           </div>
 
