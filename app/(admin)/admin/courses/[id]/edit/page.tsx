@@ -19,7 +19,7 @@ export default async function EditCoursePage({ params }: EditCoursePageProps) {
   if (!course) notFound()
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title={`Edit ${course.title}`}
         description="Changes are saved when you click Save."
