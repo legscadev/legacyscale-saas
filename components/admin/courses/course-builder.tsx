@@ -12,6 +12,20 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CourseStatus, LessonType } from '@prisma/client'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -404,6 +418,16 @@ export function CourseBuilder({
     [course.id, patchChapter, router],
   )
 
+  // dnd-kit sensors — pointer for mouse/touch, keyboard for a11y.
+  // 5px activation distance prevents the drag handle from stealing
+  // clicks meant for the inline title input next to it.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
   const moveLesson = useCallback(
     async (chapterId: string, from: number, to: number) => {
       if (from === to) return
@@ -434,6 +458,75 @@ export function CourseBuilder({
       }
     },
     [chapters, course.id, patchChapter],
+  )
+
+  // Multi-step chapter move helper used by drag-and-drop. moveChapter
+  // (above) is for ±1 arrow clicks; drag drops can span any distance.
+  const moveChapterTo = useCallback(
+    async (id: string, to: number) => {
+      const from = chapters.findIndex((c) => c.id === id)
+      if (from === -1 || from === to) return
+      if (to < 0 || to >= chapters.length) return
+
+      const original = chapters
+      const next = [...chapters]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved!)
+      setChapters(next)
+
+      try {
+        const result = await reorderChaptersAction(
+          course.id,
+          next.map((c) => c.id),
+        )
+        if (!result.ok) {
+          setChapters(original)
+          toast.error(result.error ?? 'Could not reorder chapters')
+        }
+      } catch (err) {
+        console.error(err)
+        setChapters(original)
+        toast.error('Network error — please try again')
+      }
+    },
+    [chapters, course.id],
+  )
+
+  // Single onDragEnd dispatcher for both chapters and lessons. Each
+  // useSortable item tags itself with { type: 'chapter' | 'lesson' }
+  // (and chapterId for lessons) via the `data` prop so we can route
+  // here. Cross-chapter lesson drops are intentionally ignored —
+  // moving a lesson between chapters isn't supported by the service.
+  const onDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const activeType = active.data.current?.type
+      const overType = over.data.current?.type
+
+      if (activeType === 'chapter' && overType === 'chapter') {
+        const to = chapters.findIndex((c) => c.id === over.id)
+        if (to === -1) return
+        void moveChapterTo(String(active.id), to)
+        return
+      }
+
+      if (activeType === 'lesson' && overType === 'lesson') {
+        const fromChapter = active.data.current?.chapterId as
+          | string
+          | undefined
+        const toChapter = over.data.current?.chapterId as string | undefined
+        if (!fromChapter || fromChapter !== toChapter) return
+        const chapter = chapters.find((c) => c.id === fromChapter)
+        if (!chapter) return
+        const from = chapter.lessons.findIndex((l) => l.id === active.id)
+        const to = chapter.lessons.findIndex((l) => l.id === over.id)
+        if (from === -1 || to === -1) return
+        void moveLesson(fromChapter, from, to)
+      }
+    },
+    [chapters, moveChapterTo, moveLesson],
   )
 
   return (
@@ -482,23 +575,36 @@ export function CourseBuilder({
               </Button>
             </EmptyState>
           ) : (
-            chapters.map((ch, i) => (
-              <BuilderChapter
-                key={ch.id}
-                chapter={ch}
-                index={i}
-                total={chapters.length}
-                onRename={(t) => renameChapter(ch.id, t)}
-                onRemove={() => requestDelete(ch)}
-                onMove={(dir) => moveChapter(ch.id, dir)}
-                onAddLesson={(type) => addLesson(ch.id, type)}
-                onRenameLesson={(lessonId, title) =>
-                  renameLesson(ch.id, lessonId, title)
-                }
-                onRemoveLesson={(lessonId) => deleteLesson(ch.id, lessonId)}
-                onMoveLesson={(from, to) => moveLesson(ch.id, from, to)}
-              />
-            ))
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onDragEnd}
+            >
+              <SortableContext
+                items={chapters.map((c) => c.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {chapters.map((ch, i) => (
+                  <BuilderChapter
+                    key={ch.id}
+                    chapter={ch}
+                    index={i}
+                    total={chapters.length}
+                    onRename={(t) => renameChapter(ch.id, t)}
+                    onRemove={() => requestDelete(ch)}
+                    onMove={(dir) => moveChapter(ch.id, dir)}
+                    onAddLesson={(type) => addLesson(ch.id, type)}
+                    onRenameLesson={(lessonId, title) =>
+                      renameLesson(ch.id, lessonId, title)
+                    }
+                    onRemoveLesson={(lessonId) =>
+                      deleteLesson(ch.id, lessonId)
+                    }
+                    onMoveLesson={(from, to) => moveLesson(ch.id, from, to)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
 
           {chapters.length > 0 ? (

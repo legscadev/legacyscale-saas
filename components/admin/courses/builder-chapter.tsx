@@ -8,6 +8,12 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -20,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusBadge } from '@/components/shared'
-import { lessonTypeIcon } from './lesson-type'
+import { LessonTypeIcon } from './lesson-type'
 import type {
   ChapterListItem,
   LessonListItem,
@@ -35,6 +41,9 @@ const LESSON_TYPES: { type: LessonType; label: string }[] = [
 
 const reorderBtn =
   'text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-30'
+
+const dragHandleBtn =
+  'cursor-grab text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30'
 
 export interface BuilderChapterProps {
   chapter: ChapterListItem
@@ -69,9 +78,45 @@ export function BuilderChapter({
 }: BuilderChapterProps) {
   const lessons = chapter.lessons
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: chapter.id,
+    data: { type: 'chapter' as const },
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
   return (
-    <Card className="gap-0 p-0">
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'gap-0 p-0 transition-shadow',
+        isDragging && 'z-10 shadow-lg ring-1 ring-primary/30',
+      )}
+    >
       <div className="flex items-center gap-2 border-b p-2.5">
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          disabled={!onMove}
+          aria-label="Drag chapter to reorder"
+          {...attributes}
+          {...listeners}
+          className={dragHandleBtn}
+        >
+          <GripVertical className="size-4" />
+        </button>
         <div className="flex flex-col">
           <button
             type="button"
@@ -119,18 +164,15 @@ export function BuilderChapter({
             Add lesson
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {LESSON_TYPES.map((t) => {
-              const Icon = lessonTypeIcon(t.type)
-              return (
-                <DropdownMenuItem
-                  key={t.type}
-                  onClick={() => onAddLesson?.(t.type)}
-                >
-                  <Icon />
-                  {t.label}
-                </DropdownMenuItem>
-              )
-            })}
+            {LESSON_TYPES.map((t) => (
+              <DropdownMenuItem
+                key={t.type}
+                onClick={() => onAddLesson?.(t.type)}
+              >
+                <LessonTypeIcon type={t.type} />
+                {t.label}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
         <Button
@@ -150,73 +192,150 @@ export function BuilderChapter({
           No lessons yet — use “Add lesson”.
         </p>
       ) : (
-        <ul className="divide-y">
-          {lessons.map((lesson, i) => {
-            const Icon = lessonTypeIcon(lesson.type)
-            return (
-              <li
+        <SortableContext
+          items={lessons.map((l) => l.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <ul className="divide-y">
+            {lessons.map((lesson, i) => (
+              <SortableLessonRow
                 key={lesson.id}
-                className="flex items-center gap-2 px-2.5 py-1.5"
-              >
-                <span aria-hidden className="text-muted-foreground">
-                  <GripVertical className="size-4" />
-                </span>
-                <Icon className="size-4 shrink-0 text-muted-foreground" />
-                <Input
-                  value={lesson.title}
-                  onChange={(e) =>
-                    onRenameLesson?.(lesson.id, e.target.value)
-                  }
-                  placeholder="Lesson title"
-                  disabled={!onRenameLesson}
-                  className="h-7 flex-1 border-0 bg-transparent px-1 text-sm focus-visible:ring-1"
-                />
-                <StatusBadge status={lesson.status} />
-                <div className="flex flex-col">
-                  <button
-                    type="button"
-                    disabled={i === 0 || !onMoveLesson}
-                    onClick={() => onMoveLesson?.(i, i - 1)}
-                    aria-label="Move lesson up"
-                    className={reorderBtn}
-                  >
-                    <ChevronUp className="size-3" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={i === lessons.length - 1 || !onMoveLesson}
-                    onClick={() => onMoveLesson?.(i, i + 1)}
-                    aria-label="Move lesson down"
-                    className={reorderBtn}
-                  >
-                    <ChevronDown className="size-3" />
-                  </button>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Edit lesson"
-                  disabled={!onEditLesson}
-                  onClick={() => onEditLesson?.(lesson)}
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Delete lesson"
-                  disabled={!onRemoveLesson}
-                  onClick={() => onRemoveLesson?.(lesson.id)}
-                >
-                  <Trash2 />
-                </Button>
-              </li>
-            )
-          })}
-        </ul>
+                lesson={lesson}
+                chapterId={chapter.id}
+                index={i}
+                total={lessons.length}
+                onRename={
+                  onRenameLesson
+                    ? (title) => onRenameLesson(lesson.id, title)
+                    : undefined
+                }
+                onMove={
+                  onMoveLesson
+                    ? (dir) => onMoveLesson(i, i + dir)
+                    : undefined
+                }
+                onEdit={onEditLesson ? () => onEditLesson(lesson) : undefined}
+                onRemove={
+                  onRemoveLesson ? () => onRemoveLesson(lesson.id) : undefined
+                }
+              />
+            ))}
+          </ul>
+        </SortableContext>
       )}
     </Card>
+  )
+}
+
+interface SortableLessonRowProps {
+  lesson: LessonListItem
+  chapterId: string
+  index: number
+  total: number
+  onRename?: (title: string) => void
+  onMove?: (dir: -1 | 1) => void
+  onEdit?: () => void
+  onRemove?: () => void
+}
+
+function SortableLessonRow({
+  lesson,
+  chapterId,
+  index,
+  total,
+  onRename,
+  onMove,
+  onEdit,
+  onRemove,
+}: SortableLessonRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: lesson.id,
+    data: { type: 'lesson' as const, chapterId },
+  })
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={cn(
+        'flex items-center gap-2 bg-card px-2.5 py-1.5',
+        isDragging && 'z-10 shadow-md ring-1 ring-primary/30',
+      )}
+    >
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        disabled={!onMove}
+        aria-label="Drag lesson to reorder"
+        {...attributes}
+        {...listeners}
+        className={dragHandleBtn}
+      >
+        <GripVertical className="size-4" />
+      </button>
+      <LessonTypeIcon
+        type={lesson.type}
+        className="size-4 shrink-0 text-muted-foreground"
+      />
+      <Input
+        value={lesson.title}
+        onChange={(e) => onRename?.(e.target.value)}
+        placeholder="Lesson title"
+        disabled={!onRename}
+        className="h-7 flex-1 border-0 bg-transparent px-1 text-sm focus-visible:ring-1"
+      />
+      <StatusBadge status={lesson.status} />
+      <div className="flex flex-col">
+        <button
+          type="button"
+          disabled={index === 0 || !onMove}
+          onClick={() => onMove?.(-1)}
+          aria-label="Move lesson up"
+          className={reorderBtn}
+        >
+          <ChevronUp className="size-3" />
+        </button>
+        <button
+          type="button"
+          disabled={index === total - 1 || !onMove}
+          onClick={() => onMove?.(1)}
+          aria-label="Move lesson down"
+          className={reorderBtn}
+        >
+          <ChevronDown className="size-3" />
+        </button>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Edit lesson"
+        disabled={!onEdit}
+        onClick={onEdit}
+      >
+        <Pencil />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Delete lesson"
+        disabled={!onRemove}
+        onClick={onRemove}
+      >
+        <Trash2 />
+      </Button>
+    </li>
   )
 }
