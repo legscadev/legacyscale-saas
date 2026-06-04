@@ -20,27 +20,40 @@ interface UserMenuProps {
   user: User
   /** Where the in-app settings link should point. */
   settingsHref: string
+  /** Avatar-only variant — used by the collapsed sidebar. */
+  compact?: boolean
 }
 
-export function UserMenu({ user, settingsHref }: UserMenuProps) {
+export function UserMenu({ user, settingsHref, compact = false }: UserMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <button className="flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-muted/60" />
+          <button
+            aria-label={compact ? user.name : undefined}
+            className={
+              compact
+                ? "grid w-full place-items-center rounded-lg p-1 transition-colors hover:bg-muted/60"
+                : "flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-muted/60"
+            }
+          />
         }
       >
         <Avatar size="sm">
           {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
           <AvatarFallback>{initials(user.name)}</AvatarFallback>
         </Avatar>
-        <div className="flex min-w-0 flex-1 flex-col leading-tight">
-          <span className="truncate text-sm font-medium">{user.name}</span>
-          <span className="truncate text-xs text-muted-foreground">
-            {user.email}
-          </span>
-        </div>
-        <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+        {!compact ? (
+          <>
+            <div className="flex min-w-0 flex-1 flex-col leading-tight">
+              <span className="truncate text-sm font-medium">{user.name}</span>
+              <span className="truncate text-xs text-muted-foreground">
+                {user.email}
+              </span>
+            </div>
+            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+          </>
+        ) : null}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuGroup>
