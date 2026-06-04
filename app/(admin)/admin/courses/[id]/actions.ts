@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { Prisma, type LessonType } from '@prisma/client'
+import { Prisma, type LessonStatus, type LessonType } from '@prisma/client'
 import { z } from 'zod'
 
 import { requireAdmin } from '@/lib/auth/get-user'
@@ -515,6 +515,45 @@ export async function commitResourceUploadAction(
     console.error('Resource commit failed:', err)
     return { ok: false, error: 'Could not save resource' }
   }
+}
+
+// ===========================================================
+// VIDEO PROCESSING STATUS  (2.17)
+// ===========================================================
+
+export interface LessonStatusResult extends BaseResult {
+  lesson?: {
+    id: string
+    chapterId: string
+    status: LessonStatus
+    durationSeconds: number | null
+    muxPlaybackId: string | null
+  }
+}
+
+/**
+ * Lightweight poll endpoint — returns just the fields that change
+ * via the Mux webhook so the builder can tick until PROCESSING flips
+ * to READY (or errors back to DRAFT). chapterId is included so the
+ * client can update local state without a separate lookup.
+ */
+export async function getLessonStatusAction(
+  lessonId: string,
+): Promise<LessonStatusResult> {
+  await requireAdmin()
+
+  const lesson = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    select: {
+      id: true,
+      chapterId: true,
+      status: true,
+      durationSeconds: true,
+      muxPlaybackId: true,
+    },
+  })
+  if (!lesson) return { ok: false, error: 'Lesson not found' }
+  return { ok: true, lesson }
 }
 
 export interface ResourceDownloadUrlResult extends BaseResult {

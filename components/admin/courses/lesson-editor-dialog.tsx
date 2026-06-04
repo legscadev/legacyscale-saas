@@ -52,6 +52,9 @@ interface LessonEditorDialogProps {
     resourceSize: number
     status: 'READY'
   }) => void
+  /** Optimistically flip the video lesson to PROCESSING on upchunk success — the
+   *  builder's polling effect will then tick until Mux flips it to READY. */
+  onVideoUploadStarted: () => void
 }
 
 function formatDuration(seconds: number | null): string {
@@ -69,6 +72,7 @@ export function LessonEditorDialog({
   isUnsaved,
   onChange,
   onResourceUploaded,
+  onVideoUploadStarted,
 }: LessonEditorDialogProps) {
   if (!lesson) return null
 
@@ -106,7 +110,11 @@ export function LessonEditorDialog({
           </div>
 
           {lesson.type === 'VIDEO' ? (
-            <VideoSection lesson={lesson} isUnsaved={isUnsaved} />
+            <VideoSection
+              lesson={lesson}
+              isUnsaved={isUnsaved}
+              onUploadStarted={onVideoUploadStarted}
+            />
           ) : null}
           {lesson.type === 'RESOURCE' ? (
             <ResourceSection
@@ -135,9 +143,10 @@ export function LessonEditorDialog({
 interface VideoSectionProps {
   lesson: LessonListItem
   isUnsaved: boolean
+  onUploadStarted: () => void
 }
 
-function VideoSection({ lesson, isUnsaved }: VideoSectionProps) {
+function VideoSection({ lesson, isUnsaved, onUploadStarted }: VideoSectionProps) {
   const [percent, setPercent] = useState<number | null>(null)
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'uploaded' | 'error'>(
     'idle',
@@ -196,9 +205,13 @@ function VideoSection({ lesson, isUnsaved }: VideoSectionProps) {
           setPhase('uploaded')
           setPercent(100)
           uploaderRef.current = null
+          // Optimistically tell the builder the lesson is now
+          // PROCESSING so its polling effect kicks in and the
+          // status badge / dialog auto-update when Mux finishes.
+          onUploadStarted()
           toast.success('Upload complete', {
             description:
-              'Video is processing on Mux — usually takes a minute. Refresh to see it ready.',
+              'Video is processing on Mux — usually takes a minute.',
           })
         })
       } catch (err) {
@@ -209,7 +222,7 @@ function VideoSection({ lesson, isUnsaved }: VideoSectionProps) {
         )
       }
     },
-    [lesson.id],
+    [lesson.id, onUploadStarted],
   )
 
   const cancelUpload = useCallback(() => {

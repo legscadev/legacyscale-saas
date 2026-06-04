@@ -41,7 +41,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { EmptyState, StatusBadge } from '@/components/shared'
-import { saveCourseStructureAction } from '@/app/(admin)/admin/courses/[id]/actions'
+import {
+  getLessonStatusAction,
+  saveCourseStructureAction,
+} from '@/app/(admin)/admin/courses/[id]/actions'
 import type { CourseDetail } from '@/lib/services/course-service'
 import type {
   ChapterListItem,
@@ -120,6 +123,87 @@ export function CourseBuilder({
     window.addEventListener('beforeunload', beforeUnload)
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [isDirty])
+
+  // Stable key for the SET of currently-PROCESSING lesson ids — the
+  // polling effect should restart only when that set actually changes
+  // (added a new one after upload, or one transitioned away), not on
+  // every re-render.
+  const processingIdsKey = chapters
+    .flatMap((c) => c.lessons)
+    .filter((l) => l.status === 'PROCESSING')
+    .map((l) => l.id)
+    .sort()
+    .join(',')
+
+  // Poll PROCESSING lessons every 10s until they flip to READY (or
+  // back to DRAFT on Mux error). Updates lesson status, duration, and
+  // playbackId in-place so badges + the editor dialog auto-update.
+  useEffect(() => {
+    if (!processingIdsKey) return
+    const ids = processingIdsKey.split(',')
+    let cancelled = false
+
+    async function tick() {
+      const results = await Promise.all(ids.map((id) => getLessonStatusAction(id)))
+      if (cancelled) return
+      for (const result of results) {
+        if (!result.ok || !result.lesson) continue
+        const incoming = result.lesson
+        if (incoming.status === 'PROCESSING') continue
+        // Mutate in place — these webhook-driven fields aren't part of
+        // the isDirty snapshot so this doesn't flip the Save button.
+        setChapters((prev) =>
+          prev.map((c) =>
+            c.id === incoming.chapterId
+              ? {
+                  ...c,
+                  lessons: c.lessons.map((l) =>
+                    l.id === incoming.id
+                      ? {
+                          ...l,
+                          status: incoming.status,
+                          durationSeconds: incoming.durationSeconds,
+                          muxPlaybackId: incoming.muxPlaybackId,
+                        }
+                      : l,
+                  ),
+                }
+              : c,
+          ),
+        )
+        // Also sync the saved snapshot so a later isDirty check stays
+        // accurate after edits to other fields.
+        setSavedSnapshot((prev) =>
+          prev.map((c) =>
+            c.id === incoming.chapterId
+              ? {
+                  ...c,
+                  lessons: c.lessons.map((l) =>
+                    l.id === incoming.id
+                      ? {
+                          ...l,
+                          status: incoming.status,
+                          durationSeconds: incoming.durationSeconds,
+                          muxPlaybackId: incoming.muxPlaybackId,
+                        }
+                      : l,
+                  ),
+                }
+              : c,
+          ),
+        )
+      }
+    }
+
+    // Kick once immediately so a freshly-uploaded video doesn't wait
+    // a full 10s before the first check.
+    void tick()
+    const interval = setInterval(tick, 10_000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [processingIdsKey])
 
   // ===========================================================
   // Local mutations — no network calls, all changes batch until Save.
@@ -564,6 +648,32 @@ export function CourseBuilder({
             ),
           )
         }}
+        onVideoUploadStarted={() => {
+          if (!editingRef) return
+          // Optimistic flip: Mux's upchunk finished, the webhook will
+          // (within seconds) mark the lesson PROCESSING server-side
+          // and then READY. Updating local state to PROCESSING now
+          // lights up the badge and arms the polling effect.
+          const patch = { status: 'PROCESSING' as const }
+          patchChapter(editingRef.chapterId, (c) => ({
+            ...c,
+            lessons: c.lessons.map((l) =>
+              l.id === editingRef.lessonId ? { ...l, ...patch } : l,
+            ),
+          }))
+          setSavedSnapshot((prev) =>
+            prev.map((c) =>
+              c.id === editingRef.chapterId
+                ? {
+                    ...c,
+                    lessons: c.lessons.map((l) =>
+                      l.id === editingRef.lessonId ? { ...l, ...patch } : l,
+                    ),
+                  }
+                : c,
+            ),
+          )
+        }}
       />
 
       <AlertDialog
@@ -640,6 +750,7 @@ function serialize(chapters: LocalChapter[]): string {
         id: l.tempId ? null : l.id,
         tempId: l.tempId ?? null,
         title: l.title,
+        description: l.description ?? null,
         type: l.type,
         orderIndex: li,
       })),
