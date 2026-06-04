@@ -2,6 +2,7 @@ import type { LessonType, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { deleteAsset as deleteMuxAsset } from '@/lib/mux'
+import { removeLessonResourceFolder } from './lesson-service'
 
 /**
  * Sync the entire chapter + lesson tree of a course in one transaction.
@@ -41,16 +42,22 @@ async function syncCourseStructure(
   courseId: string,
   chapters: SyncChapterInput[],
 ): Promise<SyncResult> {
-  // Load current state outside the transaction for the Mux pre-pass —
-  // we only need it to know which assets to delete; the actual DB
-  // diff happens inside the transaction with a fresh read.
+  // Load current state outside the transaction for the external-asset
+  // pre-pass — we need to know which Mux assets and Storage files to
+  // delete. The actual DB diff happens inside the transaction with a
+  // fresh read.
   const existingForCleanup = await prisma.chapter.findMany({
     where: { courseId, deletedAt: null },
     select: {
       id: true,
       lessons: {
         where: { deletedAt: null },
-        select: { id: true, type: true, muxAssetId: true },
+        select: {
+          id: true,
+          type: true,
+          muxAssetId: true,
+          resourceUrl: true,
+        },
       },
     },
   })
@@ -62,8 +69,10 @@ async function syncCourseStructure(
     chapters.flatMap((c) => c.lessons.filter((l) => l.id).map((l) => l.id!)),
   )
 
-  // Mux cleanup pre-pass — lessons going away (either as part of a
-  // chapter delete or individually) get their assets removed first.
+  // External-asset cleanup pre-pass — lessons going away (either as
+  // part of a chapter delete or individually) get their Mux asset
+  // or resource file removed first. Both are best-effort: a Storage
+  // or Mux failure logs but doesn't fail the structural sync.
   const lessonsBeingRemoved = existingForCleanup.flatMap((chapter) => {
     if (!incomingChapterIds.has(chapter.id)) return chapter.lessons
     return chapter.lessons.filter((l) => !incomingLessonIds.has(l.id))
@@ -78,6 +87,9 @@ async function syncCourseStructure(
           err,
         )
       }
+    }
+    if (lesson.type === 'RESOURCE' && lesson.resourceUrl) {
+      await removeLessonResourceFolder(lesson.id)
     }
   }
 

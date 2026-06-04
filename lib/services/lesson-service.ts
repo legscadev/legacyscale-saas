@@ -2,6 +2,46 @@ import type { LessonType, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { deleteAsset as deleteMuxAsset } from '@/lib/mux'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+const RESOURCE_BUCKET = 'lesson-resources'
+
+/**
+ * Best-effort: removes every file under <lessonId>/ in the
+ * lesson-resources bucket. Used when a RESOURCE lesson is deleted so
+ * we don't accumulate orphan files. Errors are logged but never
+ * thrown — losing a Storage object should not block the DB delete.
+ */
+export async function removeLessonResourceFolder(
+  lessonId: string,
+): Promise<void> {
+  try {
+    const supabase = createAdminClient()
+    const { data: existing, error: listError } = await supabase.storage
+      .from(RESOURCE_BUCKET)
+      .list(lessonId)
+    if (listError) {
+      console.error(
+        `Resource list failed for lesson ${lessonId}:`,
+        listError,
+      )
+      return
+    }
+    if (!existing || existing.length === 0) return
+    const paths = existing.map((f) => `${lessonId}/${f.name}`)
+    const { error: removeError } = await supabase.storage
+      .from(RESOURCE_BUCKET)
+      .remove(paths)
+    if (removeError) {
+      console.error(
+        `Resource remove failed for lesson ${lessonId}:`,
+        removeError,
+      )
+    }
+  } catch (err) {
+    console.error(`Resource cleanup error for lesson ${lessonId}:`, err)
+  }
+}
 
 const lessonRowSelect = {
   id: true,
@@ -67,14 +107,17 @@ async function updateLesson(id: string, input: UpdateLessonInput) {
 }
 
 /**
- * Hard delete. For VIDEO lessons we attempt to clean up the Mux asset
- * first so we don't accumulate orphans, but a Mux failure must not
- * block the DB delete — the row goes, the asset becomes manual cleanup.
+ * Hard delete. Before the row goes, we attempt to clean up any
+ * external assets the lesson owns:
+ *   • VIDEO → delete the Mux asset (the upload bytes Mux is hosting).
+ *   • RESOURCE → remove the file from the lesson-resources bucket.
+ * Both side-effects are best-effort — failures log and the DB delete
+ * still proceeds, leaving the asset/file as manual cleanup.
  */
 async function deleteLesson(id: string) {
   const lesson = await prisma.lesson.findUnique({
     where: { id },
-    select: { id: true, type: true, muxAssetId: true },
+    select: { id: true, type: true, muxAssetId: true, resourceUrl: true },
   })
   if (!lesson) return { id }
 
@@ -87,6 +130,10 @@ async function deleteLesson(id: string) {
         err,
       )
     }
+  }
+
+  if (lesson.type === 'RESOURCE' && lesson.resourceUrl) {
+    await removeLessonResourceFolder(id)
   }
 
   await prisma.lesson.delete({ where: { id } })
