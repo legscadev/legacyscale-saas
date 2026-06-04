@@ -177,11 +177,6 @@ model Lesson {
   muxPlaybackId   String? @map("mux_playback_id")
   durationSeconds Int?    @map("duration_seconds")
 
-  // Resource fields (type = RESOURCE)
-  resourceUrl  String? @map("resource_url")
-  resourceName String? @map("resource_name")
-  resourceSize Int?    @map("resource_size")
-
   // Quiz settings (type = QUIZ)
   passingScore Int? @map("passing_score")  // Minimum % to pass (e.g., 70)
   maxAttempts  Int? @map("max_attempts")   // null = unlimited
@@ -197,11 +192,32 @@ model Lesson {
   lessonProgress LessonProgress[]
   quizAttempts   QuizAttempt[]
   notes          Note[]
+  resources      LessonResource[]
 
   @@index([chapterId, orderIndex])
   @@index([type])
   @@index([status])
   @@map("lessons")
+}
+
+/// Files attached to a lesson (PDFs, worksheets, slides, etc.).
+/// Stored in the `lesson-resources` Supabase Storage bucket at path
+/// `<lessonId>/<resourceId>`. Original filename + mime type live in
+/// the row so signed-download URLs can serve the correct attachment.
+model LessonResource {
+  id        String   @id @default(uuid())
+  lessonId  String   @map("lesson_id")
+  name      String   // Original filename, e.g. "workbook.pdf"
+  path      String   // Bucket-relative path, e.g. "<lessonId>/<resourceId>"
+  size      Int      // Bytes
+  mimeType  String   @map("mime_type")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId, createdAt])
+  @@map("lesson_resources")
 }
 
 // ============================================

@@ -22,9 +22,17 @@ const chapterListSelect = {
       orderIndex: true,
       durationSeconds: true,
       muxPlaybackId: true,
-      resourceUrl: true,
-      resourceName: true,
-      resourceSize: true,
+      resources: {
+        orderBy: { createdAt: 'asc' as const },
+        select: {
+          id: true,
+          lessonId: true,
+          name: true,
+          size: true,
+          mimeType: true,
+          createdAt: true,
+        },
+      },
     },
   },
 } as const
@@ -113,3 +121,4 @@ export type ChapterListItem = Awaited<
   ReturnType<typeof listByCourse>
 >[number]
 export type LessonListItem = ChapterListItem['lessons'][number]
+export type LessonResourceItem = LessonListItem['resources'][number]

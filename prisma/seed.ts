@@ -130,8 +130,9 @@ async function main() {
       status: 'READY',
       orderIndex: 2,
       description: 'Download the Agency Starter Kit PDF.',
-      resourceName: 'agency-starter-kit.pdf',
-      resourceSize: 1024000, // 1MB
+      // Files live in the LessonResource table now; see the
+      // resource upload flow in the admin builder rather than
+      // seeding bucket objects here.
     },
   })
   console.log('✅ Sample resource lesson created:', resourceLesson.title)

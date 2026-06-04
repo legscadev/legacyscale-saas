@@ -56,7 +56,6 @@ async function syncCourseStructure(
           id: true,
           type: true,
           muxAssetId: true,
-          resourceUrl: true,
         },
       },
     },
@@ -88,7 +87,12 @@ async function syncCourseStructure(
         )
       }
     }
-    if (lesson.type === 'RESOURCE' && lesson.resourceUrl) {
+    if (lesson.type === 'RESOURCE') {
+      // Always attempt — the helper no-ops when the bucket folder is
+      // empty, so we don't need to pre-check resourceUrl. Per-lesson
+      // resources now live in a separate table that cascades on the
+      // chapter/lesson delete; the bucket files need this explicit
+      // sweep.
       await removeLessonResourceFolder(lesson.id)
     }
   }

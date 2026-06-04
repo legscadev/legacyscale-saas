@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -102,6 +102,11 @@ export function CourseBuilder({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   )
+  // Stable id for DndContext so the auto-generated aria-describedby
+  // IDs match between server and client renders. Without this,
+  // dnd-kit's internal counter starts fresh on each side and React
+  // logs a hydration mismatch warning on every page load.
+  const dndContextId = useId()
 
   const lessonCount = chapters.reduce((n, c) => n + c.lessons.length, 0)
 
@@ -290,9 +295,7 @@ export function CourseBuilder({
             orderIndex: c.lessons.length,
             durationSeconds: null,
             muxPlaybackId: null,
-            resourceUrl: null,
-            resourceName: null,
-            resourceSize: null,
+            resources: [],
           },
         ],
       }))
@@ -526,6 +529,7 @@ export function CourseBuilder({
             </EmptyState>
           ) : (
             <DndContext
+              id={dndContextId}
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={onDragEnd}
@@ -622,30 +626,42 @@ export function CourseBuilder({
           if (!editingRef) return
           patchLesson(editingRef.chapterId, editingRef.lessonId, changes)
         }}
-        onResourceUploaded={(changes) => {
+        onResourceAdded={(resource) => {
           if (!editingRef) return
-          patchChapter(editingRef.chapterId, (c) => ({
+          // Each resource upload persists immediately on the server;
+          // append it to local state + saved snapshot so the dialog
+          // sees the new file and isDirty stays accurate.
+          const append = (c: LocalChapter): LocalChapter => ({
             ...c,
             lessons: c.lessons.map((l) =>
-              l.id === editingRef.lessonId ? { ...l, ...changes } : l,
+              l.id === editingRef.lessonId
+                ? { ...l, status: 'READY', resources: [...l.resources, resource] }
+                : l,
             ),
-          }))
-          // Resource commit also lands on the server (status flips to
-          // READY, resourceUrl is set), so update the saved snapshot in
-          // place — these fields aren't part of isDirty tracking, but
-          // we want re-opens of the dialog to see the new state without
-          // a manual save.
+          })
+          patchChapter(editingRef.chapterId, append)
           setSavedSnapshot((prev) =>
-            prev.map((c) =>
-              c.id === editingRef.chapterId
+            prev.map((c) => (c.id === editingRef.chapterId ? append(c) : c)),
+          )
+        }}
+        onResourceRemoved={(resourceId) => {
+          if (!editingRef) return
+          // Delete already ran on the server — strip locally and
+          // mirror in the saved snapshot.
+          const strip = (c: LocalChapter): LocalChapter => ({
+            ...c,
+            lessons: c.lessons.map((l) =>
+              l.id === editingRef.lessonId
                 ? {
-                    ...c,
-                    lessons: c.lessons.map((l) =>
-                      l.id === editingRef.lessonId ? { ...l, ...changes } : l,
-                    ),
+                    ...l,
+                    resources: l.resources.filter((r) => r.id !== resourceId),
                   }
-                : c,
+                : l,
             ),
+          })
+          patchChapter(editingRef.chapterId, strip)
+          setSavedSnapshot((prev) =>
+            prev.map((c) => (c.id === editingRef.chapterId ? strip(c) : c)),
           )
         }}
         onVideoUploadStarted={() => {

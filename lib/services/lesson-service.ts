@@ -53,9 +53,17 @@ const lessonRowSelect = {
   orderIndex: true,
   durationSeconds: true,
   muxPlaybackId: true,
-  resourceUrl: true,
-  resourceName: true,
-  resourceSize: true,
+  resources: {
+    orderBy: { createdAt: 'asc' as const },
+    select: {
+      id: true,
+      lessonId: true,
+      name: true,
+      size: true,
+      mimeType: true,
+      createdAt: true,
+    },
+  },
 } as const
 
 interface CreateLessonInput {
@@ -117,7 +125,7 @@ async function updateLesson(id: string, input: UpdateLessonInput) {
 async function deleteLesson(id: string) {
   const lesson = await prisma.lesson.findUnique({
     where: { id },
-    select: { id: true, type: true, muxAssetId: true, resourceUrl: true },
+    select: { id: true, type: true, muxAssetId: true },
   })
   if (!lesson) return { id }
 
@@ -132,7 +140,10 @@ async function deleteLesson(id: string) {
     }
   }
 
-  if (lesson.type === 'RESOURCE' && lesson.resourceUrl) {
+  if (lesson.type === 'RESOURCE') {
+    // LessonResource rows cascade with the lesson, but the bucket
+    // files don't — blow away the whole <lessonId>/ folder. No-op
+    // for lessons that never had any uploads.
     await removeLessonResourceFolder(id)
   }
 

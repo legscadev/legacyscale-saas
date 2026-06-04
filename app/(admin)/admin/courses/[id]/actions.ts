@@ -399,26 +399,19 @@ const prepareResourceUploadSchema = z.object({
 
 const commitResourceUploadSchema = z.object({
   lessonId: z.uuid(),
+  resourceId: z.uuid(),
   path: z.string().min(1),
   filename: z.string().min(1).max(200),
   size: z.number().int().positive().max(RESOURCE_MAX_BYTES),
+  mimeType: z.string().min(1).max(150),
 })
-
-function sanitizeFilename(name: string): string {
-  // Strip diacritics / unsafe chars; keep extension dot.
-  const dot = name.lastIndexOf('.')
-  const ext = dot > 0 ? name.slice(dot) : ''
-  const stem = (dot > 0 ? name.slice(0, dot) : name)
-    .replace(/[^a-zA-Z0-9._-]+/g, '_')
-    .replace(/_+/g, '_')
-    .slice(0, 150)
-  return `${stem || 'file'}${ext}`.slice(0, 200)
-}
 
 export interface PrepareResourceUploadResult extends BaseResult {
   signedUrl?: string
   token?: string
   path?: string
+  /** Server-minted id the client passes back to commit. */
+  resourceId?: string
 }
 
 export async function prepareResourceUploadAction(
@@ -437,22 +430,14 @@ export async function prepareResourceUploadAction(
     }
   }
 
-  const { lessonId, filename } = parsed.data
-  const safeName = sanitizeFilename(filename)
-  const path = `${lessonId}/${safeName}`
+  const { lessonId } = parsed.data
+  // Mint a resource id up front — it's both the row PK on commit and
+  // the file path leaf, so the bucket file is addressable even if
+  // commit fails (a sweep can still find the orphan).
+  const resourceId = crypto.randomUUID()
+  const path = `${lessonId}/${resourceId}`
 
-  // Wipe any prior file in this lesson's folder so we don't keep stale
-  // attachments around when the user replaces a resource.
   const supabase = createAdminClient()
-  const { data: existing } = await supabase.storage
-    .from(RESOURCE_BUCKET)
-    .list(lessonId)
-  if (existing && existing.length > 0) {
-    await supabase.storage
-      .from(RESOURCE_BUCKET)
-      .remove(existing.map((f) => `${lessonId}/${f.name}`))
-  }
-
   const { data, error } = await supabase.storage
     .from(RESOURCE_BUCKET)
     .createSignedUploadUrl(path)
@@ -466,13 +451,19 @@ export async function prepareResourceUploadAction(
     signedUrl: data.signedUrl,
     token: data.token,
     path: data.path,
+    resourceId,
   }
 }
 
 export interface CommitResourceUploadResult extends BaseResult {
-  resourceUrl?: string
-  resourceName?: string
-  resourceSize?: number
+  resource?: {
+    id: string
+    lessonId: string
+    name: string
+    size: number
+    mimeType: string
+    createdAt: Date
+  }
 }
 
 export async function commitResourceUploadAction(
@@ -486,34 +477,79 @@ export async function commitResourceUploadAction(
     return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
   }
 
-  const { lessonId, path, filename, size } = parsed.data
+  const { lessonId, resourceId, path, filename, size, mimeType } = parsed.data
 
   try {
-    await prisma.lesson.update({
-      where: { id: lessonId },
+    const resource = await prisma.lessonResource.create({
       data: {
-        resourceUrl: path,
-        resourceName: filename,
-        resourceSize: size,
-        status: 'READY',
+        id: resourceId,
+        lessonId,
+        name: filename,
+        path,
+        size,
+        mimeType,
+      },
+      select: {
+        id: true,
+        lessonId: true,
+        name: true,
+        size: true,
+        mimeType: true,
+        createdAt: true,
       },
     })
+    // Flip the lesson to READY on its first attachment; later
+    // uploads against an already-READY lesson keep the same status.
+    await prisma.lesson.update({
+      where: { id: lessonId },
+      data: { status: 'READY' },
+    })
     revalidatePath(`/admin/courses/${courseId}`)
-    return {
-      ok: true,
-      resourceUrl: path,
-      resourceName: filename,
-      resourceSize: size,
-    }
+    return { ok: true, resource }
   } catch (err) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === 'P2025'
+      err.code === 'P2003'
     ) {
       return { ok: false, error: 'Lesson not found' }
     }
     console.error('Resource commit failed:', err)
     return { ok: false, error: 'Could not save resource' }
+  }
+}
+
+export async function removeLessonResourceAction(
+  courseId: string,
+  resourceId: string,
+): Promise<BaseResult> {
+  await requireAdmin()
+
+  try {
+    const resource = await prisma.lessonResource.findUnique({
+      where: { id: resourceId },
+      select: { id: true, path: true, lessonId: true },
+    })
+    if (!resource) return { ok: false, error: 'Resource not found' }
+
+    // Best-effort bucket cleanup before the DB row goes — same
+    // posture as Mux delete.
+    const supabase = createAdminClient()
+    const { error: removeErr } = await supabase.storage
+      .from(RESOURCE_BUCKET)
+      .remove([resource.path])
+    if (removeErr) {
+      console.error(
+        `Resource bucket remove failed for ${resource.path}:`,
+        removeErr,
+      )
+    }
+
+    await prisma.lessonResource.delete({ where: { id: resourceId } })
+    revalidatePath(`/admin/courses/${courseId}`)
+    return { ok: true }
+  } catch (err) {
+    console.error('Resource delete failed:', err)
+    return { ok: false, error: 'Could not delete resource' }
   }
 }
 
@@ -563,22 +599,27 @@ export interface ResourceDownloadUrlResult extends BaseResult {
 const RESOURCE_DOWNLOAD_EXPIRY_SECONDS = 60
 
 export async function getResourceDownloadUrlAction(
-  lessonId: string,
+  resourceId: string,
 ): Promise<ResourceDownloadUrlResult> {
   await requireAdmin()
 
-  const lesson = await prisma.lesson.findUnique({
-    where: { id: lessonId },
-    select: { resourceUrl: true },
+  const resource = await prisma.lessonResource.findUnique({
+    where: { id: resourceId },
+    select: { path: true, name: true },
   })
-  if (!lesson?.resourceUrl) {
-    return { ok: false, error: 'No file attached to this lesson' }
+  if (!resource) {
+    return { ok: false, error: 'Resource not found' }
   }
 
   const supabase = createAdminClient()
   const { data, error } = await supabase.storage
     .from(RESOURCE_BUCKET)
-    .createSignedUrl(lesson.resourceUrl, RESOURCE_DOWNLOAD_EXPIRY_SECONDS)
+    .createSignedUrl(resource.path, RESOURCE_DOWNLOAD_EXPIRY_SECONDS, {
+      // Force Content-Disposition: attachment with the original name
+      // so the browser downloads as e.g. "workbook.pdf" instead of
+      // the opaque bucket path.
+      download: resource.name,
+    })
 
   if (error || !data) {
     console.error('Signed download URL creation failed:', error)

@@ -33,8 +33,12 @@ import {
   commitResourceUploadAction,
   getResourceDownloadUrlAction,
   prepareResourceUploadAction,
+  removeLessonResourceAction,
 } from '@/app/(admin)/admin/courses/[id]/actions'
-import type { LessonListItem } from '@/lib/services/chapter-service'
+import type {
+  LessonListItem,
+  LessonResourceItem,
+} from '@/lib/services/chapter-service'
 
 interface LessonEditorDialogProps {
   open: boolean
@@ -45,13 +49,10 @@ interface LessonEditorDialogProps {
   isUnsaved: boolean
   /** Pushes title/description changes back to the builder's local state. */
   onChange: (changes: { title?: string; description?: string | null }) => void
-  /** Pushes resource upload result into the builder's local state. */
-  onResourceUploaded: (changes: {
-    resourceUrl: string
-    resourceName: string
-    resourceSize: number
-    status: 'READY'
-  }) => void
+  /** Appends a newly-uploaded resource into the builder's local state. */
+  onResourceAdded: (resource: LessonResourceItem) => void
+  /** Removes a resource (post-server delete) from the builder's local state. */
+  onResourceRemoved: (resourceId: string) => void
   /** Optimistically flip the video lesson to PROCESSING on upchunk success — the
    *  builder's polling effect will then tick until Mux flips it to READY. */
   onVideoUploadStarted: () => void
@@ -71,7 +72,8 @@ export function LessonEditorDialog({
   courseId,
   isUnsaved,
   onChange,
-  onResourceUploaded,
+  onResourceAdded,
+  onResourceRemoved,
   onVideoUploadStarted,
 }: LessonEditorDialogProps) {
   if (!lesson) return null
@@ -121,7 +123,8 @@ export function LessonEditorDialog({
               lesson={lesson}
               courseId={courseId}
               isUnsaved={isUnsaved}
-              onUploaded={onResourceUploaded}
+              onResourceAdded={onResourceAdded}
+              onResourceRemoved={onResourceRemoved}
             />
           ) : null}
         </div>
@@ -391,7 +394,7 @@ function Warning({
 }
 
 // =====================================================================
-// RESOURCE SECTION — file upload (2.13)
+// RESOURCE SECTION — file upload list (2.13 → multi-resource)
 // =====================================================================
 
 const RESOURCE_MAX_BYTES = 50 * 1024 * 1024 // mirrors server cap
@@ -402,12 +405,8 @@ interface ResourceSectionProps {
   lesson: LessonListItem
   courseId: string
   isUnsaved: boolean
-  onUploaded: (changes: {
-    resourceUrl: string
-    resourceName: string
-    resourceSize: number
-    status: 'READY'
-  }) => void
+  onResourceAdded: (resource: LessonResourceItem) => void
+  onResourceRemoved: (resourceId: string) => void
 }
 
 function formatFileSize(bytes: number | null): string {
@@ -421,23 +420,23 @@ function ResourceSection({
   lesson,
   courseId,
   isUnsaved,
-  onUploaded,
+  onResourceAdded,
+  onResourceRemoved,
 }: ResourceSectionProps) {
-  const [phase, setPhase] = useState<'idle' | 'uploading' | 'error'>('idle')
+  const [uploading, setUploading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const hasFile = Boolean(lesson.resourceUrl && lesson.resourceName)
+  const resources = lesson.resources
 
   const startUpload = useCallback(
     async (file: File) => {
       if (!file) return
       if (file.size > RESOURCE_MAX_BYTES) {
-        setPhase('error')
         setErrorMessage('File must be 50 MB or smaller')
         return
       }
-      setPhase('uploading')
+      setUploading(true)
       setErrorMessage(null)
 
       try {
@@ -447,7 +446,13 @@ function ResourceSection({
           size: file.size,
           mimeType: file.type || 'application/octet-stream',
         })
-        if (!prep.ok || !prep.signedUrl || !prep.token || !prep.path) {
+        if (
+          !prep.ok ||
+          !prep.signedUrl ||
+          !prep.token ||
+          !prep.path ||
+          !prep.resourceId
+        ) {
           throw new Error(prep.error ?? 'Could not start upload')
         }
 
@@ -461,45 +466,58 @@ function ResourceSection({
 
         const commit = await commitResourceUploadAction(courseId, {
           lessonId: lesson.id,
+          resourceId: prep.resourceId,
           path: prep.path,
           filename: file.name,
           size: file.size,
+          mimeType: file.type || 'application/octet-stream',
         })
-        if (!commit.ok) {
+        if (!commit.ok || !commit.resource) {
           throw new Error(commit.error ?? 'Could not save resource')
         }
 
-        onUploaded({
-          resourceUrl: prep.path,
-          resourceName: file.name,
-          resourceSize: file.size,
-          status: 'READY',
-        })
-        setPhase('idle')
-        toast.success('Resource uploaded')
+        onResourceAdded(commit.resource)
+        toast.success(`${file.name} uploaded`)
       } catch (err) {
         console.error(err)
-        setPhase('error')
         setErrorMessage(err instanceof Error ? err.message : 'Upload failed')
+      } finally {
+        setUploading(false)
       }
     },
-    [courseId, lesson.id, onUploaded],
+    [courseId, lesson.id, onResourceAdded],
   )
 
-  const onDownload = useCallback(async () => {
-    const result = await getResourceDownloadUrlAction(lesson.id)
+  const onDownload = useCallback(async (resourceId: string) => {
+    const result = await getResourceDownloadUrlAction(resourceId)
     if (!result.ok || !result.url) {
       toast.error(result.error ?? 'Could not generate download link')
       return
     }
     window.open(result.url, '_blank', 'noopener,noreferrer')
-  }, [lesson.id])
+  }, [])
+
+  const onRemove = useCallback(
+    async (resourceId: string) => {
+      const result = await removeLessonResourceAction(courseId, resourceId)
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not delete resource')
+        return
+      }
+      onResourceRemoved(resourceId)
+      toast.success('Resource removed')
+    },
+    [courseId, onResourceRemoved],
+  )
 
   return (
     <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         <FileText className="size-3.5" />
-        Resource
+        Resources
+        {resources.length > 0 ? (
+          <span className="text-muted-foreground/60">· {resources.length}</span>
+        ) : null}
       </div>
 
       {isUnsaved ? (
@@ -507,24 +525,47 @@ function ResourceSection({
           icon={AlertTriangle}
           text="Save your course changes first — uploads need a saved lesson id."
         />
-      ) : phase === 'uploading' ? (
-        <Warning
-          icon={Loader2}
-          iconClassName="animate-spin"
-          text="Uploading…"
-        />
-      ) : hasFile ? (
-        <FileDisplay
-          name={lesson.resourceName!}
-          size={lesson.resourceSize}
-          onDownload={onDownload}
-          onReplace={() => fileInputRef.current?.click()}
-        />
       ) : (
-        <EmptyFileState onPick={() => fileInputRef.current?.click()} />
+        <>
+          {resources.length === 0 ? (
+            <p className="py-2 text-center text-sm text-muted-foreground">
+              No files attached yet.
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {resources.map((r) => (
+                <li key={r.id}>
+                  <FileRow
+                    name={r.name}
+                    size={r.size}
+                    onDownload={() => void onDownload(r.id)}
+                    onRemove={() => void onRemove(r.id)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex flex-col items-center gap-1.5 pt-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="w-full border-dashed"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
+              {uploading ? 'Uploading…' : 'Add resource'}
+            </Button>
+            <p className="text-xs text-muted-foreground/70">
+              PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max.
+            </p>
+          </div>
+        </>
       )}
 
-      {phase === 'error' && errorMessage ? (
+      {errorMessage ? (
         <p className="text-xs text-destructive" role="alert">
           {errorMessage}
         </p>
@@ -545,31 +586,16 @@ function ResourceSection({
   )
 }
 
-function EmptyFileState({ onPick }: { onPick: () => void }) {
-  return (
-    <div className="flex flex-col items-center gap-2 py-4 text-center">
-      <p className="text-sm text-muted-foreground">No file uploaded yet.</p>
-      <Button type="button" size="sm" onClick={onPick}>
-        <Upload />
-        Upload file
-      </Button>
-      <p className="text-xs text-muted-foreground/70">
-        PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max.
-      </p>
-    </div>
-  )
-}
-
-function FileDisplay({
+function FileRow({
   name,
   size,
   onDownload,
-  onReplace,
+  onRemove,
 }: {
   name: string
   size: number | null
   onDownload: () => void
-  onReplace: () => void
+  onRemove: () => void
 }) {
   return (
     <div className="flex items-center gap-3 rounded-md border bg-background p-2.5">
@@ -591,10 +617,10 @@ function FileDisplay({
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-label="Replace file"
-        onClick={onReplace}
+        aria-label="Remove file"
+        onClick={onRemove}
       >
-        <RotateCcw />
+        <X />
       </Button>
     </div>
   )
