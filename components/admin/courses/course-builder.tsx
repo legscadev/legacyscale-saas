@@ -48,6 +48,7 @@ import type {
   LessonListItem,
 } from '@/lib/services/chapter-service'
 import { BuilderChapter } from './builder-chapter'
+import { LessonEditorDialog } from './lesson-editor-dialog'
 
 // Local row types extend the server-shaped items with an optional
 // tempId so new rows can be added client-side before the next Save
@@ -84,6 +85,12 @@ export function CourseBuilder({
     initialChapters,
   )
   const [pendingNav, setPendingNav] = useState<string | null>(null)
+  // { chapterId, lessonId } — null when no editor open. Stored as
+  // identifiers (not the lesson object itself) so the dialog always
+  // reads the freshest copy out of state.
+  const [editingRef, setEditingRef] = useState<
+    { chapterId: string; lessonId: string } | null
+  >(null)
 
   // dnd-kit sensors — pointer for mouse/touch, keyboard for a11y.
   const sensors = useSensors(
@@ -193,10 +200,12 @@ export function CourseBuilder({
             tempId,
             chapterId,
             title: LESSON_DEFAULT_TITLE[type],
+            description: null,
             type,
             status: 'DRAFT',
             orderIndex: c.lessons.length,
             durationSeconds: null,
+            muxPlaybackId: null,
           },
         ],
       }))
@@ -215,6 +224,45 @@ export function CourseBuilder({
     },
     [patchChapter],
   )
+
+  const patchLesson = useCallback(
+    (
+      chapterId: string,
+      lessonId: string,
+      changes: Partial<Pick<LocalLesson, 'title' | 'description'>>,
+    ) => {
+      patchChapter(chapterId, (c) => ({
+        ...c,
+        lessons: c.lessons.map((l) =>
+          l.id === lessonId ? { ...l, ...changes } : l,
+        ),
+      }))
+    },
+    [patchChapter],
+  )
+
+  const openLessonEditor = useCallback(
+    (chapterId: string, lesson: LocalLesson) => {
+      // Only VIDEO is wired (2.10/2.10b). Other types get a quick
+      // info toast — the editor for those lands in 2.13/2.14.
+      if (lesson.type !== 'VIDEO') {
+        toast.info(
+          `${lesson.type.toLowerCase()} lesson editor lands in a later ticket.`,
+        )
+        return
+      }
+      setEditingRef({ chapterId, lessonId: lesson.id })
+    },
+    [],
+  )
+
+  // Resolve the editing lesson freshly from chapters so the dialog
+  // always sees the latest title/description (e.g. as the user types).
+  const editingLesson = editingRef
+    ? (chapters
+        .find((c) => c.id === editingRef.chapterId)
+        ?.lessons.find((l) => l.id === editingRef.lessonId) ?? null)
+    : null
 
   const removeLesson = useCallback(
     (chapterId: string, lessonId: string) => {
@@ -418,6 +466,9 @@ export function CourseBuilder({
                       removeLesson(ch.id, lessonId)
                     }
                     onMoveLesson={(from, to) => moveLesson(ch.id, from, to)}
+                    onEditLesson={(lesson) =>
+                      openLessonEditor(ch.id, lesson as LocalLesson)
+                    }
                   />
                 ))}
               </SortableContext>
@@ -473,6 +524,19 @@ export function CourseBuilder({
           </Card>
         </aside>
       </div>
+
+      <LessonEditorDialog
+        open={editingRef !== null && editingLesson !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingRef(null)
+        }}
+        lesson={editingLesson}
+        isUnsaved={Boolean(editingLesson && (editingLesson as LocalLesson).tempId)}
+        onChange={(changes) => {
+          if (!editingRef) return
+          patchLesson(editingRef.chapterId, editingRef.lessonId, changes)
+        }}
+      />
 
       <AlertDialog
         open={pendingNav !== null}

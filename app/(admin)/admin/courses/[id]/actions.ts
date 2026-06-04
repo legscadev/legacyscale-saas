@@ -308,6 +308,7 @@ const syncLessonInputSchema = z
     id: z.uuid().optional(),
     tempId: z.string().min(1).optional(),
     title: z.string().min(1).max(200),
+    description: z.string().max(5000).optional().nullable(),
     type: lessonTypeSchema,
     orderIndex: z.number().int().min(0),
   })

@@ -7,10 +7,12 @@ const lessonRowSelect = {
   id: true,
   chapterId: true,
   title: true,
+  description: true,
   type: true,
   status: true,
   orderIndex: true,
   durationSeconds: true,
+  muxPlaybackId: true,
 } as const
 
 interface CreateLessonInput {

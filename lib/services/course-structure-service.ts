@@ -19,6 +19,7 @@ export interface SyncLessonInput {
   id?: string
   tempId?: string
   title: string
+  description?: string | null
   type: LessonType
   orderIndex: number
 }
@@ -137,7 +138,11 @@ async function syncCourseStructure(
         if (lesson.id) {
           await tx.lesson.update({
             where: { id: lesson.id, chapterId: realChapterId },
-            data: { title: lesson.title, orderIndex: lesson.orderIndex },
+            data: {
+              title: lesson.title,
+              description: lesson.description ?? null,
+              orderIndex: lesson.orderIndex,
+            },
           })
         } else {
           const created = await tx.lesson.create({
@@ -145,6 +150,7 @@ async function syncCourseStructure(
               chapterId: realChapterId,
               type: lesson.type,
               title: lesson.title,
+              description: lesson.description ?? null,
               orderIndex: lesson.orderIndex,
             } satisfies Prisma.LessonUncheckedCreateInput,
             select: { id: true },
