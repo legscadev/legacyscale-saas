@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ExternalLink, Layers, Plus, Sliders } from 'lucide-react'
+import {
+  ArrowLeft,
+  ExternalLink,
+  Layers,
+  Plus,
+  Sliders,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import type { CourseStatus } from '@prisma/client'
 
@@ -12,9 +18,25 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { EmptyState, StatusBadge } from '@/components/shared'
 import { cn } from '@/lib/utils'
 import { updateCourseAction } from '@/app/(admin)/admin/courses/actions'
+import {
+  createChapterAction,
+  deleteChapterAction,
+  reorderChaptersAction,
+  updateChapterAction,
+} from '@/app/(admin)/admin/courses/[id]/actions'
 import type { CourseDetail } from '@/lib/services/course-service'
 import type { ChapterListItem } from '@/lib/services/chapter-service'
 import { BuilderChapter } from './builder-chapter'
@@ -25,6 +47,8 @@ const STATUSES: { value: CourseStatus; label: string }[] = [
   { value: 'ARCHIVED', label: 'Archived' },
 ]
 
+const CHAPTER_RENAME_DEBOUNCE_MS = 500
+
 interface CourseBuilderProps {
   course: CourseDetail
   chapters: ChapterListItem[]
@@ -32,7 +56,16 @@ interface CourseBuilderProps {
 
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
 
-export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
+interface PendingDelete {
+  id: string
+  title: string
+  lessonsCount: number
+}
+
+export function CourseBuilder({
+  course,
+  chapters: initialChapters,
+}: CourseBuilderProps) {
   const router = useRouter()
 
   // Sidebar fields — local for snappy typing, debounced sync to server.
@@ -41,15 +74,30 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
   const [status, setStatus] = useState<CourseStatus>(course.status)
   const [save, setSave] = useState<SaveState>('idle')
 
+  const [chapters, setChapters] = useState<ChapterListItem[]>(initialChapters)
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
+  const [addingChapter, setAddingChapter] = useState(false)
+
   const lessonCount = chapters.reduce((n, c) => n + c.lessons.length, 0)
 
-  // Tracks the latest synced values so we don't re-fire on the initial
-  // hydration pass or after a successful save.
   const lastSyncedRef = useRef({
     title: course.title,
     description: course.description ?? '',
     status: course.status,
   })
+
+  // Per-chapter rename debounce timers, keyed by chapter id.
+  const renameTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  )
+
+  useEffect(() => {
+    const timers = renameTimers.current
+    return () => {
+      for (const t of timers.values()) clearTimeout(t)
+      timers.clear()
+    }
+  }, [])
 
   const flush = useCallback(
     async (
@@ -60,11 +108,8 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
       }>,
     ) => {
       const trimmedTitle = patch.title?.trim()
-      if (trimmedTitle !== undefined && trimmedTitle.length === 0) {
-        // Don't let the user save an empty title — but don't toast either;
-        // they're probably mid-edit. Just skip the round-trip.
-        return
-      }
+      if (trimmedTitle !== undefined && trimmedTitle.length === 0) return
+
       setSave('pending')
       const formData = new FormData()
       if (trimmedTitle !== undefined) formData.set('title', trimmedTitle)
@@ -91,7 +136,7 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
     [course.id, router],
   )
 
-  // Debounced auto-save for title + description (text inputs).
+  // Debounced auto-save for title + description.
   useEffect(() => {
     const trimmedTitle = title.trim()
     const trimmedDescription = description.trim()
@@ -103,10 +148,7 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
       return
     }
     const timer = setTimeout(() => {
-      const patch: Partial<{
-        title: string
-        description: string
-      }> = {}
+      const patch: Partial<{ title: string; description: string }> = {}
       if (trimmedTitle !== last.title) patch.title = trimmedTitle
       if (trimmedDescription !== (last.description ?? '')) {
         patch.description = trimmedDescription
@@ -121,7 +163,6 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
     return () => clearTimeout(timer)
   }, [title, description, flush])
 
-  // Status changes save immediately — they're discrete clicks, not typing.
   const onStatusChange = useCallback(
     (next: CourseStatus) => {
       if (next === status) return
@@ -130,6 +171,130 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
       void flush({ status: next })
     },
     [status, flush],
+  )
+
+  // -------------------------------------------------------
+  // Chapter operations
+  // -------------------------------------------------------
+
+  const addChapter = useCallback(async () => {
+    if (addingChapter) return
+    setAddingChapter(true)
+    try {
+      const result = await createChapterAction(course.id)
+      if (!result.ok || !result.chapter) {
+        toast.error(result.error ?? 'Could not add chapter')
+        return
+      }
+      setChapters((prev) => [...prev, result.chapter!])
+      router.refresh()
+    } catch (err) {
+      console.error(err)
+      toast.error('Network error — please try again')
+    } finally {
+      setAddingChapter(false)
+    }
+  }, [addingChapter, course.id, router])
+
+  const renameChapter = useCallback(
+    (id: string, nextTitle: string) => {
+      // Optimistic local update — keeps the input snappy.
+      setChapters((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: nextTitle } : c)),
+      )
+
+      // Skip empty titles; the schema requires min(1) and we don't want
+      // to wipe a chapter title every time the user holds backspace.
+      const trimmed = nextTitle.trim()
+      const timers = renameTimers.current
+      const existing = timers.get(id)
+      if (existing) clearTimeout(existing)
+      if (trimmed.length === 0) return
+
+      timers.set(
+        id,
+        setTimeout(async () => {
+          timers.delete(id)
+          const result = await updateChapterAction(id, { title: trimmed })
+          if (!result.ok) {
+            toast.error(result.error ?? 'Could not save chapter title')
+            return
+          }
+        }, CHAPTER_RENAME_DEBOUNCE_MS),
+      )
+    },
+    [],
+  )
+
+  const performDelete = useCallback(
+    async (id: string) => {
+      const original = chapters
+      setChapters((prev) => prev.filter((c) => c.id !== id))
+      try {
+        const result = await deleteChapterAction(id, course.id)
+        if (!result.ok) {
+          setChapters(original)
+          toast.error(result.error ?? 'Could not delete chapter')
+          return
+        }
+        toast.success('Chapter deleted')
+        router.refresh()
+      } catch (err) {
+        console.error(err)
+        setChapters(original)
+        toast.error('Network error — please try again')
+      }
+    },
+    [chapters, course.id, router],
+  )
+
+  const requestDelete = useCallback(
+    (chapter: ChapterListItem) => {
+      // Empty chapters delete immediately to keep the inline flow snappy;
+      // chapters with lessons get a confirmation since cascade removes
+      // them along with any uploaded media.
+      if (chapter.lessons.length === 0) {
+        void performDelete(chapter.id)
+        return
+      }
+      setPendingDelete({
+        id: chapter.id,
+        title: chapter.title,
+        lessonsCount: chapter.lessons.length,
+      })
+    },
+    [performDelete],
+  )
+
+  const moveChapter = useCallback(
+    async (id: string, dir: -1 | 1) => {
+      const index = chapters.findIndex((c) => c.id === id)
+      if (index === -1) return
+      const target = index + dir
+      if (target < 0 || target >= chapters.length) return
+
+      const original = chapters
+      const next = [...chapters]
+      const [moved] = next.splice(index, 1)
+      next.splice(target, 0, moved!)
+      setChapters(next)
+
+      try {
+        const result = await reorderChaptersAction(
+          course.id,
+          next.map((c) => c.id),
+        )
+        if (!result.ok) {
+          setChapters(original)
+          toast.error(result.error ?? 'Could not reorder chapters')
+        }
+      } catch (err) {
+        console.error(err)
+        setChapters(original)
+        toast.error('Network error — please try again')
+      }
+    },
+    [chapters, course.id],
   )
 
   return (
@@ -172,9 +337,9 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
               title="Start building your course"
               description="Add a chapter, then fill it with video, quiz, and resource lessons."
             >
-              <Button disabled title="Available in the next ticket">
+              <Button onClick={addChapter} disabled={addingChapter}>
                 <Plus />
-                Add chapter
+                {addingChapter ? 'Adding…' : 'Add chapter'}
               </Button>
             </EmptyState>
           ) : (
@@ -184,7 +349,9 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
                 chapter={ch}
                 index={i}
                 total={chapters.length}
-                disabled
+                onRename={(t) => renameChapter(ch.id, t)}
+                onRemove={() => requestDelete(ch)}
+                onMove={(dir) => moveChapter(ch.id, dir)}
               />
             ))
           )}
@@ -193,11 +360,11 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
             <Button
               variant="outline"
               className="w-full border-dashed"
-              disabled
-              title="Available in the next ticket"
+              onClick={addChapter}
+              disabled={addingChapter}
             >
               <Plus />
-              Add chapter
+              {addingChapter ? 'Adding…' : 'Add chapter'}
             </Button>
           ) : null}
         </div>
@@ -268,6 +435,42 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
           </Card>
         </aside>
       </div>
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {pendingDelete?.title || 'this chapter'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the chapter and its{' '}
+              {pendingDelete?.lessonsCount}{' '}
+              {pendingDelete?.lessonsCount === 1 ? 'lesson' : 'lessons'}.
+              Video files will remain on Mux until manually removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                if (!pendingDelete) return
+                const id = pendingDelete.id
+                setPendingDelete(null)
+                void performDelete(id)
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete chapter
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -275,9 +478,7 @@ export function CourseBuilder({ course, chapters }: CourseBuilderProps) {
 function SaveIndicator({ state }: { state: SaveState }) {
   if (state === 'idle') return null
   if (state === 'pending') {
-    return (
-      <span className="text-xs text-muted-foreground">Saving…</span>
-    )
+    return <span className="text-xs text-muted-foreground">Saving…</span>
   }
   if (state === 'saved') {
     return <span className="text-xs text-success">Saved</span>

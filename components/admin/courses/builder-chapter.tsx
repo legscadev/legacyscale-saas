@@ -1,6 +1,13 @@
 'use client'
 
-import { ChevronDown, ChevronUp, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -33,11 +40,13 @@ export interface BuilderChapterProps {
   chapter: ChapterListItem
   index: number
   total: number
-  /** Disabled while operations land in the next ticket. */
-  disabled?: boolean
+  // Chapter ops — control is enabled iff the corresponding handler is
+  // supplied. Lets the parent gate features by simply not passing the
+  // handler instead of threading a `disabled` flag.
   onRename?: (title: string) => void
   onRemove?: () => void
   onMove?: (dir: -1 | 1) => void
+  // Lesson ops — same pattern; missing handler → disabled control.
   onAddLesson?: (type: LessonType) => void
   onRenameLesson?: (lessonId: string, title: string) => void
   onRemoveLesson?: (lessonId: string) => void
@@ -49,7 +58,6 @@ export function BuilderChapter({
   chapter,
   index,
   total,
-  disabled = false,
   onRename,
   onRemove,
   onMove,
@@ -60,7 +68,6 @@ export function BuilderChapter({
   onEditLesson,
 }: BuilderChapterProps) {
   const lessons = chapter.lessons
-  const noop = disabled || !onRename
 
   return (
     <Card className="gap-0 p-0">
@@ -68,7 +75,7 @@ export function BuilderChapter({
         <div className="flex flex-col">
           <button
             type="button"
-            disabled={index === 0 || disabled}
+            disabled={index === 0 || !onMove}
             onClick={() => onMove?.(-1)}
             aria-label="Move chapter up"
             className={reorderBtn}
@@ -77,7 +84,7 @@ export function BuilderChapter({
           </button>
           <button
             type="button"
-            disabled={index === total - 1 || disabled}
+            disabled={index === total - 1 || !onMove}
             onClick={() => onMove?.(1)}
             aria-label="Move chapter down"
             className={reorderBtn}
@@ -92,7 +99,7 @@ export function BuilderChapter({
           value={chapter.title}
           onChange={(e) => onRename?.(e.target.value)}
           placeholder="Chapter title"
-          disabled={noop}
+          disabled={!onRename}
           className="h-7 flex-1 border-0 bg-transparent px-1 font-medium focus-visible:ring-1"
         />
         <span className="hidden text-xs text-muted-foreground sm:inline">
@@ -100,7 +107,7 @@ export function BuilderChapter({
         </span>
         <DropdownMenu>
           <DropdownMenuTrigger
-            disabled={disabled}
+            disabled={!onAddLesson}
             render={
               <button
                 type="button"
@@ -117,7 +124,6 @@ export function BuilderChapter({
               return (
                 <DropdownMenuItem
                   key={t.type}
-                  disabled={!onAddLesson}
                   onClick={() => onAddLesson?.(t.type)}
                 >
                   <Icon />
@@ -132,7 +138,7 @@ export function BuilderChapter({
           variant="ghost"
           size="icon-sm"
           aria-label="Delete chapter"
-          disabled={disabled}
+          disabled={!onRemove}
           onClick={() => onRemove?.()}
         >
           <Trash2 />
@@ -162,14 +168,14 @@ export function BuilderChapter({
                     onRenameLesson?.(lesson.id, e.target.value)
                   }
                   placeholder="Lesson title"
-                  disabled={noop}
+                  disabled={!onRenameLesson}
                   className="h-7 flex-1 border-0 bg-transparent px-1 text-sm focus-visible:ring-1"
                 />
                 <StatusBadge status={lesson.status} />
                 <div className="flex flex-col">
                   <button
                     type="button"
-                    disabled={i === 0 || disabled}
+                    disabled={i === 0 || !onMoveLesson}
                     onClick={() => onMoveLesson?.(i, i - 1)}
                     aria-label="Move lesson up"
                     className={reorderBtn}
@@ -178,7 +184,7 @@ export function BuilderChapter({
                   </button>
                   <button
                     type="button"
-                    disabled={i === lessons.length - 1 || disabled}
+                    disabled={i === lessons.length - 1 || !onMoveLesson}
                     onClick={() => onMoveLesson?.(i, i + 1)}
                     aria-label="Move lesson down"
                     className={reorderBtn}
@@ -191,7 +197,7 @@ export function BuilderChapter({
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Edit lesson"
-                  disabled={disabled}
+                  disabled={!onEditLesson}
                   onClick={() => onEditLesson?.(lesson)}
                 >
                   <Pencil />
@@ -201,7 +207,7 @@ export function BuilderChapter({
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Delete lesson"
-                  disabled={disabled}
+                  disabled={!onRemoveLesson}
                   onClick={() => onRemoveLesson?.(lesson.id)}
                 >
                   <Trash2 />
