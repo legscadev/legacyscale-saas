@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -8,10 +8,11 @@ import {
   ExternalLink,
   Layers,
   Plus,
-  Sliders,
+  Save,
+  Undo2,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { CourseStatus, LessonType } from '@prisma/client'
+import type { LessonType } from '@prisma/client'
 import {
   DndContext,
   KeyboardSensor,
@@ -29,9 +30,6 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,41 +41,33 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { EmptyState, StatusBadge } from '@/components/shared'
-import { cn } from '@/lib/utils'
-import { updateCourseAction } from '@/app/(admin)/admin/courses/actions'
-import {
-  createChapterAction,
-  createLessonAction,
-  deleteChapterAction,
-  deleteLessonAction,
-  reorderChaptersAction,
-  reorderLessonsAction,
-  updateChapterAction,
-  updateLessonAction,
-} from '@/app/(admin)/admin/courses/[id]/actions'
+import { saveCourseStructureAction } from '@/app/(admin)/admin/courses/[id]/actions'
 import type { CourseDetail } from '@/lib/services/course-service'
-import type { ChapterListItem } from '@/lib/services/chapter-service'
+import type {
+  ChapterListItem,
+  LessonListItem,
+} from '@/lib/services/chapter-service'
 import { BuilderChapter } from './builder-chapter'
 
-const STATUSES: { value: CourseStatus; label: string }[] = [
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'PUBLISHED', label: 'Published' },
-  { value: 'ARCHIVED', label: 'Archived' },
-]
+// Local row types extend the server-shaped items with an optional
+// tempId so new rows can be added client-side before the next Save
+// round-trip. After save, tempId is cleared and id holds the real
+// DB uuid.
+type LocalLesson = LessonListItem & { tempId?: string }
+type LocalChapter = Omit<ChapterListItem, 'lessons'> & {
+  tempId?: string
+  lessons: LocalLesson[]
+}
 
-const RENAME_DEBOUNCE_MS = 500
+const LESSON_DEFAULT_TITLE: Record<LessonType, string> = {
+  VIDEO: 'New video lesson',
+  QUIZ: 'New quiz lesson',
+  RESOURCE: 'New resource lesson',
+}
 
 interface CourseBuilderProps {
   course: CourseDetail
   chapters: ChapterListItem[]
-}
-
-type SaveState = 'idle' | 'pending' | 'saved' | 'error'
-
-interface PendingDelete {
-  id: string
-  title: string
-  lessonsCount: number
 }
 
 export function CourseBuilder({
@@ -86,244 +76,50 @@ export function CourseBuilder({
 }: CourseBuilderProps) {
   const router = useRouter()
 
-  // Sidebar fields — local for snappy typing, debounced sync to server.
-  const [title, setTitle] = useState(course.title)
-  const [description, setDescription] = useState(course.description ?? '')
-  const [status, setStatus] = useState<CourseStatus>(course.status)
-  const [save, setSave] = useState<SaveState>('idle')
+  const [chapters, setChapters] = useState<LocalChapter[]>(initialChapters)
+  const [saving, setSaving] = useState(false)
+  // Tracks the snapshot we last successfully synced to the server.
+  // Used both for the Discard button and for the isDirty check.
+  const [savedSnapshot, setSavedSnapshot] = useState<LocalChapter[]>(
+    initialChapters,
+  )
+  const [pendingNav, setPendingNav] = useState<string | null>(null)
 
-  const [chapters, setChapters] = useState<ChapterListItem[]>(initialChapters)
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
-  const [addingChapter, setAddingChapter] = useState(false)
+  // dnd-kit sensors — pointer for mouse/touch, keyboard for a11y.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
 
   const lessonCount = chapters.reduce((n, c) => n + c.lessons.length, 0)
 
-  const lastSyncedRef = useRef({
-    title: course.title,
-    description: course.description ?? '',
-    status: course.status,
-  })
-
-  // Per-row rename debounce timers, keyed by chapter or lesson id.
-  // Chapter and lesson ids never collide (both UUIDs), so a single
-  // map is enough.
-  const renameTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
+  // isDirty by JSON comparison of the normalized shape — captures
+  // adds, deletes, renames, type changes, and reorders without needing
+  // a per-op counter.
+  const isDirty = useMemo(
+    () => serialize(chapters) !== serialize(savedSnapshot),
+    [chapters, savedSnapshot],
   )
 
+  // Browser-level navigation guard. Soft client-side nav goes through
+  // pendingNav + AlertDialog (see link click handlers below).
   useEffect(() => {
-    const timers = renameTimers.current
-    return () => {
-      for (const t of timers.values()) clearTimeout(t)
-      timers.clear()
+    if (!isDirty) return
+    function beforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault()
     }
-  }, [])
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => window.removeEventListener('beforeunload', beforeUnload)
+  }, [isDirty])
 
-  const flush = useCallback(
-    async (
-      patch: Partial<{
-        title: string
-        description: string
-        status: CourseStatus
-      }>,
-    ) => {
-      const trimmedTitle = patch.title?.trim()
-      if (trimmedTitle !== undefined && trimmedTitle.length === 0) return
+  // ===========================================================
+  // Local mutations — no network calls, all changes batch until Save.
+  // ===========================================================
 
-      setSave('pending')
-      const formData = new FormData()
-      if (trimmedTitle !== undefined) formData.set('title', trimmedTitle)
-      if (patch.description !== undefined) {
-        formData.set('description', patch.description.trim())
-      }
-      if (patch.status !== undefined) formData.set('status', patch.status)
-
-      try {
-        const result = await updateCourseAction(course.id, formData)
-        if (!result.ok) {
-          setSave('error')
-          toast.error(result.error ?? 'Could not save changes')
-          return
-        }
-        setSave('saved')
-        router.refresh()
-      } catch (err) {
-        console.error(err)
-        setSave('error')
-        toast.error('Network error — please try again')
-      }
-    },
-    [course.id, router],
-  )
-
-  // Debounced auto-save for title + description.
-  useEffect(() => {
-    const trimmedTitle = title.trim()
-    const trimmedDescription = description.trim()
-    const last = lastSyncedRef.current
-    if (
-      trimmedTitle === last.title &&
-      trimmedDescription === (last.description ?? '')
-    ) {
-      return
-    }
-    const timer = setTimeout(() => {
-      const patch: Partial<{ title: string; description: string }> = {}
-      if (trimmedTitle !== last.title) patch.title = trimmedTitle
-      if (trimmedDescription !== (last.description ?? '')) {
-        patch.description = trimmedDescription
-      }
-      lastSyncedRef.current = {
-        ...last,
-        title: trimmedTitle || last.title,
-        description: trimmedDescription,
-      }
-      void flush(patch)
-    }, 600)
-    return () => clearTimeout(timer)
-  }, [title, description, flush])
-
-  const onStatusChange = useCallback(
-    (next: CourseStatus) => {
-      if (next === status) return
-      setStatus(next)
-      lastSyncedRef.current = { ...lastSyncedRef.current, status: next }
-      void flush({ status: next })
-    },
-    [status, flush],
-  )
-
-  // -------------------------------------------------------
-  // Chapter operations
-  // -------------------------------------------------------
-
-  const addChapter = useCallback(async () => {
-    if (addingChapter) return
-    setAddingChapter(true)
-    try {
-      const result = await createChapterAction(course.id)
-      if (!result.ok || !result.chapter) {
-        toast.error(result.error ?? 'Could not add chapter')
-        return
-      }
-      setChapters((prev) => [...prev, result.chapter!])
-      router.refresh()
-    } catch (err) {
-      console.error(err)
-      toast.error('Network error — please try again')
-    } finally {
-      setAddingChapter(false)
-    }
-  }, [addingChapter, course.id, router])
-
-  const renameChapter = useCallback(
-    (id: string, nextTitle: string) => {
-      // Optimistic local update — keeps the input snappy.
-      setChapters((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, title: nextTitle } : c)),
-      )
-
-      // Skip empty titles; the schema requires min(1) and we don't want
-      // to wipe a chapter title every time the user holds backspace.
-      const trimmed = nextTitle.trim()
-      const timers = renameTimers.current
-      const existing = timers.get(id)
-      if (existing) clearTimeout(existing)
-      if (trimmed.length === 0) return
-
-      timers.set(
-        id,
-        setTimeout(async () => {
-          timers.delete(id)
-          const result = await updateChapterAction(id, { title: trimmed })
-          if (!result.ok) {
-            toast.error(result.error ?? 'Could not save chapter title')
-            return
-          }
-        }, RENAME_DEBOUNCE_MS),
-      )
-    },
-    [],
-  )
-
-  const performDelete = useCallback(
-    async (id: string) => {
-      const original = chapters
-      setChapters((prev) => prev.filter((c) => c.id !== id))
-      try {
-        const result = await deleteChapterAction(id, course.id)
-        if (!result.ok) {
-          setChapters(original)
-          toast.error(result.error ?? 'Could not delete chapter')
-          return
-        }
-        toast.success('Chapter deleted')
-        router.refresh()
-      } catch (err) {
-        console.error(err)
-        setChapters(original)
-        toast.error('Network error — please try again')
-      }
-    },
-    [chapters, course.id, router],
-  )
-
-  const requestDelete = useCallback(
-    (chapter: ChapterListItem) => {
-      // Empty chapters delete immediately to keep the inline flow snappy;
-      // chapters with lessons get a confirmation since cascade removes
-      // them along with any uploaded media.
-      if (chapter.lessons.length === 0) {
-        void performDelete(chapter.id)
-        return
-      }
-      setPendingDelete({
-        id: chapter.id,
-        title: chapter.title,
-        lessonsCount: chapter.lessons.length,
-      })
-    },
-    [performDelete],
-  )
-
-  const moveChapter = useCallback(
-    async (id: string, dir: -1 | 1) => {
-      const index = chapters.findIndex((c) => c.id === id)
-      if (index === -1) return
-      const target = index + dir
-      if (target < 0 || target >= chapters.length) return
-
-      const original = chapters
-      const next = [...chapters]
-      const [moved] = next.splice(index, 1)
-      next.splice(target, 0, moved!)
-      setChapters(next)
-
-      try {
-        const result = await reorderChaptersAction(
-          course.id,
-          next.map((c) => c.id),
-        )
-        if (!result.ok) {
-          setChapters(original)
-          toast.error(result.error ?? 'Could not reorder chapters')
-        }
-      } catch (err) {
-        console.error(err)
-        setChapters(original)
-        toast.error('Network error — please try again')
-      }
-    },
-    [chapters, course.id],
-  )
-
-  // -------------------------------------------------------
-  // Lesson operations
-  // -------------------------------------------------------
-
-  // Mutates a single chapter's lessons in-place via the setter.
   const patchChapter = useCallback(
-    (chapterId: string, fn: (chapter: ChapterListItem) => ChapterListItem) => {
+    (chapterId: string, fn: (chapter: LocalChapter) => LocalChapter) => {
       setChapters((prev) =>
         prev.map((c) => (c.id === chapterId ? fn(c) : c)),
       )
@@ -331,18 +127,81 @@ export function CourseBuilder({
     [],
   )
 
-  const addLesson = useCallback(
-    async (chapterId: string, type: LessonType) => {
-      const result = await createLessonAction(course.id, chapterId, type)
-      if (!result.ok || !result.lesson) {
-        toast.error(result.error ?? 'Could not add lesson')
-        return
-      }
-      const created = result.lesson
-      patchChapter(chapterId, (c) => ({ ...c, lessons: [...c.lessons, created] }))
-      router.refresh()
+  const addChapter = useCallback(() => {
+    const tempId = `temp-ch-${crypto.randomUUID()}`
+    const now = new Date()
+    setChapters((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        tempId,
+        courseId: course.id,
+        title: 'New chapter',
+        orderIndex: prev.length,
+        createdAt: now,
+        updatedAt: now,
+        lessons: [],
+      },
+    ])
+  }, [course.id])
+
+  const renameChapter = useCallback(
+    (id: string, nextTitle: string) => {
+      patchChapter(id, (c) => ({ ...c, title: nextTitle }))
     },
-    [course.id, patchChapter, router],
+    [patchChapter],
+  )
+
+  const removeChapter = useCallback((id: string) => {
+    setChapters((prev) => prev.filter((c) => c.id !== id))
+  }, [])
+
+  const moveChapter = useCallback((id: string, dir: -1 | 1) => {
+    setChapters((prev) => {
+      const index = prev.findIndex((c) => c.id === id)
+      if (index === -1) return prev
+      const target = index + dir
+      if (target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      const [moved] = next.splice(index, 1)
+      next.splice(target, 0, moved!)
+      return next
+    })
+  }, [])
+
+  const moveChapterTo = useCallback((id: string, to: number) => {
+    setChapters((prev) => {
+      const from = prev.findIndex((c) => c.id === id)
+      if (from === -1 || from === to) return prev
+      if (to < 0 || to >= prev.length) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved!)
+      return next
+    })
+  }, [])
+
+  const addLesson = useCallback(
+    (chapterId: string, type: LessonType) => {
+      const tempId = `temp-l-${crypto.randomUUID()}`
+      patchChapter(chapterId, (c) => ({
+        ...c,
+        lessons: [
+          ...c.lessons,
+          {
+            id: tempId,
+            tempId,
+            chapterId,
+            title: LESSON_DEFAULT_TITLE[type],
+            type,
+            status: 'DRAFT',
+            orderIndex: c.lessons.length,
+            durationSeconds: null,
+          },
+        ],
+      }))
+    },
+    [patchChapter],
   )
 
   const renameLesson = useCallback(
@@ -353,150 +212,34 @@ export function CourseBuilder({
           l.id === lessonId ? { ...l, title: nextTitle } : l,
         ),
       }))
-
-      const trimmed = nextTitle.trim()
-      const timers = renameTimers.current
-      const existing = timers.get(lessonId)
-      if (existing) clearTimeout(existing)
-      if (trimmed.length === 0) return
-
-      timers.set(
-        lessonId,
-        setTimeout(async () => {
-          timers.delete(lessonId)
-          const result = await updateLessonAction(course.id, lessonId, {
-            title: trimmed,
-          })
-          if (!result.ok) {
-            toast.error(result.error ?? 'Could not save lesson title')
-          }
-        }, RENAME_DEBOUNCE_MS),
-      )
     },
-    [course.id, patchChapter],
+    [patchChapter],
   )
 
-  const deleteLesson = useCallback(
-    async (chapterId: string, lessonId: string) => {
-      let removed: ChapterListItem['lessons'][number] | undefined
-      patchChapter(chapterId, (c) => {
-        removed = c.lessons.find((l) => l.id === lessonId)
-        return { ...c, lessons: c.lessons.filter((l) => l.id !== lessonId) }
-      })
-      try {
-        const result = await deleteLessonAction(course.id, lessonId)
-        if (!result.ok) {
-          // Rollback — re-insert at the original position based on the
-          // stored orderIndex. New chapter state may have shifted since
-          // the optimistic remove, so we sort after insert to stay
-          // consistent.
-          if (removed) {
-            patchChapter(chapterId, (c) => ({
-              ...c,
-              lessons: [...c.lessons, removed!].sort(
-                (a, b) => a.orderIndex - b.orderIndex,
-              ),
-            }))
-          }
-          toast.error(result.error ?? 'Could not delete lesson')
-          return
-        }
-        router.refresh()
-      } catch (err) {
-        console.error(err)
-        if (removed) {
-          patchChapter(chapterId, (c) => ({
-            ...c,
-            lessons: [...c.lessons, removed!].sort(
-              (a, b) => a.orderIndex - b.orderIndex,
-            ),
-          }))
-        }
-        toast.error('Network error — please try again')
-      }
+  const removeLesson = useCallback(
+    (chapterId: string, lessonId: string) => {
+      patchChapter(chapterId, (c) => ({
+        ...c,
+        lessons: c.lessons.filter((l) => l.id !== lessonId),
+      }))
     },
-    [course.id, patchChapter, router],
-  )
-
-  // dnd-kit sensors — pointer for mouse/touch, keyboard for a11y.
-  // 5px activation distance prevents the drag handle from stealing
-  // clicks meant for the inline title input next to it.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    [patchChapter],
   )
 
   const moveLesson = useCallback(
-    async (chapterId: string, from: number, to: number) => {
+    (chapterId: string, from: number, to: number) => {
       if (from === to) return
-      const chapter = chapters.find((c) => c.id === chapterId)
-      if (!chapter) return
-      if (to < 0 || to >= chapter.lessons.length) return
-
-      const originalLessons = chapter.lessons
-      const next = [...originalLessons]
-      const [moved] = next.splice(from, 1)
-      next.splice(to, 0, moved!)
-      patchChapter(chapterId, (c) => ({ ...c, lessons: next }))
-
-      try {
-        const result = await reorderLessonsAction(
-          course.id,
-          chapterId,
-          next.map((l) => l.id),
-        )
-        if (!result.ok) {
-          patchChapter(chapterId, (c) => ({ ...c, lessons: originalLessons }))
-          toast.error(result.error ?? 'Could not reorder lessons')
-        }
-      } catch (err) {
-        console.error(err)
-        patchChapter(chapterId, (c) => ({ ...c, lessons: originalLessons }))
-        toast.error('Network error — please try again')
-      }
+      patchChapter(chapterId, (c) => {
+        if (to < 0 || to >= c.lessons.length) return c
+        const next = [...c.lessons]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved!)
+        return { ...c, lessons: next }
+      })
     },
-    [chapters, course.id, patchChapter],
+    [patchChapter],
   )
 
-  // Multi-step chapter move helper used by drag-and-drop. moveChapter
-  // (above) is for ±1 arrow clicks; drag drops can span any distance.
-  const moveChapterTo = useCallback(
-    async (id: string, to: number) => {
-      const from = chapters.findIndex((c) => c.id === id)
-      if (from === -1 || from === to) return
-      if (to < 0 || to >= chapters.length) return
-
-      const original = chapters
-      const next = [...chapters]
-      const [moved] = next.splice(from, 1)
-      next.splice(to, 0, moved!)
-      setChapters(next)
-
-      try {
-        const result = await reorderChaptersAction(
-          course.id,
-          next.map((c) => c.id),
-        )
-        if (!result.ok) {
-          setChapters(original)
-          toast.error(result.error ?? 'Could not reorder chapters')
-        }
-      } catch (err) {
-        console.error(err)
-        setChapters(original)
-        toast.error('Network error — please try again')
-      }
-    },
-    [chapters, course.id],
-  )
-
-  // Single onDragEnd dispatcher for both chapters and lessons. Each
-  // useSortable item tags itself with { type: 'chapter' | 'lesson' }
-  // (and chapterId for lessons) via the `data` prop so we can route
-  // here. Cross-chapter lesson drops are intentionally ignored —
-  // moving a lesson between chapters isn't supported by the service.
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
@@ -508,7 +251,7 @@ export function CourseBuilder({
       if (activeType === 'chapter' && overType === 'chapter') {
         const to = chapters.findIndex((c) => c.id === over.id)
         if (to === -1) return
-        void moveChapterTo(String(active.id), to)
+        moveChapterTo(String(active.id), to)
         return
       }
 
@@ -523,40 +266,114 @@ export function CourseBuilder({
         const from = chapter.lessons.findIndex((l) => l.id === active.id)
         const to = chapter.lessons.findIndex((l) => l.id === over.id)
         if (from === -1 || to === -1) return
-        void moveLesson(fromChapter, from, to)
+        moveLesson(fromChapter, from, to)
       }
     },
     [chapters, moveChapterTo, moveLesson],
   )
 
+  // ===========================================================
+  // Save / Discard
+  // ===========================================================
+
+  const onSave = useCallback(async () => {
+    setSaving(true)
+    try {
+      const payload = toSyncPayload(chapters)
+      const result = await saveCourseStructureAction(course.id, payload)
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not save changes')
+        return
+      }
+      const next = applyMappings(chapters, result.mappings)
+      setChapters(next)
+      setSavedSnapshot(next)
+      toast.success('Changes saved')
+      router.refresh()
+    } catch (err) {
+      console.error(err)
+      toast.error('Network error — please try again')
+    } finally {
+      setSaving(false)
+    }
+  }, [chapters, course.id, router])
+
+  const onDiscard = useCallback(() => {
+    setChapters(savedSnapshot)
+  }, [savedSnapshot])
+
+  // ===========================================================
+  // Navigation guard for internal links
+  // ===========================================================
+  //
+  // pendingNav doubles as the dialog open state and the target href —
+  // when non-null, the dialog renders and the buttons know where to
+  // navigate on confirm.
+
+  const guardNav = useCallback(
+    (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!isDirty) return
+      e.preventDefault()
+      setPendingNav(href)
+    },
+    [isDirty],
+  )
+
+  const proceedAfterDiscard = useCallback(() => {
+    const href = pendingNav
+    setPendingNav(null)
+    if (href) router.push(href)
+  }, [pendingNav, router])
+
+  const saveAndProceed = useCallback(async () => {
+    const href = pendingNav
+    await onSave()
+    setPendingNav(null)
+    if (href) router.push(href)
+  }, [onSave, pendingNav, router])
+
+  // ===========================================================
+  // Render
+  // ===========================================================
+
   return (
     <div className="space-y-6">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="-ml-2"
-        render={<Link href="/admin/courses" />}
+      <Link
+        href="/admin/courses"
+        onClick={guardNav('/admin/courses')}
+        className="inline-flex items-center gap-1.5 -ml-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <ArrowLeft />
+        <ArrowLeft className="size-4" />
         All courses
-      </Button>
+      </Link>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="truncate text-2xl font-semibold tracking-tight">
-            {title.trim() || 'Untitled course'}
+            {course.title}
           </h1>
-          <StatusBadge status={status} />
+          <StatusBadge status={course.status} />
         </div>
         <div className="flex items-center gap-2">
-          <SaveIndicator state={save} />
+          {isDirty ? (
+            <span className="text-xs text-warning">Unsaved changes</span>
+          ) : null}
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            render={<Link href={`/admin/courses/${course.id}/edit`} />}
+            disabled={!isDirty || saving}
+            onClick={onDiscard}
           >
-            <Sliders />
-            More settings
+            <Undo2 />
+            Discard
+          </Button>
+          <Button
+            size="sm"
+            disabled={!isDirty || saving}
+            onClick={onSave}
+          >
+            <Save />
+            {saving ? 'Saving…' : 'Save changes'}
           </Button>
         </div>
       </div>
@@ -569,9 +386,9 @@ export function CourseBuilder({
               title="Start building your course"
               description="Add a chapter, then fill it with video, quiz, and resource lessons."
             >
-              <Button onClick={addChapter} disabled={addingChapter}>
+              <Button onClick={addChapter}>
                 <Plus />
-                {addingChapter ? 'Adding…' : 'Add chapter'}
+                Add chapter
               </Button>
             </EmptyState>
           ) : (
@@ -591,14 +408,14 @@ export function CourseBuilder({
                     index={i}
                     total={chapters.length}
                     onRename={(t) => renameChapter(ch.id, t)}
-                    onRemove={() => requestDelete(ch)}
+                    onRemove={() => removeChapter(ch.id)}
                     onMove={(dir) => moveChapter(ch.id, dir)}
                     onAddLesson={(type) => addLesson(ch.id, type)}
                     onRenameLesson={(lessonId, title) =>
                       renameLesson(ch.id, lessonId, title)
                     }
                     onRemoveLesson={(lessonId) =>
-                      deleteLesson(ch.id, lessonId)
+                      removeLesson(ch.id, lessonId)
                     }
                     onMoveLesson={(from, to) => moveLesson(ch.id, from, to)}
                   />
@@ -612,10 +429,9 @@ export function CourseBuilder({
               variant="outline"
               className="w-full border-dashed"
               onClick={addChapter}
-              disabled={addingChapter}
             >
               <Plus />
-              {addingChapter ? 'Adding…' : 'Add chapter'}
+              Add chapter
             </Button>
           ) : null}
         </div>
@@ -624,47 +440,17 @@ export function CourseBuilder({
           <Card className="gap-4 p-5">
             <p className="text-sm font-semibold">Course details</p>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="course-title">Title</Label>
-              <Input
-                id="course-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. 7-Figure Agency Program"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="course-description">Description</Label>
-              <Textarea
-                id="course-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What will members learn?"
-                className="min-h-24"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Status</Label>
-              <div className="flex gap-1.5">
-                {STATUSES.map((s) => (
-                  <button
-                    key={s.value}
-                    type="button"
-                    onClick={() => onStatusChange(s.value)}
-                    className={cn(
-                      'flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-                      s.value === status
-                        ? 'bg-primary/10 text-primary'
-                        : 'border text-muted-foreground hover:bg-muted',
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <DetailRow label="Title">{course.title}</DetailRow>
+            <DetailRow label="Description">
+              {course.description ?? (
+                <span className="text-muted-foreground/70 italic">
+                  No description yet.
+                </span>
+              )}
+            </DetailRow>
+            <DetailRow label="Status">
+              <StatusBadge status={course.status} />
+            </DetailRow>
 
             <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
               <span>
@@ -678,46 +464,50 @@ export function CourseBuilder({
 
             <Link
               href={`/admin/courses/${course.id}/edit`}
+              onClick={guardNav(`/admin/courses/${course.id}/edit`)}
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             >
               <ExternalLink className="size-3" />
-              Thumbnail, access duration, delete
+              Edit title, description, status, thumbnail
             </Link>
           </Card>
         </aside>
       </div>
 
       <AlertDialog
-        open={pendingDelete !== null}
+        open={pendingNav !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingDelete(null)
+          if (!open) setPendingNav(null)
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {pendingDelete?.title || 'this chapter'}?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Save your changes?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the chapter and its{' '}
-              {pendingDelete?.lessonsCount}{' '}
-              {pendingDelete?.lessonsCount === 1 ? 'lesson' : 'lessons'}.
-              Video files will remain on Mux until manually removed.
+              You have unsaved edits to chapters or lessons. Save before
+              leaving, or discard them and continue.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Stay on page</AlertDialogCancel>
+            <Button
+              variant="ghost"
+              onClick={(e) => {
+                e.preventDefault()
+                proceedAfterDiscard()
+              }}
+              disabled={saving}
+            >
+              Discard and leave
+            </Button>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
-                if (!pendingDelete) return
-                const id = pendingDelete.id
-                setPendingDelete(null)
-                void performDelete(id)
+                void saveAndProceed()
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={saving}
             >
-              Delete chapter
+              {saving ? 'Saving…' : 'Save and leave'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -726,13 +516,98 @@ export function CourseBuilder({
   )
 }
 
-function SaveIndicator({ state }: { state: SaveState }) {
-  if (state === 'idle') return null
-  if (state === 'pending') {
-    return <span className="text-xs text-muted-foreground">Saving…</span>
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+        {label}
+      </p>
+      <div className="text-sm">{children}</div>
+    </div>
+  )
+}
+
+// ===========================================================
+// Serialization helpers
+// ===========================================================
+
+function serialize(chapters: LocalChapter[]): string {
+  return JSON.stringify(
+    chapters.map((c, ci) => ({
+      id: c.tempId ? null : c.id,
+      tempId: c.tempId ?? null,
+      title: c.title,
+      orderIndex: ci,
+      lessons: c.lessons.map((l, li) => ({
+        id: l.tempId ? null : l.id,
+        tempId: l.tempId ?? null,
+        title: l.title,
+        type: l.type,
+        orderIndex: li,
+      })),
+    })),
+  )
+}
+
+function toSyncPayload(chapters: LocalChapter[]) {
+  return {
+    chapters: chapters.map((c, ci) => ({
+      id: c.tempId ? undefined : c.id,
+      tempId: c.tempId,
+      title: c.title.trim() || 'Untitled chapter',
+      orderIndex: ci,
+      lessons: c.lessons.map((l, li) => ({
+        id: l.tempId ? undefined : l.id,
+        tempId: l.tempId,
+        title: l.title.trim() || 'Untitled lesson',
+        type: l.type,
+        orderIndex: li,
+      })),
+    })),
   }
-  if (state === 'saved') {
-    return <span className="text-xs text-success">Saved</span>
-  }
-  return <span className="text-xs text-destructive">Failed to save</span>
+}
+
+function applyMappings(
+  chapters: LocalChapter[],
+  mappings:
+    | {
+        chapterMappings: Array<{ tempId: string; realId: string }>
+        lessonMappings: Array<{ tempId: string; realId: string }>
+      }
+    | undefined,
+): LocalChapter[] {
+  if (!mappings) return chapters
+  const chapterMap = new Map(
+    mappings.chapterMappings.map((m) => [m.tempId, m.realId]),
+  )
+  const lessonMap = new Map(
+    mappings.lessonMappings.map((m) => [m.tempId, m.realId]),
+  )
+  return chapters.map((c) => {
+    const realChapterId = c.tempId
+      ? (chapterMap.get(c.tempId) ?? c.id)
+      : c.id
+    return {
+      ...c,
+      id: realChapterId,
+      tempId: undefined,
+      lessons: c.lessons.map((l) => {
+        const realLessonId = l.tempId
+          ? (lessonMap.get(l.tempId) ?? l.id)
+          : l.id
+        return {
+          ...l,
+          id: realLessonId,
+          chapterId: realChapterId,
+          tempId: undefined,
+        }
+      }),
+    }
+  })
 }

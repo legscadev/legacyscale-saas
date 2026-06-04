@@ -12,6 +12,10 @@ import {
 } from '@/lib/services/chapter-service'
 import { lessonService } from '@/lib/services/lesson-service'
 import {
+  courseStructureService,
+  type SyncResult,
+} from '@/lib/services/course-structure-service'
+import {
   createChapterSchema,
   createLessonSchema,
   lessonTypeSchema,
@@ -287,5 +291,70 @@ export async function reorderLessonsAction(
   } catch (err) {
     console.error('Lesson reorder failed:', err)
     return { ok: false, error: 'Could not reorder lessons' }
+  }
+}
+
+// ===========================================================
+// BULK SAVE  (manual save from the builder)
+// ===========================================================
+//
+// Replaces the per-op chapter/lesson actions above for the builder
+// surface — those still exist so other entry points (e.g. scripted
+// imports later) can use them, but the builder now batches all edits
+// behind a single Save click.
+
+const syncLessonInputSchema = z
+  .object({
+    id: z.uuid().optional(),
+    tempId: z.string().min(1).optional(),
+    title: z.string().min(1).max(200),
+    type: lessonTypeSchema,
+    orderIndex: z.number().int().min(0),
+  })
+  .refine((d) => Boolean(d.id) || Boolean(d.tempId), {
+    message: 'Each lesson must carry id or tempId',
+  })
+
+const syncChapterInputSchema = z
+  .object({
+    id: z.uuid().optional(),
+    tempId: z.string().min(1).optional(),
+    title: z.string().min(1).max(200),
+    orderIndex: z.number().int().min(0),
+    lessons: z.array(syncLessonInputSchema),
+  })
+  .refine((d) => Boolean(d.id) || Boolean(d.tempId), {
+    message: 'Each chapter must carry id or tempId',
+  })
+
+const syncStructureSchema = z.object({
+  chapters: z.array(syncChapterInputSchema),
+})
+
+export interface SaveStructureResult extends BaseResult {
+  mappings?: SyncResult
+}
+
+export async function saveCourseStructureAction(
+  courseId: string,
+  payload: { chapters: unknown },
+): Promise<SaveStructureResult> {
+  await requireAdmin()
+
+  const parsed = syncStructureSchema.safeParse(payload)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  try {
+    const mappings = await courseStructureService.sync(
+      courseId,
+      parsed.data.chapters,
+    )
+    revalidatePath(`/admin/courses/${courseId}`)
+    return { ok: true, mappings }
+  } catch (err) {
+    console.error('Course structure save failed:', err)
+    return { ok: false, error: 'Could not save changes' }
   }
 }
