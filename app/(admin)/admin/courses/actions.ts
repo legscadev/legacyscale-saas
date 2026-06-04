@@ -182,18 +182,21 @@ export async function updateCourseAction(
 ): Promise<UpdateCourseResult> {
   await requireAdmin()
 
-  const accessDaysRaw = formData.get('accessDays')
-  const accessDays =
-    accessDaysRaw === null || accessDaysRaw === ''
-      ? null
-      : Number(accessDaysRaw)
+  // Only forward fields the form actually sent. Partial saves (e.g.
+  // the builder sidebar's debounced description-only update) must not
+  // get tripped up by validation on a field they aren't touching.
+  const input: Record<string, unknown> = {}
+  if (formData.has('title')) input.title = formData.get('title')
+  if (formData.has('description')) {
+    input.description = (formData.get('description') as string) || undefined
+  }
+  if (formData.has('status')) input.status = formData.get('status')
+  if (formData.has('accessDays')) {
+    const raw = formData.get('accessDays')
+    input.accessDays = raw === null || raw === '' ? null : Number(raw)
+  }
 
-  const parsed = updateCourseSchema.safeParse({
-    title: formData.get('title') ?? '',
-    description: (formData.get('description') as string) || undefined,
-    status: (formData.get('status') as string) || undefined,
-    accessDays,
-  })
+  const parsed = updateCourseSchema.safeParse(input)
 
   if (!parsed.success) {
     const fieldErrors: Record<string, string[]> = {}
