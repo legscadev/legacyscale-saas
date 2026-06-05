@@ -9,9 +9,9 @@ import { cn } from '@/lib/utils'
 import { GlowButton } from '../shared/glow-button'
 
 const NAV_LINKS = [
-  { label: 'Inside', href: '#inside' },
-  { label: 'Founder', href: '#founder' },
   { label: 'Features', href: '#features' },
+  { label: 'How it works', href: '#how-it-works' },
+  { label: 'FAQ', href: '#faq' },
 ]
 
 export function MarketingNav() {

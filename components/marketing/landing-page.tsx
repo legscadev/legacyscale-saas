@@ -1,7 +1,8 @@
 import { MarketingNav } from './nav/marketing-nav'
 import { HeroSection } from './hero/hero-section'
-import { SocialProofSection } from './social-proof/social-proof-section'
-import { ServicesSection } from './services/services-section'
+import { FeaturesSection } from './features/features-section'
+import { HowItWorksSection } from './how-it-works/how-it-works-section'
+import { FaqSection } from './faq/faq-section'
 import { FinalCtaSection } from './cta/final-cta-section'
 import { MarketingFooter } from './footer/marketing-footer'
 
@@ -11,8 +12,9 @@ export function LandingPage() {
       <MarketingNav />
       <main className="relative">
         <HeroSection />
-        <SocialProofSection />
-        <ServicesSection />
+        <FeaturesSection />
+        <HowItWorksSection />
+        <FaqSection />
         <FinalCtaSection />
       </main>
       <MarketingFooter />

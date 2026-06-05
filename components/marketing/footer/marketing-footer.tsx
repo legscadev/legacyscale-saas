@@ -3,23 +3,22 @@ import Link from 'next/link'
 
 const FOOTER_LINKS = [
   {
-    title: 'Platform',
+    title: 'Product',
     links: [
-      { label: 'Course library', href: '#features' },
-      { label: 'Live trainings', href: '#features' },
-      { label: 'Private community', href: '#features' },
+      { label: 'Features', href: '#features' },
+      { label: 'How it works', href: '#how-it-works' },
+      { label: 'FAQ', href: '#faq' },
     ],
   },
   {
     title: 'Company',
     links: [
-      { label: 'Founder', href: '#founder' },
-      { label: 'Contact', href: '#' },
+      { label: 'Contact', href: 'mailto:hello@kondense.ai' },
     ],
   },
   {
     title: 'Access',
-    links: [{ label: 'Login', href: '#' }],
+    links: [{ label: 'Login', href: '/login' }],
   },
 ]
 
@@ -50,9 +49,9 @@ export function MarketingFooter() {
               <span>Kondense</span>
             </Link>
             <p className="mt-4 max-w-sm text-sm text-white/50">
-              The members platform for marketing fulfillment arbitrage. Built
-              and operated by Keanu Vasquez — every part of the Kondense
-              program, behind one login.
+              The members platform for creators, coaches, and course sellers.
+              Course library, video hosting, and member portal — all behind
+              your branded login.
             </p>
           </div>
 

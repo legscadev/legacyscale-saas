@@ -29,9 +29,9 @@ export function HeroSection() {
         >
           <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-black/40 px-3.5 py-1.5 font-mono text-[10px] font-medium tracking-[0.25em] text-white/80 uppercase backdrop-blur-xl">
             <Sparkles className="h-3 w-3 text-[#ff8a8a]" />
-            Marketing Fulfillment Arbitrage
+            Course Platform
             <span className="ml-1 h-1 w-1 rounded-full bg-white/30" />
-            <span className="text-white/55">Members Platform</span>
+            <span className="text-white/55">For Creators &amp; Coaches</span>
           </span>
         </motion.div>
 
@@ -42,8 +42,8 @@ export function HeroSection() {
           className="mt-8 max-w-5xl text-5xl font-semibold tracking-tight text-white sm:text-7xl lg:text-[88px]"
           style={{ letterSpacing: '-0.045em', lineHeight: 1.02 }}
         >
-          Build a 7-figure agency.{' '}
-          <GradientText variant="brand">Without the guesswork.</GradientText>
+          Ship your course platform{' '}
+          <GradientText variant="brand">in a weekend.</GradientText>
         </motion.h1>
 
         <motion.p
@@ -53,9 +53,10 @@ export function HeroSection() {
           className="mt-7 max-w-2xl text-base text-white/70 sm:text-lg"
           style={{ textWrap: 'balance' }}
         >
-          The members platform built around the program Keanu Vasquez actually
-          runs — courses, live trainings, mentorship, and the private room, all
-          behind one login.
+          Kondense is the modern members platform for creators, coaches, and
+          course sellers. Course library, video hosting, member portal, and
+          announcements — all behind your branded login. No glue code, no
+          plugins, no upsells.
         </motion.p>
 
         <motion.div
@@ -65,7 +66,7 @@ export function HeroSection() {
           className="mt-10 flex flex-col items-center gap-3 sm:flex-row"
         >
           <GlowButton href="/login" magnetic={false}>
-            Login
+            Get started
             <ArrowRight className="h-4 w-4" />
           </GlowButton>
           <GlowButton
@@ -74,7 +75,7 @@ export function HeroSection() {
             magnetic={false}
             className="hover:scale-100 active:scale-100"
           >
-            What's inside
+            See features
           </GlowButton>
         </motion.div>
 
