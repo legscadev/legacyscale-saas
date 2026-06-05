@@ -1,7 +1,41 @@
 import { headers } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { verifyMuxSignature } from '@/lib/mux'
+import { deleteAsset as deleteMuxAsset, verifyMuxSignature } from '@/lib/mux'
+
+/**
+ * Best-effort delete of a previous Mux asset when a lesson is having
+ * its video replaced. Webhook handlers are the only place we learn
+ * the new asset id, so this is also the only place we can detect a
+ * replace (incoming id differs from what's already on the row).
+ *
+ * Defense in depth: applied to both `video.upload.asset_created`
+ * (fires first, when the new asset is registered with Mux) and
+ * `video.asset.ready` (fires when processing completes). In the
+ * normal Mux event sequence the cleanup runs once at asset_created;
+ * the asset.ready branch is a safety net if the asset_created event
+ * was missed.
+ */
+async function cleanupReplacedAsset(
+  lessonId: string,
+  newAssetId: string,
+): Promise<void> {
+  const existing = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    select: { muxAssetId: true },
+  })
+  const oldAssetId = existing?.muxAssetId
+  if (!oldAssetId || oldAssetId === newAssetId) return
+
+  try {
+    await deleteMuxAsset(oldAssetId)
+  } catch (err) {
+    console.error(
+      `Mux delete of replaced asset ${oldAssetId} on lesson ${lessonId} failed:`,
+      err,
+    )
+  }
+}
 
 // Public webhook endpoint — self-authenticates via Mux's signed header.
 // In dev, MUX_WEBHOOK_SECRET may be unset; we skip verification then so
@@ -78,6 +112,8 @@ async function handleMuxEvent(event: MuxEvent): Promise<void> {
       const playbackIds = data.playback_ids as MuxPlaybackId[] | undefined
       const playbackId = playbackIds?.[0]?.id
 
+      if (assetId) await cleanupReplacedAsset(lessonId, assetId)
+
       await prisma.lesson.update({
         where: { id: lessonId },
         data: {
@@ -94,6 +130,9 @@ async function handleMuxEvent(event: MuxEvent): Promise<void> {
       const lessonId = readString(data, 'passthrough')
       if (!lessonId) return
       const assetId = readString(data, 'asset_id')
+      if (!assetId) return
+
+      await cleanupReplacedAsset(lessonId, assetId)
 
       await prisma.lesson.update({
         where: { id: lessonId },
