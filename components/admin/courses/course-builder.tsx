@@ -806,7 +806,7 @@ export function CourseBuilder({
           if (!open) setPendingNav(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="overflow-hidden sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>Save your changes?</AlertDialogTitle>
             <AlertDialogDescription>
