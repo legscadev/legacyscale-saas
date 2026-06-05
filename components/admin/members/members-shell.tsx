@@ -69,24 +69,14 @@ export function MembersShell({
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false
-      console.log('[members] mount — skip first fetch')
       return
     }
     const controller = new AbortController()
     setIsLoading(true)
-    console.log('[members] effect run; query, refetchKey=', refetchKey)
     void (async () => {
       try {
         const next = await fetchMembers(query)
-        if (controller.signal.aborted) {
-          console.log('[members] response ignored (aborted)')
-          return
-        }
-        console.log('[members] applying data', {
-          active: next.counts.active,
-          suspended: next.counts.suspended,
-          firstActive: next.items[0]?.isActive,
-        })
+        if (controller.signal.aborted) return
         setData(next)
       } catch (err) {
         if (controller.signal.aborted) return
@@ -145,10 +135,7 @@ export function MembersShell({
     [sorting, patch],
   )
 
-  const refetch = useCallback(() => {
-    console.log('[members] refetch() called')
-    setRefetchKey((k) => k + 1)
-  }, [])
+  const refetch = useCallback(() => setRefetchKey((k) => k + 1), [])
 
   const columns = useMemo(
     () => getMemberColumns(currentUserId, refetch),
