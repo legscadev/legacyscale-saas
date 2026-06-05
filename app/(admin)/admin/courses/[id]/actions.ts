@@ -305,9 +305,12 @@ export async function reorderLessonsAction(
 // imports later) can use them, but the builder now batches all edits
 // behind a single Save click.
 
+// IDs are accepted as any non-empty string so seeded/imported rows
+// with slug-like identifiers (e.g. "sample-chapter-1") sync the same
+// way as UUID-generated rows. The DB does the actual lookup.
 const syncLessonInputSchema = z
   .object({
-    id: z.uuid().optional(),
+    id: z.string().min(1).optional(),
     tempId: z.string().min(1).optional(),
     title: z.string().min(1).max(200),
     description: z.string().max(5000).optional().nullable(),
@@ -320,7 +323,7 @@ const syncLessonInputSchema = z
 
 const syncChapterInputSchema = z
   .object({
-    id: z.uuid().optional(),
+    id: z.string().min(1).optional(),
     tempId: z.string().min(1).optional(),
     title: z.string().min(1).max(200),
     orderIndex: z.number().int().min(0),
@@ -346,7 +349,14 @@ export async function saveCourseStructureAction(
 
   const parsed = syncStructureSchema.safeParse(payload)
   if (!parsed.success) {
-    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+    // Log the issue so it shows up in Vercel logs — the toast on the
+    // client only sees this generic message, not the field paths.
+    console.error('Course structure validation failed:', parsed.error.issues)
+    return {
+      ok: false,
+      error: 'Some chapter or lesson data looks invalid',
+      fieldErrors: fieldErrorsFrom(parsed.error),
+    }
   }
 
   try {
