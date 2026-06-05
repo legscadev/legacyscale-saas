@@ -181,6 +181,16 @@ function VideoSection({
     }
   }, [lesson.id])
 
+  // When the builder's polling effect flips the lesson to READY
+  // server-side, drop our local "uploaded" phase so the render
+  // falls through to the MuxPlayer preview — no refresh needed.
+  useEffect(() => {
+    if (lesson.status === 'READY' && lesson.muxPlaybackId) {
+      setPhase('idle')
+      setPercent(null)
+    }
+  }, [lesson.status, lesson.muxPlaybackId])
+
   const startUpload = useCallback(
     async (file: File) => {
       if (!file) return
@@ -267,12 +277,6 @@ function VideoSection({
 
       {phase === 'uploading' ? (
         <UploadProgress percent={percent ?? 0} onCancel={cancelUpload} />
-      ) : phase === 'uploaded' ? (
-        <Warning
-          icon={Loader2}
-          iconClassName="animate-spin"
-          text="Upload finished. Mux is encoding — close this dialog and refresh in a minute to preview."
-        />
       ) : hasReadyAsset ? (
         <ReadyState
           playbackId={lesson.muxPlaybackId!}
@@ -280,11 +284,11 @@ function VideoSection({
           durationSeconds={lesson.durationSeconds}
           onReplace={() => fileInputRef.current?.click()}
         />
-      ) : isProcessing ? (
+      ) : phase === 'uploaded' || isProcessing ? (
         <Warning
           icon={Loader2}
           iconClassName="animate-spin"
-          text="Video is processing on Mux. Close this dialog and refresh in a minute."
+          text="Encoding on Mux — preview will appear here in a moment."
         />
       ) : (
         <EmptyState onPick={() => fileInputRef.current?.click()} />
