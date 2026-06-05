@@ -168,6 +168,7 @@ export function CoursesShell({ initialData }: CoursesShellProps) {
           </EmptyState>
         ) : (
           <DataTable
+            key={refetchKey}
             columns={columns}
             data={data.items}
             page={data.page}
