@@ -19,7 +19,7 @@ function getResend(): Resend {
   return _resend
 }
 
-const FROM_NAME = 'Legacy Scale'
+const FROM_NAME = 'Kondense'
 
 type EmailPurpose = 'welcome' | 'security' | 'notifications' | 'billing'
 
@@ -89,8 +89,8 @@ export async function sendWelcomeEmail(
     to,
     purpose: 'welcome',
     subject: isInvite
-      ? "Welcome to Legacy Scale — Let's Get Started"
-      : 'Welcome to Legacy Scale!',
+      ? "Welcome to Kondense — Let's Get Started"
+      : 'Welcome to Kondense!',
     react: WelcomeEmail({
       name,
       ctaUrl: options.ctaUrl,
@@ -107,7 +107,7 @@ export async function sendPasswordResetEmail(
   return sendEmail({
     to,
     purpose: 'security',
-    subject: 'Reset Your Password — Legacy Scale',
+    subject: 'Reset Your Password — Kondense',
     react: PasswordResetEmail({ name, resetUrl }),
   })
 }

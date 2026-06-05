@@ -31,17 +31,17 @@ export function WelcomeEmail({
   return (
     <Html>
       <Head />
-      <Preview>{`Welcome to Legacy Scale, ${name}!`}</Preview>
+      <Preview>{`Welcome to Kondense, ${name}!`}</Preview>
       <Body style={main}>
         <Container style={container}>
           <Section style={logoSection}>
-            <Text style={logoText}>Legacy Scale</Text>
+            <Text style={logoText}>Kondense</Text>
           </Section>
 
           <Section style={content}>
             <Heading style={heading}>Welcome, {name}!</Heading>
             <Text style={paragraph}>
-              You&apos;re now part of the Legacy Scale community. We&apos;re
+              You&apos;re now part of the Kondense community. We&apos;re
               excited to have you on board and can&apos;t wait to see you
               succeed.
             </Text>
@@ -82,12 +82,12 @@ export function WelcomeEmail({
           <Section style={footer}>
             <Text style={footerText}>
               Questions? Reply to this email or contact us at{' '}
-              <Link href="mailto:support@legacyscale.co" style={link}>
-                support@legacyscale.co
+              <Link href="mailto:support@kondense.ai" style={link}>
+                support@kondense.ai
               </Link>
             </Text>
             <Text style={footerText}>
-              © {new Date().getFullYear()} Legacy Scale. All rights reserved.
+              © {new Date().getFullYear()} Kondense. All rights reserved.
             </Text>
           </Section>
         </Container>

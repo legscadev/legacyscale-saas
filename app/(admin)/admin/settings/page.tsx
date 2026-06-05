@@ -23,14 +23,14 @@ export default function AdminSettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="platformName">Platform Name</Label>
-            <Input id="platformName" defaultValue="Legacy Scale" />
+            <Input id="platformName" defaultValue="Kondense" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="supportEmail">Support Email</Label>
             <Input
               id="supportEmail"
               type="email"
-              defaultValue="support@legacyscale.co"
+              defaultValue="support@kondense.ai"
             />
           </div>
           <Button>Save Changes</Button>

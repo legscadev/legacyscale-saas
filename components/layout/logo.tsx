@@ -10,8 +10,8 @@ export function Logo({ className, showText = true }: LogoProps) {
   return (
     <div className={cn('flex items-center gap-2', className)}>
       <Image
-        src="/legacy-scale-logo.png"
-        alt="Legacy Scale"
+        src="/kondense-logo.png"
+        alt="Kondense"
         width={32}
         height={32}
         priority
@@ -19,7 +19,7 @@ export function Logo({ className, showText = true }: LogoProps) {
       />
       {showText && (
         <span className="text-lg font-semibold tracking-tight">
-          Legacy Scale
+          Kondense
         </span>
       )}
     </div>

@@ -23,11 +23,11 @@ export function PasswordResetEmail({
   return (
     <Html>
       <Head />
-      <Preview>Reset your Legacy Scale password</Preview>
+      <Preview>Reset your Kondense password</Preview>
       <Body style={main}>
         <Container style={container}>
           <Section style={logoSection}>
-            <Text style={logoText}>Legacy Scale</Text>
+            <Text style={logoText}>Kondense</Text>
           </Section>
 
           <Section style={content}>
@@ -64,12 +64,12 @@ export function PasswordResetEmail({
           <Section style={footer}>
             <Text style={footerText}>
               Questions? Contact us at{' '}
-              <Link href="mailto:support@legacyscale.co" style={link}>
-                support@legacyscale.co
+              <Link href="mailto:support@kondense.ai" style={link}>
+                support@kondense.ai
               </Link>
             </Text>
             <Text style={footerText}>
-              © {new Date().getFullYear()} Legacy Scale. All rights reserved.
+              © {new Date().getFullYear()} Kondense. All rights reserved.
             </Text>
           </Section>
         </Container>

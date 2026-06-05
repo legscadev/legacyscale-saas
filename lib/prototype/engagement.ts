@@ -33,7 +33,7 @@ export const announcements: Announcement[] = [
   },
   {
     id: "a-003",
-    title: "Welcome to Legacy Scale!",
+    title: "Welcome to Kondense!",
     body:
       "We're excited to have you in the community. Start with the 7-Figure " +
       "Agency Program to begin your journey.",

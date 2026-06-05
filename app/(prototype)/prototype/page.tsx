@@ -44,7 +44,7 @@ export default function PrototypeHome() {
             High-fidelity clickable prototype
           </span>
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            The Legacy Scale platform,
+            The Kondense platform,
             <br />
             visualized before we build.
           </h1>

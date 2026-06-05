@@ -53,10 +53,10 @@ export default function AdminSettings() {
         <TabsContent value="platform" className="pt-4">
           <Card className="max-w-xl gap-4 p-5">
             <Labeled label="Platform name">
-              <Input defaultValue="Legacy Scale" />
+              <Input defaultValue="Kondense" />
             </Labeled>
             <Labeled label="Support email">
-              <Input defaultValue="support@legacyscale.co" type="email" />
+              <Input defaultValue="support@kondense.ai" type="email" />
             </Labeled>
             <Labeled label="Default course access">
               <Input defaultValue="Lifetime" />
@@ -80,7 +80,7 @@ export default function AdminSettings() {
               <div className="flex gap-2">
                 <Input
                   readOnly
-                  defaultValue="https://api.legacyscale.co/webhooks/ghl/9f3a…"
+                  defaultValue="https://api.kondense.ai/webhooks/ghl/9f3a…"
                 />
                 <Button variant="outline" size="icon" aria-label="Copy URL">
                   <Copy />

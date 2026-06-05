@@ -80,7 +80,7 @@ export default function LoginPage() {
       <p className="border-t pt-6 text-center text-xs text-muted-foreground">
         Access is granted after enrollment. Need help getting in?{' '}
         <Link
-          href="mailto:support@legacyscale.co"
+          href="mailto:support@kondense.ai"
           className="font-medium text-primary hover:underline"
         >
           Contact support

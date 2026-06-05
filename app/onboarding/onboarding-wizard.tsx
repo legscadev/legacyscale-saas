@@ -198,7 +198,7 @@ function BrandPanel({ currentStep }: { currentStep: number }) {
           <span className="text-sm font-bold tracking-tight">LS</span>
         </div>
         <span className="text-sm font-semibold tracking-tight">
-          Legacy Scale
+          Kondense
         </span>
       </div>
 
@@ -268,7 +268,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
       </div>
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Welcome to Legacy Scale
+          Welcome to Kondense
         </h1>
         <p className="text-sm text-muted-foreground">
           You&apos;re moments away from the playbooks, community, and systems

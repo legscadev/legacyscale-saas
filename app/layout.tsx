@@ -11,7 +11,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Legacy Scale",
+  title: "Kondense",
   description: "Agency Education Platform",
 }
 

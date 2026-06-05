@@ -38,8 +38,8 @@ export function MarketingNav() {
         >
           <span className="relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-white/[0.08] bg-[#15080a]">
             <Image
-              src="/legacy-scale-logo.png"
-              alt="Legacy Scale"
+              src="/kondense-logo.png"
+              alt="Kondense"
               width={72}
               height={72}
               priority
@@ -51,7 +51,7 @@ export function MarketingNav() {
             className="hidden text-sm font-semibold tracking-tight text-white sm:inline"
             style={{ letterSpacing: '-0.01em' }}
           >
-            Legacy Scale
+            Kondense
           </span>
         </Link>
 

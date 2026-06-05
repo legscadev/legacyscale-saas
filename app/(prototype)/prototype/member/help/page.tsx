@@ -92,7 +92,7 @@ export default function MemberHelp() {
             coming in Phase 2.
           </p>
         </div>
-        <Button render={<Link href="mailto:support@legacyscale.co" />}>
+        <Button render={<Link href="mailto:support@kondense.ai" />}>
           <Mail />
           Contact support
         </Button>

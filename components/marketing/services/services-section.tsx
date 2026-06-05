@@ -90,7 +90,7 @@ const CARDS = [
     badge: 'Library',
     title: 'Course library',
     description:
-      'Every course, chapter, and lesson — organized by curriculum, navigable in seconds. The full Legacy Scale program in one place.',
+      'Every course, chapter, and lesson — organized by curriculum, navigable in seconds. The full Kondense program in one place.',
     icon: <BookOpen className="h-5 w-5" />,
     accent: 'rgba(255,80,80,0.4)',
     visual: <LibraryVisual />,
@@ -169,7 +169,7 @@ export function ServicesSection() {
               <span className="text-white/40">One login.</span>
             </>
           }
-          description="Every tool a member touches — built around how the Legacy Scale program actually runs."
+          description="Every tool a member touches — built around how the Kondense program actually runs."
         />
 
         <ScrollReveal delay={0.1} className="mt-16">

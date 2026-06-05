@@ -112,7 +112,7 @@ export default function DesignSystemPage() {
 
       <PageHeader
         title="Design System"
-        description="Tokens, components, and patterns powering Legacy Scale."
+        description="Tokens, components, and patterns powering Kondense."
       />
 
       <BrandRampSection />

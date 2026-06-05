@@ -122,7 +122,7 @@ export default async function CourseDetail({
               <div>
                 <p className="text-sm font-medium">Keanu Vasquez</p>
                 <p className="text-xs text-muted-foreground">
-                  Founder, Legacy Scale
+                  Founder, Kondense
                 </p>
               </div>
             </div>

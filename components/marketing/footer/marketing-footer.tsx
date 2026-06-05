@@ -39,19 +39,19 @@ export function MarketingFooter() {
             >
               <span className="relative inline-flex h-10 w-10 items-center justify-center">
                 <Image
-                  src="/legacy-scale-logo.png"
-                  alt="Legacy Scale"
+                  src="/kondense-logo.png"
+                  alt="Kondense"
                   width={80}
                   height={80}
                   className="relative z-10 h-full w-full object-contain"
                 />
                 <span className="absolute inset-0 -z-10 rounded-full bg-[#ff4a4a] opacity-20 blur-lg transition-opacity duration-300 group-hover:opacity-50" />
               </span>
-              <span>Legacy Scale</span>
+              <span>Kondense</span>
             </Link>
             <p className="mt-4 max-w-sm text-sm text-white/50">
               The members platform for marketing fulfillment arbitrage. Built
-              and operated by Keanu Vasquez — every part of the Legacy Scale
+              and operated by Keanu Vasquez — every part of the Kondense
               program, behind one login.
             </p>
           </div>
@@ -78,7 +78,7 @@ export function MarketingFooter() {
         </div>
 
         <div className="mt-16 flex flex-col items-start justify-between gap-4 border-t border-white/[0.06] pt-8 text-xs text-white/40 sm:flex-row sm:items-center">
-          <div>© {new Date().getFullYear()} Legacy Scale. All rights reserved.</div>
+          <div>© {new Date().getFullYear()} Kondense. All rights reserved.</div>
           <div className="flex items-center gap-6">
             <Link href="#" className="transition-colors hover:text-white/70">
               Privacy

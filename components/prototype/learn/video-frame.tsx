@@ -36,7 +36,7 @@ export function VideoFrame({
 
       {/* Brand watermark */}
       <Image
-        src="/legacy-scale-logo.png"
+        src="/kondense-logo.png"
         alt=""
         width={28}
         height={28}

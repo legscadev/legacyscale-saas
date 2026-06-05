@@ -11,7 +11,7 @@ export function SocialProofSection() {
         <SectionHeading
           eyebrow="Inside the platform"
           title={<>Built around how the program runs.</>}
-          description="Every part of the Legacy Scale system has a tool inside the platform. One mentor. One login. No upsells."
+          description="Every part of the Kondense system has a tool inside the platform. One mentor. One login. No upsells."
         />
 
         <div className="mt-16">

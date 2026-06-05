@@ -34,7 +34,7 @@ export default async function AccessRevokedPage() {
           <p className="text-sm text-muted-foreground">
             If you think this is a mistake,{' '}
             <a
-              href="mailto:support@legacyscale.co"
+              href="mailto:support@kondense.ai"
               className="font-medium text-primary hover:underline"
             >
               contact support

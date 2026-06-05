@@ -28,7 +28,7 @@ export function AnnouncementEmail({
       <Body style={main}>
         <Container style={container}>
           <Section style={logoSection}>
-            <Text style={logoText}>Legacy Scale</Text>
+            <Text style={logoText}>Kondense</Text>
           </Section>
 
           <Section style={content}>
@@ -45,11 +45,11 @@ export function AnnouncementEmail({
 
           <Section style={footer}>
             <Text style={footerText}>
-              You received this email because you&apos;re a Legacy Scale
+              You received this email because you&apos;re a Kondense
               member.
             </Text>
             <Text style={footerText}>
-              © {new Date().getFullYear()} Legacy Scale. All rights reserved.
+              © {new Date().getFullYear()} Kondense. All rights reserved.
             </Text>
           </Section>
         </Container>

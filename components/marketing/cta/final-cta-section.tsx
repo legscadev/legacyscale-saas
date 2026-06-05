@@ -43,7 +43,7 @@ export function FinalCtaSection() {
                 style={{ textWrap: 'balance' }}
               >
                 Courses, live trainings, mentorship, and the room. Your
-                Legacy Scale access — exactly where you left it.
+                Kondense access — exactly where you left it.
               </p>
             </ScrollReveal>
             <ScrollReveal delay={0.24}>

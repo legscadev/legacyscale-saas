@@ -10,7 +10,7 @@ interface BrandMarkProps {
   className?: string
 }
 
-/** Legacy Scale wordmark + logo glyph (red orbital "LS" mark on a dark tile). */
+/** Kondense wordmark + logo glyph (red orbital "LS" mark on a dark tile). */
 export function BrandMark({ context, compact = false, className }: BrandMarkProps) {
   return (
     <div className={cn("flex items-center gap-2.5", className)}>
@@ -19,8 +19,8 @@ export function BrandMark({ context, compact = false, className }: BrandMarkProp
           bg-neutral-950 ring-1 ring-inset ring-white/10"
       >
         <Image
-          src="/legacy-scale-logo.png"
-          alt="Legacy Scale"
+          src="/kondense-logo.png"
+          alt="Kondense"
           width={24}
           height={24}
           className="size-6 object-contain"
@@ -29,7 +29,7 @@ export function BrandMark({ context, compact = false, className }: BrandMarkProp
       {!compact ? (
         <div className="flex flex-col leading-none">
           <span className="text-sm font-semibold tracking-tight">
-            Legacy Scale
+            Kondense
           </span>
           {context ? (
             <span className="mt-0.5 text-[11px] font-medium text-muted-foreground">

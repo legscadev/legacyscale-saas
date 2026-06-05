@@ -2,7 +2,7 @@ import type { Enrollment, User } from "./types"
 
 export const currentAdmin: User = {
   id: "u-admin",
-  email: "keanu@legacyscale.co",
+  email: "keanu@kondense.ai",
   name: "Keanu Vasquez",
   role: "ADMIN",
   isActive: true,

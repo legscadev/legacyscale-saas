@@ -20,7 +20,7 @@ export default function AuthLayout({
             <span className="text-sm font-bold tracking-tight">LS</span>
           </div>
           <span className="text-sm font-semibold tracking-tight">
-            Legacy Scale
+            Kondense
           </span>
         </div>
 
@@ -49,7 +49,7 @@ export default function AuthLayout({
 
         <figure className="relative max-w-md rounded-2xl bg-white/10 p-5 ring-1 ring-inset ring-white/15 backdrop-blur">
           <blockquote className="text-[15px] font-medium leading-relaxed">
-            &ldquo;Legacy Scale gave me the exact system to go from $4k to
+            &ldquo;Kondense gave me the exact system to go from $4k to
             $42k/mo in under a year. The playbooks are unreal.&rdquo;
           </blockquote>
           <figcaption className="mt-4 flex items-center gap-3">

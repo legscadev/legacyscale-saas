@@ -40,7 +40,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
               color: '#d11a1a',
             }}
           >
-            Legacy Scale
+            Kondense
           </div>
           <h1 style={{ marginBottom: '0.5rem', fontSize: '2rem', fontWeight: 700 }}>
             Critical Error
