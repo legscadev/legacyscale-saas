@@ -96,6 +96,12 @@ export function CourseBuilder({
     { chapterId: string; lessonId: string } | null
   >(null)
 
+  // Lesson ids whose Mux upload just finished — we keep polling these
+  // even if the dialog is closed and even if the optimistic PROCESSING
+  // patch never landed on the chapters state, so the badge eventually
+  // flips to Ready without a manual refresh.
+  const [pendingUploadIds, setPendingUploadIds] = useState<string[]>([])
+
   // dnd-kit sensors — pointer for mouse/touch, keyboard for a11y.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -130,14 +136,20 @@ export function CourseBuilder({
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [isDirty])
 
-  // Stable key for the SET of currently-PROCESSING lesson ids — the
-  // polling effect should restart only when that set actually changes
-  // (added a new one after upload, or one transitioned away), not on
-  // every re-render.
-  const processingIdsKey = chapters
-    .flatMap((c) => c.lessons)
-    .filter((l) => l.status === 'PROCESSING')
-    .map((l) => l.id)
+  // Stable key for the SET of lesson ids that should be polled — both
+  // those currently PROCESSING server-side AND those we just kicked
+  // off an upload for (which may not have flipped to PROCESSING in
+  // local state yet if the optimistic patch missed). The effect
+  // restarts only when this set actually changes, not on every re-render.
+  const processingIdsKey = Array.from(
+    new Set([
+      ...chapters
+        .flatMap((c) => c.lessons)
+        .filter((l) => l.status === 'PROCESSING')
+        .map((l) => l.id),
+      ...pendingUploadIds,
+    ]),
+  )
     .sort()
     .join(',')
 
@@ -152,10 +164,20 @@ export function CourseBuilder({
     async function tick() {
       const results = await Promise.all(ids.map((id) => getLessonStatusAction(id)))
       if (cancelled) return
-      for (const result of results) {
-        if (!result.ok || !result.lesson) continue
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i]!
+        const pollId = ids[i]!
+        if (!result.ok || !result.lesson) {
+          // Lesson is gone (deleted while polling) — stop watching.
+          setPendingUploadIds((prev) => prev.filter((id) => id !== pollId))
+          continue
+        }
         const incoming = result.lesson
         if (incoming.status === 'PROCESSING') continue
+        // Lesson reached a terminal state for this upload — drop it
+        // from the post-upload tracker so polling stops once nothing
+        // else needs watching.
+        setPendingUploadIds((prev) => prev.filter((id) => id !== incoming.id))
         // Mutate in place — these webhook-driven fields aren't part of
         // the isDirty snapshot so this doesn't flip the Save button.
         setChapters((prev) =>
@@ -729,13 +751,38 @@ export function CourseBuilder({
           // Optimistic flip: Mux's upchunk finished, the webhook will
           // (within seconds) mark the lesson PROCESSING server-side
           // and then READY. Updating local state to PROCESSING now
-          // lights up the badge and arms the polling effect.
+          // lights up the badge.
           //
-          // We use the lessonId reported by VideoSection (the post-
-          // ensureSaved real id) rather than editingRef — the upload
-          // closure was captured before the auto-save remapped the
-          // row, so editingRef may still hold the tempId here.
+          // Use the functional setter form so we always patch the
+          // latest chapters snapshot, even if the closure that
+          // called us was captured pre-save (when editingRef still
+          // held a tempId).
           const patch = { status: 'PROCESSING' as const }
+          const apply = (chs: LocalChapter[]): LocalChapter[] =>
+            chs.map((c) => ({
+              ...c,
+              lessons: c.lessons.map((l) =>
+                l.id === lessonId ? { ...l, ...patch } : l,
+              ),
+            }))
+          setChapters(apply)
+          setSavedSnapshot(apply)
+          // Register the lesson with the post-upload poll tracker so
+          // the badge keeps converging even if the optimistic patch
+          // above misses or the user closes the dialog.
+          setPendingUploadIds((prev) =>
+            prev.includes(lessonId) ? prev : [...prev, lessonId],
+          )
+        }}
+        onVideoStatusReady={(lessonId, data) => {
+          // VideoSection's self-driving post-upload poll has seen the
+          // Mux asset go READY. Patch local state so the badge flips
+          // to Ready and the dialog auto-renders the MuxPlayer.
+          const patch = {
+            status: 'READY' as const,
+            durationSeconds: data.durationSeconds,
+            muxPlaybackId: data.muxPlaybackId,
+          }
           const apply = (chs: LocalChapter[]): LocalChapter[] =>
             chs.map((c) => ({
               ...c,

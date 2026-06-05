@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client'
 import {
   commitResourceUploadAction,
+  getLessonStatusAction,
   getResourceDownloadUrlAction,
   prepareResourceUploadAction,
   removeLessonResourceAction,
@@ -64,6 +65,15 @@ interface LessonEditorDialogProps {
    *  before auto-save remapped tempId → real id; the parent's editingRef
    *  may still hold the tempId at this point. */
   onVideoUploadStarted: (lessonId: string) => void
+  /** Fired when VideoSection's own post-upload poll sees the lesson
+   *  transition to READY server-side. Independent of the builder's
+   *  optimistic-patch-driven polling — guarantees the badge + dialog
+   *  flip even if the optimistic patch never landed (e.g. stale prop
+   *  closure after auto-save remap). */
+  onVideoStatusReady: (lessonId: string, data: {
+    durationSeconds: number | null
+    muxPlaybackId: string | null
+  }) => void
 }
 
 function formatDuration(seconds: number | null): string {
@@ -83,6 +93,7 @@ export function LessonEditorDialog({
   onResourceAdded,
   onResourceRemoved,
   onVideoUploadStarted,
+  onVideoStatusReady,
 }: LessonEditorDialogProps) {
   if (!lesson) return null
 
@@ -124,6 +135,7 @@ export function LessonEditorDialog({
               lesson={lesson}
               ensureSaved={ensureSaved}
               onUploadStarted={onVideoUploadStarted}
+              onStatusReady={onVideoStatusReady}
             />
           ) : null}
           {lesson.type === 'RESOURCE' ? (
@@ -157,12 +169,17 @@ interface VideoSectionProps {
     { ok: true; lessonId: string } | { ok: false; error?: string }
   >
   onUploadStarted: (lessonId: string) => void
+  onStatusReady: (lessonId: string, data: {
+    durationSeconds: number | null
+    muxPlaybackId: string | null
+  }) => void
 }
 
 function VideoSection({
   lesson,
   ensureSaved,
   onUploadStarted,
+  onStatusReady,
 }: VideoSectionProps) {
   const [percent, setPercent] = useState<number | null>(null)
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'uploaded' | 'error'>(
@@ -190,6 +207,39 @@ function VideoSection({
       setPercent(null)
     }
   }, [lesson.status, lesson.muxPlaybackId])
+
+  // Self-driving poll: once upchunk finishes, hit getLessonStatusAction
+  // every 5s until Mux flips the lesson to READY. Doesn't rely on the
+  // builder's optimistic PROCESSING patch landing — that patch can
+  // miss when the upload closure was captured before auto-save remapped
+  // tempId → realId.
+  useEffect(() => {
+    if (phase !== 'uploaded') return
+    if (lesson.status === 'READY' && lesson.muxPlaybackId) return
+    let cancelled = false
+
+    async function tick() {
+      const result = await getLessonStatusAction(lesson.id)
+      if (cancelled) return
+      if (!result.ok || !result.lesson) return
+      if (
+        result.lesson.status === 'READY' &&
+        result.lesson.muxPlaybackId
+      ) {
+        onStatusReady(lesson.id, {
+          durationSeconds: result.lesson.durationSeconds,
+          muxPlaybackId: result.lesson.muxPlaybackId,
+        })
+      }
+    }
+
+    void tick()
+    const interval = setInterval(tick, 5_000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [phase, lesson.id, lesson.status, lesson.muxPlaybackId, onStatusReady])
 
   const startUpload = useCallback(
     async (file: File) => {
