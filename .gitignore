@@ -74,3 +74,4 @@ ehthumbs.db
 
 # Playwright MCP test output
 .playwright-mcp/
+.test-video.mp4

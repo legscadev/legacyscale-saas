@@ -439,12 +439,12 @@ function VideoPreview({ lesson }: { lesson: LessonListItem }) {
   if (lesson.status === 'READY' && lesson.muxPlaybackId) {
     return (
       <div className="space-y-1">
-        <div className="overflow-hidden rounded-md bg-black">
+        <div className="mx-auto overflow-hidden rounded-md bg-black">
           <MuxPlayer
             playbackId={lesson.muxPlaybackId}
             streamType="on-demand"
             metadata={{ video_title: lesson.title }}
-            style={{ aspectRatio: '16 / 9', width: '100%', maxWidth: 480 }}
+            style={{ aspectRatio: '16 / 9', width: '100%' }}
           />
         </div>
         <p className="text-xs text-muted-foreground">
