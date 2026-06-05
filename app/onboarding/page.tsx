@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BrandMark } from '@/components/layout/brand-mark'
 import { prisma } from '@/lib/prisma'
+import { AdminPasswordOnboarding } from './admin-password-onboarding'
 import { OnboardingWizard } from './onboarding-wizard'
 
 interface OnboardingPageProps {
@@ -18,7 +19,11 @@ export default async function OnboardingPage({
   const invite = token
     ? await prisma.invite.findUnique({
         where: { token },
-        include: { user: { select: { name: true, email: true, authId: true } } },
+        include: {
+          user: {
+            select: { name: true, email: true, authId: true, role: true },
+          },
+        },
       })
     : null
 
@@ -29,6 +34,12 @@ export default async function OnboardingPage({
     !!invite.user.authId
 
   if (isValid) {
+    // Admins skip the marketing-style member wizard (welcome, profile,
+    // goal, done) and go straight to password → dashboard. They're the
+    // ones running the platform, not the ones being sold on it.
+    if (invite.user.role === 'ADMIN') {
+      return <AdminPasswordOnboarding token={token!} />
+    }
     const firstName = invite.user.name?.split(' ')[0] ?? null
     return (
       <OnboardingWizard
