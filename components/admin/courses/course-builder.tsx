@@ -725,31 +725,26 @@ export function CourseBuilder({
             prev.map((c) => (c.id === editingRef.chapterId ? strip(c) : c)),
           )
         }}
-        onVideoUploadStarted={() => {
-          if (!editingRef) return
+        onVideoUploadStarted={(lessonId) => {
           // Optimistic flip: Mux's upchunk finished, the webhook will
           // (within seconds) mark the lesson PROCESSING server-side
           // and then READY. Updating local state to PROCESSING now
           // lights up the badge and arms the polling effect.
+          //
+          // We use the lessonId reported by VideoSection (the post-
+          // ensureSaved real id) rather than editingRef — the upload
+          // closure was captured before the auto-save remapped the
+          // row, so editingRef may still hold the tempId here.
           const patch = { status: 'PROCESSING' as const }
-          patchChapter(editingRef.chapterId, (c) => ({
-            ...c,
-            lessons: c.lessons.map((l) =>
-              l.id === editingRef.lessonId ? { ...l, ...patch } : l,
-            ),
-          }))
-          setSavedSnapshot((prev) =>
-            prev.map((c) =>
-              c.id === editingRef.chapterId
-                ? {
-                    ...c,
-                    lessons: c.lessons.map((l) =>
-                      l.id === editingRef.lessonId ? { ...l, ...patch } : l,
-                    ),
-                  }
-                : c,
-            ),
-          )
+          const apply = (chs: LocalChapter[]): LocalChapter[] =>
+            chs.map((c) => ({
+              ...c,
+              lessons: c.lessons.map((l) =>
+                l.id === lessonId ? { ...l, ...patch } : l,
+              ),
+            }))
+          setChapters(apply)
+          setSavedSnapshot(apply)
         }}
       />
 

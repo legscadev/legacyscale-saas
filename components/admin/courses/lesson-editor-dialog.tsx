@@ -59,8 +59,11 @@ interface LessonEditorDialogProps {
   /** Removes a resource (post-server delete) from the builder's local state. */
   onResourceRemoved: (resourceId: string) => void
   /** Optimistically flip the video lesson to PROCESSING on upchunk success — the
-   *  builder's polling effect will then tick until Mux flips it to READY. */
-  onVideoUploadStarted: () => void
+   *  builder's polling effect will then tick until Mux flips it to READY.
+   *  The lessonId is passed back because the upload closure was captured
+   *  before auto-save remapped tempId → real id; the parent's editingRef
+   *  may still hold the tempId at this point. */
+  onVideoUploadStarted: (lessonId: string) => void
 }
 
 function formatDuration(seconds: number | null): string {
@@ -153,7 +156,7 @@ interface VideoSectionProps {
   ensureSaved: () => Promise<
     { ok: true; lessonId: string } | { ok: false; error?: string }
   >
-  onUploadStarted: () => void
+  onUploadStarted: (lessonId: string) => void
 }
 
 function VideoSection({
@@ -190,11 +193,12 @@ function VideoSection({
         if (!saved.ok) {
           throw new Error(saved.error ?? 'Could not save lesson before upload')
         }
+        const lessonId = saved.lessonId
 
         const res = await fetch('/api/uploads/video', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lessonId: saved.lessonId }),
+          body: JSON.stringify({ lessonId }),
         })
         const json = await res.json()
         if (!res.ok || !json.success) {
@@ -227,7 +231,7 @@ function VideoSection({
           // Optimistically tell the builder the lesson is now
           // PROCESSING so its polling effect kicks in and the
           // status badge / dialog auto-update when Mux finishes.
-          onUploadStarted()
+          onUploadStarted(lessonId)
           toast.success('Upload complete', {
             description:
               'Video is processing on Mux — usually takes a minute.',
