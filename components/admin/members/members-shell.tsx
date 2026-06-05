@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useTransition,
 } from 'react'
 import type {
   OnChangeFn,
@@ -55,7 +54,7 @@ export function MembersShell({
 }: MembersShellProps) {
   const [query, setQuery] = useState<MembersQueryState>(DEFAULT_QUERY_STATE)
   const [data, setData] = useState<MembersData>(initialData)
-  const [isPending, startTransition] = useTransition()
+  const [isLoading, setIsLoading] = useState(false)
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [createOpen, setCreateOpen] = useState(false)
@@ -70,17 +69,33 @@ export function MembersShell({
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false
+      console.log('[members] mount — skip first fetch')
       return
     }
-    let cancelled = false
-    startTransition(() => {
-      fetchMembers(query).then((next) => {
-        if (!cancelled) setData(next)
-      })
-    })
-    return () => {
-      cancelled = true
-    }
+    const controller = new AbortController()
+    setIsLoading(true)
+    console.log('[members] effect run; query, refetchKey=', refetchKey)
+    void (async () => {
+      try {
+        const next = await fetchMembers(query)
+        if (controller.signal.aborted) {
+          console.log('[members] response ignored (aborted)')
+          return
+        }
+        console.log('[members] applying data', {
+          active: next.counts.active,
+          suspended: next.counts.suspended,
+          firstActive: next.items[0]?.isActive,
+        })
+        setData(next)
+      } catch (err) {
+        if (controller.signal.aborted) return
+        console.error('[members] fetch failed', err)
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false)
+      }
+    })()
+    return () => controller.abort()
   }, [query, refetchKey])
 
   // Drop any selections that no longer exist in the current data (e.g.
@@ -130,7 +145,10 @@ export function MembersShell({
     [sorting, patch],
   )
 
-  const refetch = useCallback(() => setRefetchKey((k) => k + 1), [])
+  const refetch = useCallback(() => {
+    console.log('[members] refetch() called')
+    setRefetchKey((k) => k + 1)
+  }, [])
 
   const columns = useMemo(
     () => getMemberColumns(currentUserId, refetch),
@@ -144,7 +162,7 @@ export function MembersShell({
   const onlyAdminInPlatform = data.counts.all <= 1
 
   return (
-    <div className="space-y-6" data-pending={isPending}>
+    <div className="space-y-6" data-pending={isLoading}>
       <PageHeader
         title="Members"
         description={`Manage ${data.counts.all.toLocaleString()} ${
@@ -169,7 +187,7 @@ export function MembersShell({
           onRoleChange={(role) => patch({ role })}
           onStatusChange={(status) => patch({ status })}
           onClearAll={clearFilters}
-          isPending={isPending}
+          isPending={isLoading}
         />
 
         {showEmpty ? (
