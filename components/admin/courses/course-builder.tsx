@@ -505,14 +505,6 @@ export function CourseBuilder({
     if (href) router.push(href)
   }, [pendingNav, router])
 
-  const saveAndProceed = useCallback(async () => {
-    const href = pendingNav
-    const result = await performSave()
-    if (!result.ok) return
-    setPendingNav(null)
-    if (href) router.push(href)
-  }, [pendingNav, performSave, router])
-
   // Auto-save trigger for upload flows. The Mux + Storage prepare
   // actions both need a real lesson uuid as their passthrough /
   // path leaf; a temp client-side id breaks the webhook → lesson
@@ -806,18 +798,17 @@ export function CourseBuilder({
           if (!open) setPendingNav(null)
         }}
       >
-        <AlertDialogContent className="overflow-hidden sm:max-w-md">
+        <AlertDialogContent className="overflow-hidden sm:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle>Save your changes?</AlertDialogTitle>
+            <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
             <AlertDialogDescription>
-              You have unsaved edits to chapters or lessons. Save before
-              leaving, or discard them and continue.
+              You have unsaved edits to chapters or lessons. Leave the page
+              and they&apos;ll be discarded.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Stay on page</AlertDialogCancel>
-            <Button
-              variant="ghost"
+            <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
                 proceedAfterDiscard()
@@ -825,15 +816,6 @@ export function CourseBuilder({
               disabled={saving}
             >
               Discard and leave
-            </Button>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault()
-                void saveAndProceed()
-              }}
-              disabled={saving}
-            >
-              {saving ? 'Saving…' : 'Save and leave'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
