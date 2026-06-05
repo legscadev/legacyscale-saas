@@ -128,6 +128,10 @@ model Course {
   description  String?
   thumbnailUrl String?      @map("thumbnail_url")
   status       CourseStatus @default(DRAFT)
+  // When true, any signed-in MEMBER can open the course without an
+  // Enrollment row. Paid courses leave this false and continue to
+  // require enrollment for access.
+  isFree       Boolean      @default(false) @map("is_free")
   orderIndex   Int          @default(0) @map("order_index")
   accessDays   Int?         @map("access_days") // null = forever
   publishedAt  DateTime?    @map("published_at")

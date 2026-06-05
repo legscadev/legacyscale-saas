@@ -35,6 +35,7 @@ export const createCourseSchema = z.object({
   thumbnailUrl: optionalUrlSchema,
   status: courseStatusSchema.default('DRAFT'),
   accessDays: accessDaysSchema.default(null),
+  isFree: z.boolean().default(false),
 })
 
 export const updateCourseSchema = z
@@ -44,6 +45,7 @@ export const updateCourseSchema = z
     thumbnailUrl: optionalUrlSchema,
     status: courseStatusSchema.optional(),
     accessDays: accessDaysSchema.optional(),
+    isFree: z.boolean().optional(),
     orderIndex: z.number().int().min(0).optional(),
   })
   .refine(

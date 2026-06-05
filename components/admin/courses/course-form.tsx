@@ -43,6 +43,7 @@ export interface CourseFormDefaults {
   thumbnailUrl?: string | null
   status?: CourseStatus
   accessDays?: number | null
+  isFree?: boolean
 }
 
 interface CourseFormProps {
@@ -88,6 +89,7 @@ export function CourseForm({
       ? String(defaults.accessDays)
       : '30',
   )
+  const [isFree, setIsFree] = useState<boolean>(defaults?.isFree ?? false)
 
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   // Track whether the user explicitly cleared the existing thumbnail.
@@ -162,6 +164,7 @@ export function CourseForm({
     formData.set('title', trimmedTitle)
     if (description.trim()) formData.set('description', description.trim())
     formData.set('status', status)
+    formData.set('isFree', isFree ? '1' : '0')
     if (!forever) formData.set('accessDays', accessDays)
     if (thumbnailFile) formData.set('thumbnail', thumbnailFile)
     if (clearedThumbnail && !thumbnailFile) {
@@ -351,6 +354,24 @@ export function CourseForm({
             How long a member retains access after enrollment.
           </p>
         </div>
+      </div>
+
+      <div className="rounded-lg border bg-muted/30 p-4">
+        <label className="flex items-start gap-3">
+          <Checkbox
+            checked={isFree}
+            onCheckedChange={(c) => setIsFree(Boolean(c))}
+            disabled={submitting}
+            className="mt-0.5"
+          />
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">Free for all members</p>
+            <p className="text-xs text-muted-foreground">
+              Any signed-in member can open this course without an enrollment.
+              Leave off to keep it gated behind enrollment.
+            </p>
+          </div>
+        </label>
       </div>
 
       {formError && (

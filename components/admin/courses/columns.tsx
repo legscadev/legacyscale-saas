@@ -72,12 +72,19 @@ export function getCourseColumns(
               )}
             </div>
             <div className="min-w-0">
-              <Link
-                href={`/admin/courses/${c.id}`}
-                className="block truncate text-sm font-medium transition-colors hover:text-primary hover:underline underline-offset-2"
-              >
-                {c.title}
-              </Link>
+              <div className="flex items-center gap-1.5">
+                <Link
+                  href={`/admin/courses/${c.id}`}
+                  className="truncate text-sm font-medium transition-colors hover:text-primary hover:underline underline-offset-2"
+                >
+                  {c.title}
+                </Link>
+                {c.isFree ? (
+                  <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                    Free
+                  </span>
+                ) : null}
+              </div>
               {c.description ? (
                 <p className="truncate text-xs text-muted-foreground">
                   {c.description}

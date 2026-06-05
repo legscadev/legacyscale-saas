@@ -674,6 +674,11 @@ export function CourseBuilder({
             <DetailRow label="Status">
               <StatusBadge status={course.status} />
             </DetailRow>
+            <DetailRow label="Access">
+              <span className="text-sm">
+                {course.isFree ? 'Free for all members' : 'Enrollment required'}
+              </span>
+            </DetailRow>
 
             <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
               <span>

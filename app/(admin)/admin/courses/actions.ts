@@ -108,6 +108,7 @@ export async function createCourseAction(
     description: (formData.get('description') as string) || undefined,
     status: (formData.get('status') as string) || 'DRAFT',
     accessDays,
+    isFree: formData.get('isFree') === '1',
     // thumbnailUrl is set in step 2 after upload — never trusted off the form.
   })
 
@@ -194,6 +195,9 @@ export async function updateCourseAction(
   if (formData.has('accessDays')) {
     const raw = formData.get('accessDays')
     input.accessDays = raw === null || raw === '' ? null : Number(raw)
+  }
+  if (formData.has('isFree')) {
+    input.isFree = formData.get('isFree') === '1'
   }
 
   const parsed = updateCourseSchema.safeParse(input)
