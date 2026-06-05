@@ -44,6 +44,7 @@ import { EmptyState, StatusBadge } from '@/components/shared'
 import {
   getLessonStatusAction,
   saveCourseStructureAction,
+  type SaveStructureResult,
 } from '@/app/(admin)/admin/courses/[id]/actions'
 import type { CourseDetail } from '@/lib/services/course-service'
 import type {
@@ -299,6 +300,7 @@ export function CourseBuilder({
           },
         ],
       }))
+      setEditingRef({ chapterId, lessonId: tempId })
     },
     [patchChapter],
   )
@@ -412,27 +414,47 @@ export function CourseBuilder({
   // Save / Discard
   // ===========================================================
 
-  const onSave = useCallback(async () => {
-    setSaving(true)
-    try {
-      const payload = toSyncPayload(chapters)
-      const result = await saveCourseStructureAction(course.id, payload)
-      if (!result.ok) {
-        toast.error(result.error ?? 'Could not save changes')
-        return
+  // Returns the server mappings so callers that need the new real
+  // id for a previously-temp row can resolve it. `silent` suppresses
+  // the success toast for invisible saves (e.g. auto-save before an
+  // upload).
+  const performSave = useCallback(
+    async (
+      opts: { silent?: boolean } = {},
+    ): Promise<
+      | { ok: true; mappings: SaveStructureResult['mappings'] }
+      | { ok: false; error?: string }
+    > => {
+      setSaving(true)
+      try {
+        const payload = toSyncPayload(chapters)
+        const result = await saveCourseStructureAction(course.id, payload)
+        if (!result.ok) {
+          if (!opts.silent) {
+            toast.error(result.error ?? 'Could not save changes')
+          }
+          return { ok: false, error: result.error }
+        }
+        const next = applyMappings(chapters, result.mappings)
+        setChapters(next)
+        setSavedSnapshot(next)
+        if (!opts.silent) toast.success('Changes saved')
+        router.refresh()
+        return { ok: true, mappings: result.mappings }
+      } catch (err) {
+        console.error(err)
+        if (!opts.silent) toast.error('Network error — please try again')
+        return { ok: false }
+      } finally {
+        setSaving(false)
       }
-      const next = applyMappings(chapters, result.mappings)
-      setChapters(next)
-      setSavedSnapshot(next)
-      toast.success('Changes saved')
-      router.refresh()
-    } catch (err) {
-      console.error(err)
-      toast.error('Network error — please try again')
-    } finally {
-      setSaving(false)
-    }
-  }, [chapters, course.id, router])
+    },
+    [chapters, course.id, router],
+  )
+
+  const onSave = useCallback(() => {
+    void performSave()
+  }, [performSave])
 
   const onDiscard = useCallback(() => {
     setChapters(savedSnapshot)
@@ -463,10 +485,49 @@ export function CourseBuilder({
 
   const saveAndProceed = useCallback(async () => {
     const href = pendingNav
-    await onSave()
+    const result = await performSave()
+    if (!result.ok) return
     setPendingNav(null)
     if (href) router.push(href)
-  }, [onSave, pendingNav, router])
+  }, [pendingNav, performSave, router])
+
+  // Auto-save trigger for upload flows. The Mux + Storage prepare
+  // actions both need a real lesson uuid as their passthrough /
+  // path leaf; a temp client-side id breaks the webhook → lesson
+  // mapping. When the user clicks Upload on an unsaved lesson, we
+  // silently flush the whole structure, look up the new real id
+  // for the currently-editing lesson, and hand it back so the
+  // upload can proceed using it.
+  const ensureLessonSaved = useCallback(async (): Promise<
+    { ok: true; lessonId: string } | { ok: false; error?: string }
+  > => {
+    if (!editingRef) return { ok: false, error: 'No lesson selected' }
+    const lesson = chapters
+      .find((c) => c.id === editingRef.chapterId)
+      ?.lessons.find((l) => l.id === editingRef.lessonId)
+    if (!lesson) return { ok: false, error: 'Lesson not found' }
+
+    // Already saved — return current id, no round-trip.
+    if (!lesson.tempId) return { ok: true, lessonId: lesson.id }
+
+    const result = await performSave({ silent: true })
+    if (!result.ok) {
+      return { ok: false, error: result.error ?? 'Could not save lesson' }
+    }
+    const mapping = result.mappings?.lessonMappings.find(
+      (m) => m.tempId === lesson.tempId,
+    )
+    if (!mapping) {
+      return { ok: false, error: 'Lesson id was not mapped after save' }
+    }
+    // Re-point the editing ref at the new real id so subsequent
+    // re-opens of the dialog find the row.
+    setEditingRef({
+      chapterId: editingRef.chapterId,
+      lessonId: mapping.realId,
+    })
+    return { ok: true, lessonId: mapping.realId }
+  }, [chapters, editingRef, performSave])
 
   // ===========================================================
   // Render
@@ -621,7 +682,7 @@ export function CourseBuilder({
         }}
         lesson={editingLesson}
         courseId={course.id}
-        isUnsaved={Boolean(editingLesson && (editingLesson as LocalLesson).tempId)}
+        ensureSaved={ensureLessonSaved}
         onChange={(changes) => {
           if (!editingRef) return
           patchLesson(editingRef.chapterId, editingRef.lessonId, changes)

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import MuxPlayer from '@mux/mux-player-react'
 import * as UpChunk from '@mux/upchunk'
 import {
-  AlertTriangle,
   Download,
   FileText,
   Loader2,
@@ -12,6 +11,7 @@ import {
   Upload,
   Video,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -45,8 +45,13 @@ interface LessonEditorDialogProps {
   onOpenChange: (open: boolean) => void
   lesson: LessonListItem | null
   courseId: string
-  /** Set when the row exists locally but hasn't been saved yet. */
-  isUnsaved: boolean
+  /** Auto-save trigger called by upload flows when the lesson is
+   *  unsaved (its tempId can't be used as a Mux passthrough / bucket
+   *  path leaf). Returns the real lesson id on success. Resolves to
+   *  the existing id when the lesson is already saved. */
+  ensureSaved: () => Promise<
+    { ok: true; lessonId: string } | { ok: false; error?: string }
+  >
   /** Pushes title/description changes back to the builder's local state. */
   onChange: (changes: { title?: string; description?: string | null }) => void
   /** Appends a newly-uploaded resource into the builder's local state. */
@@ -70,7 +75,7 @@ export function LessonEditorDialog({
   onOpenChange,
   lesson,
   courseId,
-  isUnsaved,
+  ensureSaved,
   onChange,
   onResourceAdded,
   onResourceRemoved,
@@ -114,7 +119,7 @@ export function LessonEditorDialog({
           {lesson.type === 'VIDEO' ? (
             <VideoSection
               lesson={lesson}
-              isUnsaved={isUnsaved}
+              ensureSaved={ensureSaved}
               onUploadStarted={onVideoUploadStarted}
             />
           ) : null}
@@ -122,7 +127,7 @@ export function LessonEditorDialog({
             <ResourceSection
               lesson={lesson}
               courseId={courseId}
-              isUnsaved={isUnsaved}
+              ensureSaved={ensureSaved}
               onResourceAdded={onResourceAdded}
               onResourceRemoved={onResourceRemoved}
             />
@@ -145,11 +150,17 @@ export function LessonEditorDialog({
 
 interface VideoSectionProps {
   lesson: LessonListItem
-  isUnsaved: boolean
+  ensureSaved: () => Promise<
+    { ok: true; lessonId: string } | { ok: false; error?: string }
+  >
   onUploadStarted: () => void
 }
 
-function VideoSection({ lesson, isUnsaved, onUploadStarted }: VideoSectionProps) {
+function VideoSection({
+  lesson,
+  ensureSaved,
+  onUploadStarted,
+}: VideoSectionProps) {
   const [percent, setPercent] = useState<number | null>(null)
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'uploaded' | 'error'>(
     'idle',
@@ -175,10 +186,15 @@ function VideoSection({ lesson, isUnsaved, onUploadStarted }: VideoSectionProps)
       setErrorMessage(null)
 
       try {
+        const saved = await ensureSaved()
+        if (!saved.ok) {
+          throw new Error(saved.error ?? 'Could not save lesson before upload')
+        }
+
         const res = await fetch('/api/uploads/video', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lessonId: lesson.id }),
+          body: JSON.stringify({ lessonId: saved.lessonId }),
         })
         const json = await res.json()
         if (!res.ok || !json.success) {
@@ -225,7 +241,7 @@ function VideoSection({ lesson, isUnsaved, onUploadStarted }: VideoSectionProps)
         )
       }
     },
-    [lesson.id, onUploadStarted],
+    [ensureSaved, onUploadStarted],
   )
 
   const cancelUpload = useCallback(() => {
@@ -245,12 +261,7 @@ function VideoSection({ lesson, isUnsaved, onUploadStarted }: VideoSectionProps)
         Video
       </div>
 
-      {isUnsaved ? (
-        <Warning
-          icon={AlertTriangle}
-          text="Save your course changes first — uploads need a saved lesson id."
-        />
-      ) : phase === 'uploading' ? (
+      {phase === 'uploading' ? (
         <UploadProgress percent={percent ?? 0} onCancel={cancelUpload} />
       ) : phase === 'uploaded' ? (
         <Warning
@@ -381,7 +392,7 @@ function Warning({
   iconClassName,
   text,
 }: {
-  icon: typeof AlertTriangle
+  icon: LucideIcon
   iconClassName?: string
   text: string
 }) {
@@ -404,7 +415,9 @@ const RESOURCE_ACCEPT =
 interface ResourceSectionProps {
   lesson: LessonListItem
   courseId: string
-  isUnsaved: boolean
+  ensureSaved: () => Promise<
+    { ok: true; lessonId: string } | { ok: false; error?: string }
+  >
   onResourceAdded: (resource: LessonResourceItem) => void
   onResourceRemoved: (resourceId: string) => void
 }
@@ -419,7 +432,7 @@ function formatFileSize(bytes: number | null): string {
 function ResourceSection({
   lesson,
   courseId,
-  isUnsaved,
+  ensureSaved,
   onResourceAdded,
   onResourceRemoved,
 }: ResourceSectionProps) {
@@ -440,8 +453,14 @@ function ResourceSection({
       setErrorMessage(null)
 
       try {
+        const saved = await ensureSaved()
+        if (!saved.ok) {
+          throw new Error(saved.error ?? 'Could not save lesson before upload')
+        }
+        const lessonId = saved.lessonId
+
         const prep = await prepareResourceUploadAction({
-          lessonId: lesson.id,
+          lessonId,
           filename: file.name,
           size: file.size,
           mimeType: file.type || 'application/octet-stream',
@@ -465,7 +484,7 @@ function ResourceSection({
         if (uploadErr) throw uploadErr
 
         const commit = await commitResourceUploadAction(courseId, {
-          lessonId: lesson.id,
+          lessonId,
           resourceId: prep.resourceId,
           path: prep.path,
           filename: file.name,
@@ -485,7 +504,7 @@ function ResourceSection({
         setUploading(false)
       }
     },
-    [courseId, lesson.id, onResourceAdded],
+    [courseId, ensureSaved, onResourceAdded],
   )
 
   const onDownload = useCallback(async (resourceId: string) => {
@@ -520,50 +539,41 @@ function ResourceSection({
         ) : null}
       </div>
 
-      {isUnsaved ? (
-        <Warning
-          icon={AlertTriangle}
-          text="Save your course changes first — uploads need a saved lesson id."
-        />
+      {resources.length === 0 ? (
+        <p className="py-2 text-center text-sm text-muted-foreground">
+          No files attached yet.
+        </p>
       ) : (
-        <>
-          {resources.length === 0 ? (
-            <p className="py-2 text-center text-sm text-muted-foreground">
-              No files attached yet.
-            </p>
-          ) : (
-            <ul className="space-y-1.5">
-              {resources.map((r) => (
-                <li key={r.id}>
-                  <FileRow
-                    name={r.name}
-                    size={r.size}
-                    onDownload={() => void onDownload(r.id)}
-                    onRemove={() => void onRemove(r.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="flex flex-col items-center gap-1.5 pt-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="w-full border-dashed"
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
-              {uploading ? 'Uploading…' : 'Add resource'}
-            </Button>
-            <p className="text-xs text-muted-foreground/70">
-              PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max.
-            </p>
-          </div>
-        </>
+        <ul className="space-y-1.5">
+          {resources.map((r) => (
+            <li key={r.id}>
+              <FileRow
+                name={r.name}
+                size={r.size}
+                onDownload={() => void onDownload(r.id)}
+                onRemove={() => void onRemove(r.id)}
+              />
+            </li>
+          ))}
+        </ul>
       )}
+
+      <div className="flex flex-col items-center gap-1.5 pt-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full border-dashed"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
+          {uploading ? 'Uploading…' : 'Add resource'}
+        </Button>
+        <p className="text-xs text-muted-foreground/70">
+          PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max.
+        </p>
+      </div>
 
       {errorMessage ? (
         <p className="text-xs text-destructive" role="alert">
