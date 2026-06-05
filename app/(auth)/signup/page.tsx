@@ -61,10 +61,10 @@ export default function SignupPage() {
               placeholder="••••••••"
               required
               autoComplete="new-password"
-              minLength={8}
+              minLength={4}
             />
             <p className="text-xs text-muted-foreground">
-              Must be at least 8 characters
+              Must be at least 4 characters
             </p>
           </div>
           {state && 'error' in state && (

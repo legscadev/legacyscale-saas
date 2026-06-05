@@ -78,10 +78,10 @@ function ResetForm() {
             autoComplete="new-password"
             value={password}
             onChange={setPassword}
-            minLength={8}
+            minLength={4}
           />
           <p className="text-xs text-muted-foreground">
-            Must be at least 8 characters.
+            Must be at least 4 characters.
           </p>
         </div>
 

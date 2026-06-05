@@ -101,7 +101,7 @@ export function ChangePasswordForm() {
             autoComplete="new-password"
             value={newPassword}
             onChange={setNewPassword}
-            minLength={8}
+            minLength={4}
           />
           {fieldErrors.newPassword?.[0] ? (
             <p className="text-xs text-destructive" role="alert">

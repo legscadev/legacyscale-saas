@@ -83,7 +83,7 @@ export function PasswordStep({ token, onSuccess }: PasswordStepProps) {
             autoComplete="new-password"
             value={password}
             onChange={setPassword}
-            minLength={8}
+            minLength={4}
           />
           {fieldErrors.password?.[0] ? (
             <p className="text-xs text-destructive" role="alert">
@@ -91,8 +91,7 @@ export function PasswordStep({ token, onSuccess }: PasswordStepProps) {
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Must be at least 8 characters, with upper and lower case letters
-              and a number.
+              Must be at least 4 characters.
             </p>
           )}
         </div>
