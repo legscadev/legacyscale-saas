@@ -210,6 +210,7 @@ export function MembersShell({
           />
         ) : (
           <DataTable
+            key={refetchKey}
             columns={columns}
             data={data.items}
             page={data.page}
