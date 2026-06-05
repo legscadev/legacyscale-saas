@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   Compass,
   LayoutGrid,
@@ -22,7 +23,12 @@ const LINKS = [
 
 /** Always-available floating navigator for jumping across the prototype. */
 export function PrototypeNavigator() {
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
+
+  // Hide on the member side so the member app demos as if it were the
+  // real product (no floating "demo affordance" in the screenshot).
+  if (pathname?.startsWith("/prototype/member")) return null
 
   return (
     <div className="fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-2 print:hidden">

@@ -58,7 +58,7 @@ export const adminNav: NavSection[] = [
     label: "System",
     items: [
       { label: "Settings", href: `${ADMIN}/settings`, icon: Settings },
-      { label: "Phase 2 Roadmap", href: `${ADMIN}/roadmap`, icon: Rocket },
+      { label: "Plans", href: `${ADMIN}/roadmap`, icon: Rocket },
     ],
   },
 ]
@@ -84,6 +84,7 @@ export const memberNav: NavSection[] = [
     items: [
       { label: "Settings", href: `${MEMBER}/account`, icon: Settings },
       { label: "Help & Support", href: `${MEMBER}/help`, icon: LifeBuoy },
+      { label: "Plans", href: `${MEMBER}/roadmap`, icon: Rocket },
     ],
   },
 ]
