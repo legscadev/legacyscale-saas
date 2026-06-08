@@ -4,9 +4,10 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       // Course thumbnails + lesson resources are uploaded through
-      // Server Actions. Matches the per-feature caps we enforce in
-      // the action handlers themselves.
-      bodySizeLimit: '10mb',
+      // Server Actions. Cap is the per-feature limit (10 MB for
+      // thumbnails) plus headroom for multipart overhead so the body
+      // limit doesn't fire before our nicer field-level validation.
+      bodySizeLimit: '12mb',
     },
   },
 };
