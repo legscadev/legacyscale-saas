@@ -121,12 +121,6 @@ export default async function AdminDashboardPage() {
       <PageHeader
         title="Dashboard"
         description="A quick pulse on your platform and what needs your attention."
-        actions={
-          <Button render={<Link href="/admin/courses/new" />}>
-            <Plus />
-            New course
-          </Button>
-        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
