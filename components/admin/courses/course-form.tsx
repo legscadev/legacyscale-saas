@@ -41,6 +41,7 @@ export interface CourseFormDefaults {
   title?: string
   description?: string | null
   thumbnailUrl?: string | null
+  coverImageUrl?: string | null
   status?: CourseStatus
   accessDays?: number | null
   isFree?: boolean
@@ -74,7 +75,6 @@ export function CourseForm({
   destructiveAction,
 }: CourseFormProps) {
   const router = useRouter()
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = useState(defaults?.title ?? '')
   const [description, setDescription] = useState(defaults?.description ?? '')
@@ -91,66 +91,18 @@ export function CourseForm({
   )
   const [isFree, setIsFree] = useState<boolean>(defaults?.isFree ?? false)
 
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
-  // Track whether the user explicitly cleared the existing thumbnail.
-  const hadExistingThumbnail = !!defaults?.thumbnailUrl
-  const [clearedThumbnail, setClearedThumbnail] = useState(false)
+  const thumbnailPicker = useImagePicker({
+    existingUrl: defaults?.thumbnailUrl,
+  })
+  const coverPicker = useImagePicker({
+    existingUrl: defaults?.coverImageUrl,
+  })
 
   const [submitting, setSubmitting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
 
-  // Object URL for the picked file; recomputed when the file changes.
-  // Falls back to the existing remote URL when no file is picked yet.
-  const pickedPreview = useMemo(() => {
-    if (!thumbnailFile) return null
-    return URL.createObjectURL(thumbnailFile)
-  }, [thumbnailFile])
-  // Revoke when the picked URL goes out of scope to avoid leaks.
-  useEffect(() => {
-    if (!pickedPreview) return
-    return () => URL.revokeObjectURL(pickedPreview)
-  }, [pickedPreview])
-  const thumbnailPreview =
-    pickedPreview ??
-    (clearedThumbnail ? null : (defaults?.thumbnailUrl ?? null))
-
   const statusOptions = mode === 'edit' ? EDIT_STATUSES : CREATE_STATUSES
-
-  // Matches the server-side cap. Validating client-side too means the
-  // user sees a useful "thumbnail too big" message instead of getting
-  // hit with "Network error" when the multipart body exceeds the
-  // Server Action / Vercel function body limit and the request dies
-  // before the action runs.
-  const THUMBNAIL_MAX_BYTES = 10 * 1024 * 1024
-
-  function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] ?? null
-    if (file && file.size > THUMBNAIL_MAX_BYTES) {
-      const mb = (file.size / (1024 * 1024)).toFixed(1)
-      setFieldErrors((prev) => ({
-        ...prev,
-        thumbnail: [
-          `Thumbnail must be 10 MB or smaller (this one is ${mb} MB)`,
-        ],
-      }))
-      // Reset the input so a re-pick of the same too-big file still
-      // re-fires onChange.
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
-    setThumbnailFile(file)
-    setClearedThumbnail(false)
-    if (fieldErrors.thumbnail) {
-      setFieldErrors((prev) => ({ ...prev, thumbnail: undefined }))
-    }
-  }
-
-  function clearThumbnail() {
-    setThumbnailFile(null)
-    setClearedThumbnail(true)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -175,6 +127,11 @@ export function CourseForm({
       }
     }
 
+    const thumbnailLocalErr = thumbnailPicker.validate('Thumbnail')
+    if (thumbnailLocalErr) localErrors.thumbnail = [thumbnailLocalErr]
+    const coverLocalErr = coverPicker.validate('Cover image')
+    if (coverLocalErr) localErrors.coverImage = [coverLocalErr]
+
     if (Object.keys(localErrors).length > 0) {
       setFieldErrors(localErrors)
       return
@@ -186,10 +143,14 @@ export function CourseForm({
     formData.set('status', status)
     formData.set('isFree', isFree ? '1' : '0')
     if (!forever) formData.set('accessDays', accessDays)
-    if (thumbnailFile) formData.set('thumbnail', thumbnailFile)
-    if (clearedThumbnail && !thumbnailFile) {
-      formData.set('clearThumbnail', '1')
-    }
+    thumbnailPicker.appendTo(formData, {
+      fileKey: 'thumbnail',
+      clearKey: 'clearThumbnail',
+    })
+    coverPicker.appendTo(formData, {
+      fileKey: 'coverImage',
+      clearKey: 'clearCoverImage',
+    })
 
     setSubmitting(true)
     try {
@@ -260,57 +221,27 @@ export function CourseForm({
         )}
       </div>
 
-      <div className="space-y-2">
-        <Label>Thumbnail</Label>
-        <div className="flex items-start gap-4">
-          <div
-            className={cn(
-              'grid aspect-video w-48 shrink-0 place-items-center overflow-hidden rounded-md border border-dashed bg-muted',
-              fieldErrors.thumbnail && 'border-destructive',
-            )}
-          >
-            {thumbnailPreview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={thumbnailPreview}
-                alt=""
-                className="size-full object-cover"
-              />
-            ) : (
-              <ImageIcon className="size-8 text-muted-foreground" />
-            )}
-          </div>
-          <div className="flex flex-1 flex-col gap-2">
-            <input
-              ref={fileInputRef}
-              id="course-thumbnail"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={handleFilePick}
-              disabled={submitting}
-              className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/80"
-            />
-            <p className="text-xs text-muted-foreground">
-              PNG, JPEG, or WebP. 10 MB max. 16:9 aspect rendered best.
-            </p>
-            {(thumbnailFile || (hadExistingThumbnail && !clearedThumbnail)) && (
-              <button
-                type="button"
-                onClick={clearThumbnail}
-                className="self-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                disabled={submitting}
-              >
-                Remove
-              </button>
-            )}
-            {fieldErrors.thumbnail?.[0] && (
-              <p className="text-xs text-destructive" role="alert">
-                {fieldErrors.thumbnail[0]}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      <ImagePicker
+        label="Thumbnail"
+        inputId="course-thumbnail"
+        picker={thumbnailPicker}
+        aspectClass="aspect-[4/3]"
+        previewWidthClass="w-48"
+        helper="PNG, JPEG, or WebP. 10 MB max. 4:3 aspect rendered best — used on the course card."
+        disabled={submitting}
+        error={fieldErrors.thumbnail?.[0]}
+      />
+
+      <ImagePicker
+        label="Cover image"
+        inputId="course-cover"
+        picker={coverPicker}
+        aspectClass="aspect-video"
+        previewWidthClass="w-72"
+        helper="PNG, JPEG, or WebP. 10 MB max. 16:9 aspect rendered best — hero on the course detail page."
+        disabled={submitting}
+        error={fieldErrors.coverImage?.[0]}
+      />
 
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-2">
@@ -429,3 +360,160 @@ export function CourseForm({
 
 // Re-exported so destructive actions can use the same icon set.
 export { Trash2 }
+
+// ===========================================================
+// Image picker — shared by Thumbnail (4:3) and Cover (16:9)
+// ===========================================================
+
+// Matches the server-side cap. Validating client-side too means the
+// user sees a useful "image too big" message instead of getting hit
+// with "Network error" when the multipart body exceeds the Server
+// Action / Vercel function body limit and the request dies before
+// the action runs.
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024
+
+interface ImagePickerState {
+  file: File | null
+  setFile: (f: File | null) => void
+  cleared: boolean
+  setCleared: (c: boolean) => void
+  hadExisting: boolean
+  preview: string | null
+  inputRef: React.RefObject<HTMLInputElement | null>
+  reset: () => void
+  validate: (label: 'Thumbnail' | 'Cover image') => string | null
+  appendTo: (
+    formData: FormData,
+    keys: { fileKey: string; clearKey: string },
+  ) => void
+}
+
+function useImagePicker({
+  existingUrl,
+}: {
+  existingUrl?: string | null
+}): ImagePickerState {
+  const [file, setFile] = useState<File | null>(null)
+  const [cleared, setCleared] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Object URL for the picked file; recomputed when the file changes.
+  // Falls back to the existing remote URL when no file is picked yet.
+  const pickedPreview = useMemo(() => {
+    if (!file) return null
+    return URL.createObjectURL(file)
+  }, [file])
+  useEffect(() => {
+    if (!pickedPreview) return
+    return () => URL.revokeObjectURL(pickedPreview)
+  }, [pickedPreview])
+  const preview = pickedPreview ?? (cleared ? null : (existingUrl ?? null))
+
+  return {
+    file,
+    setFile,
+    cleared,
+    setCleared,
+    hadExisting: !!existingUrl,
+    preview,
+    inputRef,
+    reset: () => {
+      setFile(null)
+      setCleared(true)
+      if (inputRef.current) inputRef.current.value = ''
+    },
+    validate: (label) => {
+      if (!file) return null
+      if (file.size > IMAGE_MAX_BYTES) {
+        const mb = (file.size / (1024 * 1024)).toFixed(1)
+        return `${label} must be 10 MB or smaller (this one is ${mb} MB)`
+      }
+      return null
+    },
+    appendTo: (formData, { fileKey, clearKey }) => {
+      if (file) formData.set(fileKey, file)
+      if (cleared && !file) formData.set(clearKey, '1')
+    },
+  }
+}
+
+interface ImagePickerProps {
+  label: string
+  inputId: string
+  picker: ImagePickerState
+  aspectClass: string
+  previewWidthClass: string
+  helper: string
+  disabled?: boolean
+  error?: string
+}
+
+function ImagePicker({
+  label,
+  inputId,
+  picker,
+  aspectClass,
+  previewWidthClass,
+  helper,
+  disabled,
+  error,
+}: ImagePickerProps) {
+  const stillShowing = !!picker.file || (picker.hadExisting && !picker.cleared)
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={inputId}>{label}</Label>
+      <div className="flex items-start gap-4">
+        <div
+          className={cn(
+            'grid shrink-0 place-items-center overflow-hidden rounded-md border border-dashed bg-muted',
+            aspectClass,
+            previewWidthClass,
+            error && 'border-destructive',
+          )}
+        >
+          {picker.preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={picker.preview}
+              alt=""
+              className="size-full object-cover"
+            />
+          ) : (
+            <ImageIcon className="size-8 text-muted-foreground" />
+          )}
+        </div>
+        <div className="flex flex-1 flex-col gap-2">
+          <input
+            ref={picker.inputRef}
+            id={inputId}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(e) => {
+              const next = e.target.files?.[0] ?? null
+              picker.setFile(next)
+              picker.setCleared(false)
+            }}
+            disabled={disabled}
+            className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/80"
+          />
+          <p className="text-xs text-muted-foreground">{helper}</p>
+          {stillShowing && (
+            <button
+              type="button"
+              onClick={picker.reset}
+              className="self-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              disabled={disabled}
+            >
+              Remove
+            </button>
+          )}
+          {error && (
+            <p className="text-xs text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

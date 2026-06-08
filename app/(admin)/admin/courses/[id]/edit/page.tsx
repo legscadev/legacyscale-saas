@@ -31,6 +31,7 @@ export default async function EditCoursePage({ params }: EditCoursePageProps) {
           title: course.title,
           description: course.description,
           thumbnailUrl: course.thumbnailUrl,
+          coverImageUrl: course.coverImageUrl,
           status: course.status,
           accessDays: course.accessDays,
           isFree: course.isFree,

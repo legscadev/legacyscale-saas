@@ -122,49 +122,72 @@ export async function createCourseAction(
     return { ok: false, fieldErrors }
   }
 
-  // Validate the optional thumbnail before we touch the DB so a bad
+  // Validate the optional images before we touch the DB so a bad
   // file fails the request cleanly with no orphan row.
-  const file = formData.get('thumbnail')
-  const thumbnailFile =
-    file instanceof File && file.size > 0 ? file : null
+  const thumbnailFile = readUploadedFile(formData, 'thumbnail')
+  const coverFile = readUploadedFile(formData, 'coverImage')
 
-  if (thumbnailFile) {
-    if (!THUMBNAIL_MIMES[thumbnailFile.type]) {
-      return {
-        ok: false,
-        fieldErrors: { thumbnail: ['Thumbnail must be a PNG, JPEG, or WebP image'] },
-      }
-    }
-    if (thumbnailFile.size > THUMBNAIL_MAX_BYTES) {
-      return {
-        ok: false,
-        fieldErrors: { thumbnail: ['Thumbnail must be 10 MB or smaller'] },
-      }
-    }
-  }
+  const thumbnailErr = validateImageFile(thumbnailFile, 'Thumbnail')
+  if (thumbnailErr) return { ok: false, fieldErrors: { thumbnail: [thumbnailErr] } }
+  const coverErr = validateImageFile(coverFile, 'Cover image')
+  if (coverErr) return { ok: false, fieldErrors: { coverImage: [coverErr] } }
 
   // 1. Create the row.
   const course = await courseService.create(parsed.data, admin.id)
 
-  // 2. Upload + patch thumbnail (best-effort — row already exists).
+  // 2. Upload + patch images (best-effort — row already exists).
+  const imagePatch: { thumbnailUrl?: string; coverImageUrl?: string } = {}
+  const warnings: string[] = []
   if (thumbnailFile) {
     try {
-      const url = await uploadThumbnail(course.id, thumbnailFile)
-      await courseService.update(course.id, { thumbnailUrl: url })
+      imagePatch.thumbnailUrl = await uploadThumbnail(course.id, thumbnailFile)
     } catch (err) {
       console.error('Thumbnail upload failed:', err)
-      revalidatePath('/admin/courses')
-      return {
-        ok: true,
-        id: course.id,
-        error:
-          'Course created, but the thumbnail upload failed. You can retry from the edit screen.',
-      }
+      warnings.push('thumbnail upload failed')
     }
+  }
+  if (coverFile) {
+    try {
+      imagePatch.coverImageUrl = await uploadCoverImage(course.id, coverFile)
+    } catch (err) {
+      console.error('Cover image upload failed:', err)
+      warnings.push('cover image upload failed')
+    }
+  }
+  if (Object.keys(imagePatch).length > 0) {
+    await courseService.update(course.id, imagePatch)
   }
 
   revalidatePath('/admin/courses')
+  if (warnings.length > 0) {
+    return {
+      ok: true,
+      id: course.id,
+      error: `Course created, but ${warnings.join(' and ')}. You can retry from the edit screen.`,
+    }
+  }
   return { ok: true, id: course.id }
+}
+
+// Tiny helpers to keep the create/update bodies readable now that
+// there are two image slots.
+function readUploadedFile(formData: FormData, key: string): File | null {
+  const v = formData.get(key)
+  return v instanceof File && v.size > 0 ? v : null
+}
+
+function validateImageFile(
+  file: File | null,
+  label: 'Thumbnail' | 'Cover image',
+): string | null {
+  if (!file) return null
+  if (!THUMBNAIL_MIMES[file.type]) {
+    return `${label} must be a PNG, JPEG, or WebP image`
+  }
+  if (file.size > THUMBNAIL_MAX_BYTES) {
+    return `${label} must be 10 MB or smaller`
+  }
+  return null
 }
 
 // ===========================================================
@@ -212,24 +235,15 @@ export async function updateCourseAction(
     return { ok: false, fieldErrors }
   }
 
-  const file = formData.get('thumbnail')
-  const thumbnailFile = file instanceof File && file.size > 0 ? file : null
+  const thumbnailFile = readUploadedFile(formData, 'thumbnail')
+  const coverFile = readUploadedFile(formData, 'coverImage')
   const clearThumbnail = formData.get('clearThumbnail') === '1'
+  const clearCoverImage = formData.get('clearCoverImage') === '1'
 
-  if (thumbnailFile) {
-    if (!THUMBNAIL_MIMES[thumbnailFile.type]) {
-      return {
-        ok: false,
-        fieldErrors: { thumbnail: ['Thumbnail must be a PNG, JPEG, or WebP image'] },
-      }
-    }
-    if (thumbnailFile.size > THUMBNAIL_MAX_BYTES) {
-      return {
-        ok: false,
-        fieldErrors: { thumbnail: ['Thumbnail must be 10 MB or smaller'] },
-      }
-    }
-  }
+  const thumbnailErr = validateImageFile(thumbnailFile, 'Thumbnail')
+  if (thumbnailErr) return { ok: false, fieldErrors: { thumbnail: [thumbnailErr] } }
+  const coverErr = validateImageFile(coverFile, 'Cover image')
+  if (coverErr) return { ok: false, fieldErrors: { coverImage: [coverErr] } }
 
   // Apply primitive updates first.
   try {
@@ -239,31 +253,52 @@ export async function updateCourseAction(
     return { ok: false, error: 'Could not update course' }
   }
 
-  // Then handle the thumbnail side-effects.
+  // Then handle the image side-effects.
+  const warnings: string[] = []
+
   if (thumbnailFile) {
     try {
       const url = await uploadThumbnail(courseId, thumbnailFile)
       await courseService.update(courseId, { thumbnailUrl: url })
     } catch (err) {
       console.error('Thumbnail upload failed:', err)
-      revalidatePath('/admin/courses')
-      revalidatePath(`/admin/courses/${courseId}`)
-      return {
-        ok: true,
-        error: 'Course updated, but the thumbnail upload failed.',
-      }
+      warnings.push('thumbnail upload failed')
     }
   } else if (clearThumbnail) {
     try {
-      await deleteThumbnailFolder(courseId)
+      await deleteCourseImage(courseId, 'thumbnail')
       await courseService.update(courseId, { thumbnailUrl: '' })
     } catch (err) {
       console.error('Thumbnail delete failed:', err)
     }
   }
 
+  if (coverFile) {
+    try {
+      const url = await uploadCoverImage(courseId, coverFile)
+      await courseService.update(courseId, { coverImageUrl: url })
+    } catch (err) {
+      console.error('Cover image upload failed:', err)
+      warnings.push('cover image upload failed')
+    }
+  } else if (clearCoverImage) {
+    try {
+      await deleteCourseImage(courseId, 'cover')
+      await courseService.update(courseId, { coverImageUrl: '' })
+    } catch (err) {
+      console.error('Cover image delete failed:', err)
+    }
+  }
+
   revalidatePath('/admin/courses')
   revalidatePath(`/admin/courses/${courseId}`)
+
+  if (warnings.length > 0) {
+    return {
+      ok: true,
+      error: `Course updated, but ${warnings.join(' and ')}.`,
+    }
+  }
   return { ok: true }
 }
 
@@ -294,23 +329,31 @@ export async function softDeleteCourseAction(
 // STORAGE
 // ===========================================================
 
-async function uploadThumbnail(courseId: string, file: File): Promise<string> {
+type CourseImageKind = 'thumbnail' | 'cover'
+
+async function uploadCourseImage(
+  courseId: string,
+  file: File,
+  kind: CourseImageKind,
+): Promise<string> {
   const ext = THUMBNAIL_MIMES[file.type]
   if (!ext) throw new Error('Unsupported mime type')
 
   const supabase = createAdminClient()
   const folder = courseId
-  const path = `${folder}/thumbnail.${ext}`
+  const path = `${folder}/${kind}.${ext}`
 
-  // Remove stale files so changing format (jpg → png) doesn't leave
-  // both lying around.
+  // Remove stale files for THIS kind only (so changing format
+  // jpg → png doesn't leave both lying around, but the other kind's
+  // file stays intact).
   const { data: existing } = await supabase.storage
     .from(THUMBNAIL_BUCKET)
     .list(folder)
-  if (existing && existing.length > 0) {
-    await supabase.storage
-      .from(THUMBNAIL_BUCKET)
-      .remove(existing.map((f) => `${folder}/${f.name}`))
+  const stalePaths = (existing ?? [])
+    .filter((f) => f.name.startsWith(`${kind}.`))
+    .map((f) => `${folder}/${f.name}`)
+  if (stalePaths.length > 0) {
+    await supabase.storage.from(THUMBNAIL_BUCKET).remove(stalePaths)
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())
@@ -326,13 +369,29 @@ async function uploadThumbnail(courseId: string, file: File): Promise<string> {
   return data.publicUrl
 }
 
-async function deleteThumbnailFolder(courseId: string): Promise<void> {
+// Kept as a thin alias so existing call sites stay readable.
+async function uploadThumbnail(courseId: string, file: File): Promise<string> {
+  return uploadCourseImage(courseId, file, 'thumbnail')
+}
+
+async function uploadCoverImage(
+  courseId: string,
+  file: File,
+): Promise<string> {
+  return uploadCourseImage(courseId, file, 'cover')
+}
+
+async function deleteCourseImage(
+  courseId: string,
+  kind: CourseImageKind,
+): Promise<void> {
   const supabase = createAdminClient()
   const { data: existing } = await supabase.storage
     .from(THUMBNAIL_BUCKET)
     .list(courseId)
-  if (!existing || existing.length === 0) return
-  await supabase.storage
-    .from(THUMBNAIL_BUCKET)
-    .remove(existing.map((f) => `${courseId}/${f.name}`))
+  const paths = (existing ?? [])
+    .filter((f) => f.name.startsWith(`${kind}.`))
+    .map((f) => `${courseId}/${f.name}`)
+  if (paths.length === 0) return
+  await supabase.storage.from(THUMBNAIL_BUCKET).remove(paths)
 }

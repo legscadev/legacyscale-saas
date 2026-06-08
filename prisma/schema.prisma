@@ -127,6 +127,9 @@ model Course {
   title        String
   description  String?
   thumbnailUrl String?      @map("thumbnail_url")
+  // Wide 16:9 hero image used on the course detail page. Optional —
+  // detail pages fall back to a gradient placeholder when null.
+  coverImageUrl String?     @map("cover_image_url")
   status       CourseStatus @default(DRAFT)
   // When true, any signed-in MEMBER can open the course without an
   // Enrollment row. Paid courses leave this false and continue to
