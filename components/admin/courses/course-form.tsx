@@ -117,8 +117,28 @@ export function CourseForm({
 
   const statusOptions = mode === 'edit' ? EDIT_STATUSES : CREATE_STATUSES
 
+  // Matches the server-side cap. Validating client-side too means the
+  // user sees a useful "thumbnail too big" message instead of getting
+  // hit with "Network error" when the multipart body exceeds the
+  // Server Action / Vercel function body limit and the request dies
+  // before the action runs.
+  const THUMBNAIL_MAX_BYTES = 8 * 1024 * 1024
+
   function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null
+    if (file && file.size > THUMBNAIL_MAX_BYTES) {
+      const mb = (file.size / (1024 * 1024)).toFixed(1)
+      setFieldErrors((prev) => ({
+        ...prev,
+        thumbnail: [
+          `Thumbnail must be 8 MB or smaller (this one is ${mb} MB)`,
+        ],
+      }))
+      // Reset the input so a re-pick of the same too-big file still
+      // re-fires onChange.
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
     setThumbnailFile(file)
     setClearedThumbnail(false)
     if (fieldErrors.thumbnail) {
@@ -271,7 +291,7 @@ export function CourseForm({
               className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/80"
             />
             <p className="text-xs text-muted-foreground">
-              PNG, JPEG, or WebP. 5 MB max. 16:9 aspect rendered best.
+              PNG, JPEG, or WebP. 8 MB max. 16:9 aspect rendered best.
             </p>
             {(thumbnailFile || (hadExistingThumbnail && !clearedThumbnail)) && (
               <button

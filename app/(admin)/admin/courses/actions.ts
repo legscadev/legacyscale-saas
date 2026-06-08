@@ -19,7 +19,7 @@ import {
 } from '@/lib/validations/course'
 
 const THUMBNAIL_BUCKET = 'course-thumbnails'
-const THUMBNAIL_MAX_BYTES = 5 * 1024 * 1024 // 5 MB
+const THUMBNAIL_MAX_BYTES = 8 * 1024 * 1024 // 8 MB
 const THUMBNAIL_MIMES: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -138,7 +138,7 @@ export async function createCourseAction(
     if (thumbnailFile.size > THUMBNAIL_MAX_BYTES) {
       return {
         ok: false,
-        fieldErrors: { thumbnail: ['Thumbnail must be 5 MB or smaller'] },
+        fieldErrors: { thumbnail: ['Thumbnail must be 8 MB or smaller'] },
       }
     }
   }
@@ -226,7 +226,7 @@ export async function updateCourseAction(
     if (thumbnailFile.size > THUMBNAIL_MAX_BYTES) {
       return {
         ok: false,
-        fieldErrors: { thumbnail: ['Thumbnail must be 5 MB or smaller'] },
+        fieldErrors: { thumbnail: ['Thumbnail must be 8 MB or smaller'] },
       }
     }
   }
