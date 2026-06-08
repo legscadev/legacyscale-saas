@@ -357,12 +357,6 @@ export function CourseBuilder({
 
   const openLessonEditor = useCallback(
     (chapterId: string, lesson: LocalLesson) => {
-      // VIDEO (2.10/2.10b) and RESOURCE (2.13) editors are wired.
-      // QUIZ editor lands in a later ticket.
-      if (lesson.type === 'QUIZ') {
-        toast.info('Quiz lesson editor lands in a later ticket.')
-        return
-      }
       setEditingRef({ chapterId, lessonId: lesson.id })
     },
     [],

@@ -40,6 +40,7 @@ import type {
   LessonListItem,
   LessonResourceItem,
 } from '@/lib/services/chapter-service'
+import { QuizSection } from './quiz-section'
 
 interface LessonEditorDialogProps {
   open: boolean
@@ -145,6 +146,13 @@ export function LessonEditorDialog({
               ensureSaved={ensureSaved}
               onResourceAdded={onResourceAdded}
               onResourceRemoved={onResourceRemoved}
+            />
+          ) : null}
+          {lesson.type === 'QUIZ' ? (
+            <QuizSection
+              lessonId={lesson.id}
+              courseId={courseId}
+              ensureSaved={ensureSaved}
             />
           ) : null}
         </div>
