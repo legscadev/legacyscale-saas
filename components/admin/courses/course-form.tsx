@@ -226,27 +226,27 @@ export function CourseForm({
         )}
       </div>
 
-      <ImagePicker
-        label="Thumbnail"
-        inputId="course-thumbnail"
-        picker={thumbnailPicker}
-        aspectClass="aspect-[4/3]"
-        previewWidthClass="w-48"
-        helper="PNG, JPEG, or WebP. 10 MB max. 4:3 aspect rendered best — used on the course card."
-        disabled={submitting}
-        error={fieldErrors.thumbnail?.[0]}
-      />
+      <div className="grid gap-6 sm:grid-cols-2">
+        <ImagePicker
+          label="Thumbnail"
+          inputId="course-thumbnail"
+          picker={thumbnailPicker}
+          aspectClass="aspect-[4/3]"
+          helper="PNG, JPEG, or WebP. 10 MB max. 4:3 — used on the course card."
+          disabled={submitting}
+          error={fieldErrors.thumbnail?.[0]}
+        />
 
-      <ImagePicker
-        label="Cover image"
-        inputId="course-cover"
-        picker={coverPicker}
-        aspectClass="aspect-video"
-        previewWidthClass="w-72"
-        helper="PNG, JPEG, or WebP. 10 MB max. 16:9 aspect rendered best — hero on the course detail page."
-        disabled={submitting}
-        error={fieldErrors.coverImage?.[0]}
-      />
+        <ImagePicker
+          label="Cover image"
+          inputId="course-cover"
+          picker={coverPicker}
+          aspectClass="aspect-video"
+          helper="PNG, JPEG, or WebP. 10 MB max. 16:9 — hero on the course detail page."
+          disabled={submitting}
+          error={fieldErrors.coverImage?.[0]}
+        />
+      </div>
 
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-2">
@@ -526,7 +526,6 @@ interface ImagePickerProps {
   inputId: string
   picker: ImagePickerState
   aspectClass: string
-  previewWidthClass: string
   helper: string
   disabled?: boolean
   error?: string
@@ -537,7 +536,6 @@ function ImagePicker({
   inputId,
   picker,
   aspectClass,
-  previewWidthClass,
   helper,
   disabled,
   error,
@@ -546,12 +544,11 @@ function ImagePicker({
   return (
     <div className="space-y-2">
       <Label htmlFor={inputId}>{label}</Label>
-      <div className="flex items-start gap-4">
+      <div className="space-y-3">
         <div
           className={cn(
-            'grid shrink-0 place-items-center overflow-hidden rounded-md border border-dashed bg-muted',
+            'grid w-44 max-w-full place-items-center overflow-hidden rounded-md border border-dashed bg-muted',
             aspectClass,
-            previewWidthClass,
             error && 'border-destructive',
           )}
         >
@@ -566,7 +563,7 @@ function ImagePicker({
             <ImageIcon className="size-8 text-muted-foreground" />
           )}
         </div>
-        <div className="flex flex-1 flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <input
             ref={picker.inputRef}
             id={inputId}
