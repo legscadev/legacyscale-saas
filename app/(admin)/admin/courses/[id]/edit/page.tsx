@@ -35,6 +35,7 @@ export default async function EditCoursePage({ params }: EditCoursePageProps) {
           status: course.status,
           accessDays: course.accessDays,
           isFree: course.isFree,
+          audience: course.audience,
         }}
         onSubmit={updateCourseAction.bind(null, id)}
         destructiveAction={

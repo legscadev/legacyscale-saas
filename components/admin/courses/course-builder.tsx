@@ -660,9 +660,15 @@ export function CourseBuilder({
             <DetailRow label="Status">
               <StatusBadge status={course.status} />
             </DetailRow>
-            <DetailRow label="Access">
+            <DetailRow label="Audience">
               <span className="text-sm">
-                {course.isFree ? 'Free for all members' : 'Enrollment required'}
+                {course.audience === 'INTERNAL'
+                  ? 'Internal team only'
+                  : course.audience === 'BOTH'
+                    ? 'Members + internal team'
+                    : course.isFree
+                      ? 'Members · free for all'
+                      : 'Members · enrollment required'}
               </span>
             </DetailRow>
 

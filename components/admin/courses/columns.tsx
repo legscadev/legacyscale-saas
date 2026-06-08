@@ -79,7 +79,15 @@ export function getCourseColumns(
                 >
                   {c.title}
                 </Link>
-                {c.isFree ? (
+                {c.audience === 'INTERNAL' ? (
+                  <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                    Internal
+                  </span>
+                ) : c.audience === 'BOTH' ? (
+                  <span className="rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-700 dark:text-sky-400">
+                    Internal + Members
+                  </span>
+                ) : c.isFree ? (
                   <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
                     Free
                   </span>

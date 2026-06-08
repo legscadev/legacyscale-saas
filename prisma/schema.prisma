@@ -23,6 +23,16 @@ enum CourseStatus {
   ARCHIVED
 }
 
+/// Who can see a course beyond admins.
+/// - MEMBERS:  shown in the member catalog only (default).
+/// - INTERNAL: shown only to internal/admin team — hidden from members.
+/// - BOTH:     shown in the member catalog AND the internal section.
+enum CourseAudience {
+  MEMBERS
+  INTERNAL
+  BOTH
+}
+
 enum LessonType {
   VIDEO
   QUIZ
@@ -133,8 +143,12 @@ model Course {
   status       CourseStatus @default(DRAFT)
   // When true, any signed-in MEMBER can open the course without an
   // Enrollment row. Paid courses leave this false and continue to
-  // require enrollment for access.
-  isFree       Boolean      @default(false) @map("is_free")
+  // require enrollment for access. Only meaningful when audience
+  // includes MEMBERS (i.e. MEMBERS or BOTH).
+  isFree       Boolean        @default(false) @map("is_free")
+  // Who sees this course beyond admins. See CourseAudience for
+  // semantics. Defaults to MEMBERS for backwards compatibility.
+  audience     CourseAudience @default(MEMBERS)
   orderIndex   Int          @default(0) @map("order_index")
   accessDays   Int?         @map("access_days") // null = forever
   publishedAt  DateTime?    @map("published_at")

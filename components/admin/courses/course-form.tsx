@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Image as ImageIcon, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { CourseStatus } from '@prisma/client'
+import type { CourseAudience, CourseStatus } from '@prisma/client'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,6 +45,7 @@ export interface CourseFormDefaults {
   status?: CourseStatus
   accessDays?: number | null
   isFree?: boolean
+  audience?: CourseAudience
 }
 
 interface CourseFormProps {
@@ -90,6 +91,9 @@ export function CourseForm({
       : '30',
   )
   const [isFree, setIsFree] = useState<boolean>(defaults?.isFree ?? false)
+  const [audience, setAudience] = useState<CourseAudience>(
+    defaults?.audience ?? 'MEMBERS',
+  )
 
   const thumbnailPicker = useImagePicker({
     existingUrl: defaults?.thumbnailUrl,
@@ -142,6 +146,7 @@ export function CourseForm({
     if (description.trim()) formData.set('description', description.trim())
     formData.set('status', status)
     formData.set('isFree', isFree ? '1' : '0')
+    formData.set('audience', audience)
     if (!forever) formData.set('accessDays', accessDays)
     thumbnailPicker.appendTo(formData, {
       fileKey: 'thumbnail',
@@ -307,22 +312,59 @@ export function CourseForm({
         </div>
       </div>
 
-      <div className="rounded-lg border bg-muted/30 p-4">
-        <label className="flex items-start gap-3">
-          <Checkbox
-            checked={isFree}
-            onCheckedChange={(c) => setIsFree(Boolean(c))}
-            disabled={submitting}
-            className="mt-0.5"
-          />
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium">Free for all members</p>
-            <p className="text-xs text-muted-foreground">
-              Any signed-in member can open this course without an enrollment.
-              Leave off to keep it gated behind enrollment.
-            </p>
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <Label>Audience</Label>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <AudienceOption
+              value="MEMBERS"
+              current={audience}
+              disabled={submitting}
+              onSelect={setAudience}
+              title="Members"
+              body="Shown in the member catalog only."
+            />
+            <AudienceOption
+              value="INTERNAL"
+              current={audience}
+              disabled={submitting}
+              onSelect={setAudience}
+              title="Internal team"
+              body="Hidden from members. Admins only."
+            />
+            <AudienceOption
+              value="BOTH"
+              current={audience}
+              disabled={submitting}
+              onSelect={setAudience}
+              title="Both"
+              body="Shown to members and internal team."
+            />
           </div>
-        </label>
+        </div>
+
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <label className="flex items-start gap-3">
+            <Checkbox
+              checked={isFree}
+              onCheckedChange={(c) => setIsFree(Boolean(c))}
+              disabled={submitting || audience === 'INTERNAL'}
+              className="mt-0.5"
+            />
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">Free for all members</p>
+              <p className="text-xs text-muted-foreground">
+                Any signed-in member can open this course without an enrollment.
+                Leave off to keep it gated behind enrollment.
+                {audience === 'INTERNAL' ? (
+                  <span className="ml-1 italic">
+                    Not applicable — internal courses are hidden from members.
+                  </span>
+                ) : null}
+              </p>
+            </div>
+          </label>
+        </div>
       </div>
 
       {formError && (
@@ -360,6 +402,48 @@ export function CourseForm({
 
 // Re-exported so destructive actions can use the same icon set.
 export { Trash2 }
+
+// ===========================================================
+// Audience option — single tile in the three-way audience picker
+// ===========================================================
+
+interface AudienceOptionProps {
+  value: CourseAudience
+  current: CourseAudience
+  disabled?: boolean
+  onSelect: (next: CourseAudience) => void
+  title: string
+  body: string
+}
+
+function AudienceOption({
+  value,
+  current,
+  disabled,
+  onSelect,
+  title,
+  body,
+}: AudienceOptionProps) {
+  const active = current === value
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(value)}
+      disabled={disabled}
+      className={cn(
+        'flex w-full flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors',
+        active
+          ? 'border-primary bg-primary/5 ring-2 ring-primary/30'
+          : 'border-border bg-muted/30 hover:border-foreground/20 hover:bg-muted/50',
+        disabled && 'cursor-not-allowed opacity-60',
+      )}
+      aria-pressed={active}
+    >
+      <span className="text-sm font-medium">{title}</span>
+      <span className="text-xs text-muted-foreground">{body}</span>
+    </button>
+  )
+}
 
 // ===========================================================
 // Image picker — shared by Thumbnail (4:3) and Cover (16:9)

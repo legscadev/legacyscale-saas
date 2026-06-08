@@ -62,6 +62,7 @@ const courseListSelect = {
   coverImageUrl: true,
   status: true,
   isFree: true,
+  audience: true,
   accessDays: true,
   orderIndex: true,
   publishedAt: true,
@@ -162,6 +163,7 @@ async function createCourse(input: CreateCourseInput, createdBy: string) {
       coverImageUrl: input.coverImageUrl || null,
       status: input.status,
       isFree: input.isFree ?? false,
+      audience: input.audience ?? 'MEMBERS',
       accessDays: input.accessDays ?? null,
       orderIndex,
       createdBy,
@@ -187,6 +189,7 @@ async function updateCourse(id: string, input: UpdateCourseInput) {
   }
   if (input.accessDays !== undefined) data.accessDays = input.accessDays
   if (input.isFree !== undefined) data.isFree = input.isFree
+  if (input.audience !== undefined) data.audience = input.audience
   if (input.orderIndex !== undefined) data.orderIndex = input.orderIndex
 
   if (input.status !== undefined) {

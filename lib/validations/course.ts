@@ -6,11 +6,13 @@ import { idSchema, optionalUrlSchema } from './common'
 // ============================================
 
 export const courseStatusSchema = z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED'])
+export const courseAudienceSchema = z.enum(['MEMBERS', 'INTERNAL', 'BOTH'])
 export const lessonTypeSchema = z.enum(['VIDEO', 'QUIZ', 'RESOURCE'])
 export const lessonStatusSchema = z.enum(['DRAFT', 'PROCESSING', 'READY'])
 export const questionTypeSchema = z.enum(['MULTIPLE_CHOICE', 'TRUE_FALSE'])
 
 export type CourseStatus = z.infer<typeof courseStatusSchema>
+export type CourseAudience = z.infer<typeof courseAudienceSchema>
 export type LessonType = z.infer<typeof lessonTypeSchema>
 export type LessonStatus = z.infer<typeof lessonStatusSchema>
 export type QuestionType = z.infer<typeof questionTypeSchema>
@@ -37,6 +39,7 @@ export const createCourseSchema = z.object({
   status: courseStatusSchema.default('DRAFT'),
   accessDays: accessDaysSchema.default(null),
   isFree: z.boolean().default(false),
+  audience: courseAudienceSchema.default('MEMBERS'),
 })
 
 export const updateCourseSchema = z
@@ -48,6 +51,7 @@ export const updateCourseSchema = z
     status: courseStatusSchema.optional(),
     accessDays: accessDaysSchema.optional(),
     isFree: z.boolean().optional(),
+    audience: courseAudienceSchema.optional(),
     orderIndex: z.number().int().min(0).optional(),
   })
   .refine(
