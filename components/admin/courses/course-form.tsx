@@ -187,67 +187,78 @@ export function CourseForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-      <div className="space-y-2">
-        <Label htmlFor="course-title">
-          Title
-          <RequiredMark />
-        </Label>
-        <Input
-          id="course-title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. The 7-Figure Agency Program"
-          disabled={submitting}
-          aria-invalid={!!fieldErrors.title}
-          aria-required="true"
-          autoFocus
-        />
-        {fieldErrors.title?.[0] && (
-          <p className="text-xs text-destructive" role="alert">
-            {fieldErrors.title[0]}
-          </p>
-        )}
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-8" noValidate>
+      <FormSection title="Basics" description="What members will see first.">
+        <div className="space-y-2">
+          <Label htmlFor="course-title">
+            Title
+            <RequiredMark />
+          </Label>
+          <Input
+            id="course-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. The 7-Figure Agency Program"
+            disabled={submitting}
+            aria-invalid={!!fieldErrors.title}
+            aria-required="true"
+            autoFocus
+          />
+          {fieldErrors.title?.[0] && (
+            <p className="text-xs text-destructive" role="alert">
+              {fieldErrors.title[0]}
+            </p>
+          )}
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="course-description">Description</Label>
-        <RichTextEditor
-          id="course-description"
-          value={description}
-          onChange={setDescription}
-          placeholder="A short summary of what members will learn."
-          disabled={submitting}
-        />
-        {fieldErrors.description?.[0] && (
-          <p className="text-xs text-destructive" role="alert">
-            {fieldErrors.description[0]}
-          </p>
-        )}
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor="course-description">Description</Label>
+          <RichTextEditor
+            id="course-description"
+            value={description}
+            onChange={setDescription}
+            placeholder="A short summary of what members will learn."
+            disabled={submitting}
+          />
+          {fieldErrors.description?.[0] && (
+            <p className="text-xs text-destructive" role="alert">
+              {fieldErrors.description[0]}
+            </p>
+          )}
+        </div>
+      </FormSection>
 
-      <div className="grid gap-6 sm:grid-cols-2">
-        <ImagePicker
-          label="Thumbnail"
-          inputId="course-thumbnail"
-          picker={thumbnailPicker}
-          aspectClass="aspect-[4/3]"
-          helper="PNG, JPEG, or WebP. 10 MB max. 4:3 — used on the course card."
-          disabled={submitting}
-          error={fieldErrors.thumbnail?.[0]}
-        />
+      <FormSection
+        title="Media"
+        description="Square thumbnail for the course card, wide hero for the detail page."
+      >
+        <div className="grid gap-6 sm:grid-cols-2">
+          <ImagePicker
+            label="Thumbnail"
+            inputId="course-thumbnail"
+            picker={thumbnailPicker}
+            aspectClass="aspect-[4/3]"
+            helper="PNG, JPEG, or WebP. 10 MB max. 4:3 — used on the course card."
+            disabled={submitting}
+            error={fieldErrors.thumbnail?.[0]}
+          />
 
-        <ImagePicker
-          label="Cover image"
-          inputId="course-cover"
-          picker={coverPicker}
-          aspectClass="aspect-video"
-          helper="PNG, JPEG, or WebP. 10 MB max. 16:9 — hero on the course detail page."
-          disabled={submitting}
-          error={fieldErrors.coverImage?.[0]}
-        />
-      </div>
+          <ImagePicker
+            label="Cover image"
+            inputId="course-cover"
+            picker={coverPicker}
+            aspectClass="aspect-video"
+            helper="PNG, JPEG, or WebP. 10 MB max. 16:9 — hero on the course detail page."
+            disabled={submitting}
+            error={fieldErrors.coverImage?.[0]}
+          />
+        </div>
+      </FormSection>
 
+      <FormSection
+        title="Access & visibility"
+        description="Who can see this course and on what terms."
+      >
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="course-status">Status</Label>
@@ -366,6 +377,7 @@ export function CourseForm({
           </label>
         </div>
       </div>
+      </FormSection>
 
       {formError && (
         <p className="text-sm text-destructive" role="alert">
@@ -402,6 +414,34 @@ export function CourseForm({
 
 // Re-exported so destructive actions can use the same icon set.
 export { Trash2 }
+
+// ===========================================================
+// Form section — labeled group with a divider so the long form
+// scans as three areas (Basics / Media / Access & visibility)
+// instead of one flat list.
+// ===========================================================
+
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="grid gap-4 border-t pt-6 first:border-t-0 first:pt-0 sm:grid-cols-[12rem_1fr]">
+      <header className="space-y-1">
+        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+        {description ? (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        ) : null}
+      </header>
+      <div className="space-y-6">{children}</div>
+    </section>
+  )
+}
 
 // ===========================================================
 // Audience option — single tile in the three-way audience picker
