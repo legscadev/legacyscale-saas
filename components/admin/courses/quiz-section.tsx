@@ -1,7 +1,32 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { GraduationCap, Loader2, Plus, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
+  Eye,
+  GraduationCap,
+  GripVertical,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -10,11 +35,14 @@ import {
   createQuizQuestionAction,
   deleteQuizQuestionAction,
   listQuizQuestionsAction,
+  reorderQuizQuestionsAction,
+  updateQuizQuestionAction,
 } from '@/app/(admin)/admin/courses/[id]/quiz-actions'
 import type { QuizQuestionItem } from '@/lib/services/quiz-service'
 import type { CreateQuestionInput } from '@/lib/validations/quiz'
 
 import { QuizQuestionForm } from './quiz-question-form'
+import { QuizPreviewDialog } from './quiz-preview-dialog'
 
 interface QuizSectionProps {
   lessonId: string
@@ -34,9 +62,18 @@ export function QuizSection({
   const [questions, setQuestions] = useState<QuizQuestionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState<AddingType>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   // Track which question id is being deleted so its row shows a spinner.
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
 
   // Fetch the existing questions on mount. We refetch when lessonId
   // changes — that happens after ensureSaved() swaps a tempId for the
@@ -93,6 +130,27 @@ export function QuizSection({
     [courseId, ensureSaved],
   )
 
+  const handleEdit = useCallback(
+    async (questionId: string, input: CreateQuestionInput) => {
+      setSubmitting(true)
+      try {
+        const result = await updateQuizQuestionAction(courseId, questionId, input)
+        if (!result.ok || !result.question) {
+          toast.error(result.error ?? 'Could not save question')
+          return
+        }
+        setQuestions((prev) =>
+          prev.map((q) => (q.id === questionId ? result.question! : q)),
+        )
+        setEditingId(null)
+        toast.success('Question updated')
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [courseId],
+  )
+
   const handleDelete = useCallback(
     async (questionId: string) => {
       setDeletingId(questionId)
@@ -109,15 +167,59 @@ export function QuizSection({
     [courseId],
   )
 
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      // Reorder locally first for snappy UX, then sync with the server.
+      // On failure, revert.
+      const oldIndex = questions.findIndex((q) => q.id === active.id)
+      const newIndex = questions.findIndex((q) => q.id === over.id)
+      if (oldIndex < 0 || newIndex < 0) return
+
+      const previous = questions
+      const next = arrayMove(questions, oldIndex, newIndex)
+      setQuestions(next)
+      void (async () => {
+        const result = await reorderQuizQuestionsAction(
+          courseId,
+          lessonId,
+          next.map((q) => q.id),
+        )
+        if (!result.ok) {
+          toast.error(result.error ?? 'Could not reorder questions')
+          setQuestions(previous)
+        }
+      })()
+    },
+    [courseId, lessonId, questions],
+  )
+
+  const sortableIds = useMemo(() => questions.map((q) => q.id), [questions])
+
   return (
     <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        <GraduationCap className="size-3.5" />
-        Quiz questions
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <GraduationCap className="size-3.5" />
+          Quiz questions
+          {questions.length > 0 ? (
+            <span className="text-muted-foreground/60">
+              · {questions.length}
+            </span>
+          ) : null}
+        </div>
         {questions.length > 0 ? (
-          <span className="text-muted-foreground/60">
-            · {questions.length}
-          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setPreviewOpen(true)}
+          >
+            <Eye />
+            Preview
+          </Button>
         ) : null}
       </div>
 
@@ -131,18 +233,44 @@ export function QuizSection({
           No questions yet.
         </p>
       ) : (
-        <ul className="space-y-1.5">
-          {questions.map((q, i) => (
-            <li key={q.id}>
-              <QuestionRow
-                index={i + 1}
-                question={q}
-                deleting={deletingId === q.id}
-                onDelete={() => void handleDelete(q.id)}
-              />
-            </li>
-          ))}
-        </ul>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={sortableIds}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-1.5">
+              {questions.map((q, i) =>
+                editingId === q.id ? (
+                  <li key={q.id}>
+                    <QuizQuestionForm
+                      initial={q}
+                      submitting={submitting}
+                      onCancel={() => setEditingId(null)}
+                      onSubmit={(input) => void handleEdit(q.id, input)}
+                    />
+                  </li>
+                ) : (
+                  <li key={q.id}>
+                    <SortableQuestionRow
+                      index={i + 1}
+                      question={q}
+                      deleting={deletingId === q.id}
+                      onEdit={() => {
+                        setAdding(null)
+                        setEditingId(q.id)
+                      }}
+                      onDelete={() => void handleDelete(q.id)}
+                    />
+                  </li>
+                ),
+              )}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
 
       {adding ? (
@@ -176,23 +304,60 @@ export function QuizSection({
           </Button>
         </div>
       )}
+
+      <QuizPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        questions={questions}
+      />
     </div>
   )
 }
 
-interface QuestionRowProps {
+interface SortableQuestionRowProps {
   index: number
   question: QuizQuestionItem
   deleting: boolean
+  onEdit: () => void
   onDelete: () => void
 }
 
-function QuestionRow({ index, question, deleting, onDelete }: QuestionRowProps) {
+function SortableQuestionRow({
+  index,
+  question,
+  deleting,
+  onEdit,
+  onDelete,
+}: SortableQuestionRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: question.id })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
   const options = (question.options as string[]) ?? []
   const correct = options[question.correctIndex] ?? '—'
   return (
-    <div className="rounded-md border bg-background p-3">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'rounded-md border bg-background p-3',
+        isDragging && 'shadow-md',
+      )}
+    >
       <div className="flex items-start gap-3">
+        <button
+          type="button"
+          aria-label="Drag question to reorder"
+          {...attributes}
+          {...listeners}
+          className="mt-0.5 cursor-grab touch-none rounded p-0.5 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing"
+        >
+          <GripVertical className="size-3.5" />
+        </button>
         <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums text-muted-foreground">
           {index}
         </span>
@@ -206,6 +371,15 @@ function QuestionRow({ index, question, deleting, onDelete }: QuestionRowProps) 
             </span>
           </p>
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Edit question"
+          onClick={onEdit}
+        >
+          <Pencil className="size-3.5" />
+        </Button>
         <Button
           type="button"
           variant="ghost"
