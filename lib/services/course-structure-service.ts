@@ -179,6 +179,15 @@ async function syncCourseStructure(
     }
 
     return { chapterMappings, lessonMappings }
+  }, {
+    // Default Prisma interactive-transaction timeouts (5s wait + 5s
+    // execute) are too tight on the Supabase transaction-mode pooler
+    // for big course payloads — a real-world save of a course with
+    // ~10+ chapters/lessons routinely takes 5–6s and trips P2028.
+    // 30s gives plenty of headroom while still bounding any runaway
+    // transaction.
+    maxWait: 10_000,
+    timeout: 30_000,
   })
 }
 
