@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { emailSchema, nameSchema } from './common'
+import { emailSchema, nameSchema, passwordSchema } from './common'
 import { userRoleSchema } from './user'
 
 /**
@@ -25,6 +25,8 @@ export const adminUpdateMemberSchema = z
     name: nameSchema.optional(),
     role: userRoleSchema.optional(),
     isActive: z.boolean().optional(),
+    /** New password — bypasses the user's own reset flow. Min 4 chars. */
+    password: passwordSchema.optional(),
     /** true: soft-delete (sets deletedAt). false: restore from archive. */
     archive: z.boolean().optional(),
   })

@@ -25,11 +25,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const validation = await validateBody(request, adminUpdateMemberSchema)
   if (validation.error) return validation.error
 
-  const { name, role, isActive, archive } = validation.data
+  const { name, role, isActive, password, archive } = validation.data
 
   // Self-modification guards. Admins can update their own name freely,
   // but they can't change their own role (could lock themselves out of
-  // admin), deactivate themselves, or archive themselves.
+  // admin), deactivate themselves, or archive themselves. Password
+  // change on self is fine — same as using the profile flow.
   if (id === admin.id) {
     if (role !== undefined && role !== admin.role) {
       return errorResponse("You can't change your own role", 400)
@@ -89,6 +90,31 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         })
       } catch (err) {
         console.error('Name mirror to auth metadata failed:', err)
+      }
+    }
+
+    // Admin-driven password reset. Goes straight through the auth
+    // admin API — bypasses the user's own reset-email flow. We only
+    // attempt this when the member has an authId (anyone seeded via
+    // our normal flow always does).
+    if (password !== undefined && user.authId) {
+      try {
+        const supabase = createAdminClient()
+        const { error: pwErr } =
+          await supabase.auth.admin.updateUserById(user.authId, { password })
+        if (pwErr) {
+          console.error('Member password reset failed:', pwErr.message)
+          return errorResponse(
+            `Member fields updated, but password change failed: ${pwErr.message}`,
+            500,
+          )
+        }
+      } catch (err) {
+        console.error('Member password reset threw:', err)
+        return errorResponse(
+          'Member fields updated, but password change threw an error.',
+          500,
+        )
       }
     }
 
