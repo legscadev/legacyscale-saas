@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Bell, HelpCircle, Menu, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -108,7 +109,7 @@ export function TopBar({ onMenuClick, user, profileHref, role }: TopBarProps) {
           )}
         >
           <Search className="size-4 shrink-0" />
-          <span className="flex-1 truncate text-left">Search…</span>
+          <span className="flex-1 truncate text-left">Search or jump to…</span>
           <kbd className="hidden h-5 items-center gap-0.5 rounded border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground sm:flex">
             ⌘K
           </kbd>
@@ -152,18 +153,19 @@ export function TopBar({ onMenuClick, user, profileHref, role }: TopBarProps) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Notifications"
+                  aria-label="Announcements"
                   className="relative"
+                  render={
+                    <Link
+                      href={role === 'admin' ? '/admin/announcements' : '/announcements'}
+                    />
+                  }
                 >
                   <Bell />
-                  <span
-                    aria-hidden
-                    className="absolute right-1 top-1 size-1.5 rounded-full bg-brand-500 ring-2 ring-background"
-                  />
                 </Button>
               }
             />
-            <TooltipContent side="bottom">Notifications</TooltipContent>
+            <TooltipContent side="bottom">Announcements</TooltipContent>
           </Tooltip>
 
           <ThemeToggle />

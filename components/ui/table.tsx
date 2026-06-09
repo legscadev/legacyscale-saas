@@ -24,10 +24,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
     <thead
       data-slot="table-header"
       className={cn(
-        // Sticky to the page scroll. `top-14` accounts for the 56px
-        // TopBar height so headers don't slide under it.
-        "sticky top-14 z-10 bg-muted/60 backdrop-blur supports-[backdrop-filter]:bg-muted/40",
-        "[&_tr]:border-b [&_th]:text-[11px] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-muted-foreground",
+        "bg-muted/40 [&_tr]:border-b [&_th]:text-[11px] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-muted-foreground",
         className,
       )}
       {...props}
