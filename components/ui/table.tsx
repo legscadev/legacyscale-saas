@@ -23,7 +23,13 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn(
+        // Sticky to the page scroll. `top-14` accounts for the 56px
+        // TopBar height so headers don't slide under it.
+        "sticky top-14 z-10 bg-muted/60 backdrop-blur supports-[backdrop-filter]:bg-muted/40",
+        "[&_tr]:border-b [&_th]:text-[11px] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-muted-foreground",
+        className,
+      )}
       {...props}
     />
   )
@@ -57,7 +63,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        "border-b transition-colors hover:bg-brand-50/60 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-brand-50 dark:hover:bg-brand-950/30 dark:data-[state=selected]:bg-brand-950/40",
         className
       )}
       {...props}

@@ -28,12 +28,16 @@ const catalogSelect = {
   isFree: true,
   accessDays: true,
   publishedAt: true,
-  // Counts for the card UI.
+  // Counts + per-lesson duration so the card can show "X lessons · Yh Zm"
+  // without a second roundtrip.
   _count: { select: { chapters: true } },
   chapters: {
     where: { deletedAt: null },
     select: {
-      _count: { select: { lessons: true } },
+      lessons: {
+        where: { deletedAt: null },
+        select: { durationSeconds: true },
+      },
     },
   },
 } as const
@@ -60,6 +64,8 @@ export async function listCatalogForMember(userId: string) {
         courseId: true,
         status: true,
         progressPercent: true,
+        enrolledAt: true,
+        lastAccessedAt: true,
       },
     }),
     prisma.lessonProgress.groupBy({
@@ -102,8 +108,10 @@ export async function listCatalogForMember(userId: string) {
 
   return rows.map((row) => {
     const { chapters, _count, ...rest } = row
-    const lessonsTotal = chapters.reduce(
-      (sum, c) => sum + c._count.lessons,
+    const allLessons = chapters.flatMap((c) => c.lessons)
+    const lessonsTotal = allLessons.length
+    const durationSeconds = allLessons.reduce(
+      (sum, l) => sum + (l.durationSeconds ?? 0),
       0,
     )
     const enrollment = enrollmentByCourse.get(row.id) ?? null
@@ -112,6 +120,7 @@ export async function listCatalogForMember(userId: string) {
       ...rest,
       chaptersCount: _count.chapters,
       lessonsCount: lessonsTotal,
+      durationSeconds,
       enrollment,
       progress:
         lessonsTotal > 0

@@ -105,6 +105,46 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: var(--font-sans);
+  /* Modern OpenType features for premium SaaS feel:
+     - ss01: alternate stylistic set when supported
+     - cv11: tabular-style figures in headings
+     Apply at body level; numbers feel cleaner everywhere. */
+  font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1, "cv11" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Headings track tighter — premium SaaS feel. */
+h1, h2, h3 {
+  letter-spacing: -0.015em;
+}
+
+/* Skeleton shimmer keyframes (used by components/ui/skeleton.tsx). */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Slow ambient breathing for decorative glow blobs in empty states
+   and hero atmospherics — barely perceptible, just enough to feel alive. */
+@keyframes breathe {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.05);
+  }
+}
+
+.animate-breathe {
+  animation: breathe 6s ease-in-out infinite;
 }
 
 /* Custom scrollbar for dark theme */

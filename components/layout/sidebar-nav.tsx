@@ -58,8 +58,8 @@ export function SidebarNav({
                     ? 'size-8 justify-center'
                     : 'gap-2.5 px-2',
                   active
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground',
                 )}
               >
                 <Icon

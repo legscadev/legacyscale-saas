@@ -9,7 +9,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -44,6 +44,13 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData) => void
   /** Used by TanStack to stably identify rows for selection. */
   getRowId?: (row: TData) => string
+  /** Render-prop for the bulk-action bar that appears when rows are
+   *  selected. Receives the selected row IDs + a `clear` helper. */
+  bulkActions?: (state: {
+    selectedIds: string[]
+    selectedCount: number
+    clear: () => void
+  }) => React.ReactNode
 }
 
 export function DataTable<TData, TValue>({
@@ -60,6 +67,7 @@ export function DataTable<TData, TValue>({
   onRowSelectionChange,
   onRowClick,
   getRowId,
+  bulkActions,
 }: DataTableProps<TData, TValue>) {
   const table = useReactTable({
     data,
@@ -82,8 +90,13 @@ export function DataTable<TData, TValue>({
   const from = (page - 1) * pageSize + 1
   const to = Math.min(page * pageSize, total)
 
+  const selectedIds = rowSelection ? Object.keys(rowSelection).filter((k) => rowSelection[k]) : []
+  const selectedCount = selectedIds.length
+  const showBulkBar = !!bulkActions && selectedCount > 0
+  const clearSelection = () => onRowSelectionChange?.({})
+
   return (
-    <div className="space-y-3">
+    <div className="relative space-y-3">
       <div className="overflow-hidden rounded-xl ring-1 ring-foreground/10 bg-card">
         <Table>
           <TableHeader>
@@ -158,6 +171,36 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
+
+      {/* Sticky bulk-action bar — animates in when selection is non-empty. */}
+      {showBulkBar ? (
+        <div className="pointer-events-none sticky bottom-4 z-20 flex justify-center">
+          <div
+            role="toolbar"
+            aria-label="Bulk actions"
+            className="pointer-events-auto flex items-center gap-2 rounded-full border bg-foreground/95 px-2 py-1.5 text-background shadow-2xl shadow-foreground/20 backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-200"
+          >
+            <span className="px-3 text-sm font-medium tabular-nums">
+              {selectedCount} selected
+            </span>
+            <div className="h-5 w-px bg-background/20" />
+            {bulkActions!({
+              selectedIds,
+              selectedCount,
+              clear: clearSelection,
+            })}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={clearSelection}
+              aria-label="Clear selection"
+              className="text-background/70 hover:bg-background/10 hover:text-background"
+            >
+              <X />
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {pageCount > 1 ? (
         <div className="flex items-center justify-between text-sm text-muted-foreground">

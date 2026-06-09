@@ -48,3 +48,17 @@ export async function startCourseAction(
 
   redirect(`/courses/${courseId}/lessons/${next.id}`)
 }
+
+/**
+ * Form-action wrapper around startCourseAction so the "Resume" CTA on
+ * the catalog hero can call it directly without a client component.
+ * On success, startCourseAction throws via redirect; on failure we
+ * land the user on the course detail page where the inline UI can
+ * surface a more helpful state.
+ */
+export async function resumeCourseAction(formData: FormData): Promise<void> {
+  const courseId = String(formData.get('courseId') ?? '')
+  if (!courseId) redirect('/courses')
+  await startCourseAction(courseId)
+  redirect(`/courses/${courseId}`)
+}
