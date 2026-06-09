@@ -54,22 +54,23 @@ function AppShellInner({
       className="min-h-screen bg-background"
       data-state={collapsed ? 'collapsed' : 'expanded'}
     >
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — always dark (Vercel pattern). */}
       <aside
+        data-sidebar="dark"
         className={cn(
-          'fixed inset-y-0 left-0 z-40 hidden flex-col border-r bg-muted transition-[width] duration-200 ease-in-out lg:flex',
+          'fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-white/[0.06] bg-neutral-950 text-neutral-300 transition-[width] duration-200 ease-in-out lg:flex',
           collapsed ? 'w-14' : 'w-64',
         )}
       >
         <div
           className={cn(
-            'flex h-14 items-center border-b',
+            'flex h-14 items-center',
             collapsed ? 'justify-center px-2' : 'px-4',
           )}
         >
           <Link
             href={homeHref}
-            className="flex items-center"
+            className="flex items-center text-white"
             aria-label={context}
           >
             <BrandMark context={context} compact={collapsed} />
@@ -83,7 +84,6 @@ function AppShellInner({
             classic Notion / Linear / Vercel pattern. */}
         <div
           className={cn(
-            'border-t bg-muted/40 backdrop-blur',
             collapsed ? 'flex justify-center p-2' : 'p-2',
           )}
         >
@@ -103,14 +103,20 @@ function AppShellInner({
             className="absolute inset-0 bg-black/40 backdrop-blur-xs"
             onClick={() => setDrawerOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 flex-col border-r bg-muted animate-in slide-in-from-left">
-            <div className="flex h-14 items-center justify-between border-b px-4">
-              <BrandMark context={context} />
+          <div
+            data-sidebar="dark"
+            className="absolute inset-y-0 left-0 flex w-72 flex-col border-r border-white/[0.06] bg-neutral-950 text-neutral-300 animate-in slide-in-from-left"
+          >
+            <div className="flex h-14 items-center justify-between px-4">
+              <span className="text-white">
+                <BrandMark context={context} />
+              </span>
               <Button
                 variant="ghost"
                 size="icon-sm"
                 onClick={() => setDrawerOpen(false)}
                 aria-label="Close navigation"
+                className="text-neutral-300 hover:bg-white/10 hover:text-white"
               >
                 <X />
               </Button>
@@ -121,7 +127,7 @@ function AppShellInner({
                 onNavigate={() => setDrawerOpen(false)}
               />
             </div>
-            <div className="border-t bg-muted/40 p-2">
+            <div className="p-2">
               <UserMenu
                 user={user}
                 profileHref={profileHref}

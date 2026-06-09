@@ -6,14 +6,15 @@ type CardVariant = "default" | "raised" | "hero" | "flat"
 type CardSize = "default" | "sm"
 
 const variantClass: Record<CardVariant, string> = {
-  // Standard card — subtle ring, no shadow.
-  default: "bg-card ring-1 ring-foreground/10",
-  // Raised card — adds shadow + lift; for primary surfaces.
+  // Standard card — tight, barely-there shadow.
+  default:
+    "bg-card ring-1 ring-foreground/[0.07] shadow-xs shadow-foreground/[0.015] dark:shadow-black/10",
+  // Raised card — tight + slightly stronger; for primary surfaces.
   raised:
-    "bg-card ring-1 ring-foreground/10 shadow-sm shadow-foreground/[0.03] transition-shadow hover:shadow-md hover:shadow-foreground/5",
-  // Hero card — gradient background, no border, large shadow; for top-of-page emphasis.
+    "bg-card ring-1 ring-foreground/[0.07] shadow-sm shadow-foreground/[0.02] dark:shadow-black/15 transition-shadow hover:shadow-md hover:shadow-foreground/[0.03]",
+  // Hero card — tight medium shadow; top-of-page emphasis.
   hero:
-    "bg-gradient-to-br from-card via-card to-muted/40 ring-1 ring-foreground/5 shadow-lg shadow-foreground/[0.04]",
+    "bg-gradient-to-br from-card via-card to-muted/40 ring-1 ring-foreground/5 shadow-md shadow-foreground/[0.025] dark:shadow-black/20",
   // Flat — no ring, no shadow; for nested containers.
   flat: "bg-card",
 }

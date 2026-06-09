@@ -56,7 +56,7 @@ export function UserMenu({
               'text-left transition-colors',
               compact
                 ? 'rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background hover:opacity-90'
-                : 'flex w-full items-center gap-2.5 rounded-lg p-1.5 hover:bg-muted/60',
+                : 'flex w-full items-center gap-2.5 rounded-lg p-1.5 text-neutral-200 hover:bg-white/[0.06]',
             )}
             aria-label={compact ? `Account menu — ${displayName}` : undefined}
           />
@@ -73,15 +73,19 @@ export function UserMenu({
               {user.avatarUrl ? (
                 <AvatarImage src={user.avatarUrl} alt="" />
               ) : null}
-              <AvatarFallback>{initials}</AvatarFallback>
+              <AvatarFallback className="bg-neutral-800 text-neutral-100">
+                {initials}
+              </AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-1 flex-col leading-tight">
-              <span className="truncate text-sm font-medium">{displayName}</span>
-              <span className="truncate text-xs text-muted-foreground">
+              <span className="truncate text-sm font-medium text-white">
+                {displayName}
+              </span>
+              <span className="truncate text-xs text-neutral-400">
                 {user.email}
               </span>
             </div>
-            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+            <ChevronsUpDown className="size-4 shrink-0 text-neutral-500" />
           </>
         )}
       </DropdownMenuTrigger>

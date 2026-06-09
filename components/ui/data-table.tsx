@@ -97,7 +97,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="relative space-y-3">
-      <div className="overflow-hidden rounded-xl ring-1 ring-foreground/10 bg-card">
+      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/[0.07] shadow-sm shadow-foreground/[0.02] dark:shadow-black/15">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((group) => (

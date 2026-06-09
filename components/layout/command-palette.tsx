@@ -92,7 +92,7 @@ export function CommandPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search pages, courses, members…"
+            placeholder="Search pages…"
             aria-label="Search"
             className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
