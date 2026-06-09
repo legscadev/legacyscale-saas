@@ -42,13 +42,20 @@ export default async function UserDashboardPage() {
           title="Courses Enrolled"
           value={enrolledCount}
           icon={GraduationCap}
+          tone="brand"
         />
         <StatCard
           title="Lessons Completed"
           value={lessonsCompleted}
           icon={BookOpen}
+          tone="success"
         />
-        <StatCard title="Notes Taken" value={notesCount} icon={FileText} />
+        <StatCard
+          title="Notes Taken"
+          value={notesCount}
+          icon={FileText}
+          tone="info"
+        />
       </div>
 
       <Card>

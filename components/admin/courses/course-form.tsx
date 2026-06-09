@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { FormSection } from '@/components/shared'
 
 const CREATE_STATUSES: { value: CourseStatus; label: string }[] = [
   { value: 'DRAFT', label: 'Draft' },
@@ -414,34 +415,6 @@ export function CourseForm({
 
 // Re-exported so destructive actions can use the same icon set.
 export { Trash2 }
-
-// ===========================================================
-// Form section — labeled group with a divider so the long form
-// scans as three areas (Basics / Media / Access & visibility)
-// instead of one flat list.
-// ===========================================================
-
-function FormSection({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description?: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="grid gap-4 border-t pt-6 first:border-t-0 first:pt-0 sm:grid-cols-[12rem_1fr]">
-      <header className="space-y-1">
-        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-        {description ? (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        ) : null}
-      </header>
-      <div className="space-y-6">{children}</div>
-    </section>
-  )
-}
 
 // ===========================================================
 // Audience option — single tile in the three-way audience picker

@@ -10,7 +10,7 @@ import { BrandMark } from './brand-mark'
 import { SidebarNav } from './sidebar-nav'
 import { SidebarProvider, useSidebar } from './sidebar-context'
 import { TopBar } from './top-bar'
-import { type ShellUser } from './user-menu'
+import { UserMenu, type ShellUser } from './user-menu'
 
 interface AppShellProps {
   role: 'admin' | 'member'
@@ -57,7 +57,7 @@ function AppShellInner({
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 hidden flex-col border-r bg-card/30 transition-[width] duration-200 ease-in-out lg:flex',
+          'fixed inset-y-0 left-0 z-40 hidden flex-col border-r bg-muted transition-[width] duration-200 ease-in-out lg:flex',
           collapsed ? 'w-14' : 'w-64',
         )}
       >
@@ -78,6 +78,21 @@ function AppShellInner({
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-3">
           <SidebarNav sections={sections} collapsed={collapsed} />
         </div>
+        {/* Sidebar user mini-card — collapses to avatar-only when the
+            sidebar is collapsed. Sits flush at the bottom for the
+            classic Notion / Linear / Vercel pattern. */}
+        <div
+          className={cn(
+            'border-t bg-muted/40 backdrop-blur',
+            collapsed ? 'flex justify-center p-2' : 'p-2',
+          )}
+        >
+          <UserMenu
+            user={user}
+            profileHref={profileHref}
+            variant={collapsed ? 'topbar' : 'sidebar'}
+          />
+        </div>
       </aside>
 
       {/* Mobile drawer */}
@@ -88,7 +103,7 @@ function AppShellInner({
             className="absolute inset-0 bg-black/40 backdrop-blur-xs"
             onClick={() => setDrawerOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 flex-col border-r bg-card animate-in slide-in-from-left">
+          <div className="absolute inset-y-0 left-0 flex w-72 flex-col border-r bg-muted animate-in slide-in-from-left">
             <div className="flex h-14 items-center justify-between border-b px-4">
               <BrandMark context={context} />
               <Button
@@ -106,6 +121,13 @@ function AppShellInner({
                 onNavigate={() => setDrawerOpen(false)}
               />
             </div>
+            <div className="border-t bg-muted/40 p-2">
+              <UserMenu
+                user={user}
+                profileHref={profileHref}
+                variant="sidebar"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -121,6 +143,7 @@ function AppShellInner({
           onMenuClick={() => setDrawerOpen(true)}
           user={user}
           profileHref={profileHref}
+          role={role}
         />
         <main className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">{children}</div>

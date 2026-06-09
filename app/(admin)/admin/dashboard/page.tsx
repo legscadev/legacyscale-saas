@@ -124,22 +124,25 @@ export default async function AdminDashboardPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Members" value={members} icon={Users} />
+        <StatCard title="Members" value={members} icon={Users} tone="brand" />
         <StatCard
           title="Courses"
           value={courses}
           icon={GraduationCap}
           description={`${published} published`}
+          tone="success"
         />
         <StatCard
           title="Active enrollments"
           value={activeEnrollments}
           icon={Ticket}
+          tone="info"
         />
         <StatCard
           title="Announcements"
           value={announcements}
           icon={Megaphone}
+          tone="violet"
         />
       </div>
 

@@ -117,16 +117,19 @@ function StatsStrip({
         title="Courses available"
         value={stats.total}
         icon={GraduationCap}
+        tone="brand"
       />
       <StatCard
         title="In progress"
         value={stats.inProgress}
         icon={PlayCircle}
+        tone="warning"
       />
       <StatCard
         title="Completed"
         value={stats.completed}
         icon={CheckCircle2}
+        tone="success"
       />
     </div>
   )
