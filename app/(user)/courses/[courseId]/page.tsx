@@ -57,23 +57,21 @@ export default async function CourseDetailPage({
         All courses
       </Button>
 
-      <div className="relative overflow-hidden rounded-2xl">
+      <div className="relative h-44 overflow-hidden rounded-2xl sm:h-56 md:h-64 lg:h-72">
         {course.coverImageUrl ? (
           <>
-            <div className="relative aspect-video w-full">
-              <Image
-                src={course.coverImageUrl}
-                alt={course.title}
-                fill
-                priority
-                sizes="(min-width: 1024px) 1024px, 100vw"
-                className="object-cover"
-              />
-            </div>
+            <Image
+              src={course.coverImageUrl}
+              alt={course.title}
+              fill
+              priority
+              sizes="(min-width: 1024px) 1024px, 100vw"
+              className="object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
           </>
         ) : (
-          <div className="aspect-video bg-gradient-to-br from-brand-500 to-brand-700" />
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-500 to-brand-700" />
         )}
         <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
           <h1 className="max-w-2xl text-2xl font-bold tracking-tight text-white sm:text-3xl">
