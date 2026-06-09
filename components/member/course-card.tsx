@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowRight, BookOpen, PlayCircle } from 'lucide-react'
+import { ArrowRight, BookOpen, Clock, PlayCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -11,6 +11,14 @@ import type { MemberCatalogCourse } from '@/lib/services/member-course-service'
 interface MemberCourseCardProps {
   course: MemberCatalogCourse
   index?: number
+}
+
+function formatTotalDuration(seconds: number): string {
+  const totalMin = Math.round(seconds / 60)
+  if (totalMin < 60) return `${totalMin} min`
+  const hr = Math.floor(totalMin / 60)
+  const min = totalMin % 60
+  return min === 0 ? `${hr} hr` : `${hr}h ${min}m`
 }
 
 export function MemberCourseCard({ course, index = 0 }: MemberCourseCardProps) {
@@ -72,10 +80,12 @@ export function MemberCourseCard({ course, index = 0 }: MemberCourseCardProps) {
             {course.lessonsCount}{' '}
             {course.lessonsCount === 1 ? 'lesson' : 'lessons'}
           </span>
-          <span>
-            {course.chaptersCount}{' '}
-            {course.chaptersCount === 1 ? 'chapter' : 'chapters'}
-          </span>
+          {course.durationSeconds > 0 ? (
+            <span className="flex items-center gap-1">
+              <Clock className="size-3" />
+              {formatTotalDuration(course.durationSeconds)}
+            </span>
+          ) : null}
         </div>
 
         {course.progress && course.progress.total > 0 ? (

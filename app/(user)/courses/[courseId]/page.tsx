@@ -107,7 +107,10 @@ export default async function CourseDetailPage({
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Curriculum</h2>
           {course.chapters.length > 0 ? (
-            <CurriculumOutline chapters={course.chapters} />
+            <CurriculumOutline
+              chapters={course.chapters}
+              courseId={course.id}
+            />
           ) : (
             <EmptyState
               icon={BookOpen}
