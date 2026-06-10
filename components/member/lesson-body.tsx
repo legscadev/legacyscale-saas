@@ -1,11 +1,12 @@
-import { Download, FileText, Hammer, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MuxLessonPlayer } from './mux-lesson-player'
 import { MarkCompleteButton } from './mark-complete-button'
 import { NotesPanel } from './notes-panel'
+import { QuizRunner } from './quiz-runner'
+import { ResourceView } from './resource-view'
 import type { MemberCourseDetail } from '@/lib/services/member-course-service'
 
 type Lesson = MemberCourseDetail['chapters'][number]['lessons'][number]
@@ -76,31 +77,11 @@ export function LessonBody({ lesson }: LessonBodyProps) {
   if (lesson.type === 'RESOURCE') {
     return (
       <>
-        <Card className="gap-5 p-6">
-          <div>
-            <h2 className="text-lg font-semibold">{lesson.title}</h2>
-            {lesson.description ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {lesson.description}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-4 rounded-xl border p-4">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-error/10 text-error">
-              <FileText className="size-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">Resource attachment</p>
-              <p className="text-xs text-muted-foreground">
-                Download view lands in Phase E
-              </p>
-            </div>
-            <Button disabled>
-              <Download />
-              Download
-            </Button>
-          </div>
-        </Card>
+        <ResourceView
+          title={lesson.title}
+          description={lesson.description}
+          resources={lesson.resources}
+        />
         <div className="flex justify-end">
           <MarkCompleteButton lessonId={lesson.id} completed={completed} />
         </div>
@@ -108,25 +89,19 @@ export function LessonBody({ lesson }: LessonBodyProps) {
     )
   }
 
-  // QUIZ
+  // QUIZ — auto-completes on pass; explicit Mark Complete still
+  // available for instructors / re-marks.
   return (
     <>
-      <Card
-        variant="raised"
-        className="flex flex-col items-center gap-3 p-10 text-center"
-      >
-        <span className="grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground">
-          <Hammer className="size-6" />
-        </span>
-        <div className="space-y-1.5">
-          <h2 className="text-lg font-semibold">Quiz lands in Phase E</h2>
-          <p className="max-w-md text-sm text-muted-foreground">
-            The shell is in place. The interactive quiz runner — questions,
-            scoring, retake — ships with the completion + non-video flows
-            phase.
-          </p>
-        </div>
-      </Card>
+      <QuizRunner
+        lessonId={lesson.id}
+        title={lesson.title}
+        description={lesson.description}
+        questions={lesson.quizQuestions}
+        passingScore={lesson.passingScore}
+        maxAttempts={lesson.maxAttempts}
+        timeLimitMin={lesson.timeLimitMin}
+      />
       <div className="flex justify-end">
         <MarkCompleteButton lessonId={lesson.id} completed={completed} />
       </div>

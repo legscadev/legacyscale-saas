@@ -7,6 +7,7 @@ import {
   Clock,
   Infinity as InfinityIcon,
   Play,
+  Sparkles,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -40,6 +41,8 @@ export default async function CourseDetailPage({
   if (!course) notFound()
 
   const started = course.progressPercent > 0
+  const completed =
+    course.lessonsCount > 0 && course.progressPercent === 100
   const totalSeconds = course.chapters
     .flatMap((c) => c.lessons)
     .reduce((sum, l) => sum + (l.durationSeconds ?? 0), 0)
@@ -100,6 +103,34 @@ export default async function CourseDetailPage({
           </div>
         </div>
       </div>
+
+      {completed ? (
+        <Card
+          variant="raised"
+          className="flex flex-col gap-3 border-success/30 bg-success/[0.04] p-6 sm:flex-row sm:items-center"
+        >
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-success/15 text-success">
+            <Sparkles className="size-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold">
+              You&apos;ve completed this course
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              All {course.lessonsCount} lessons are done — revisit any
+              chapter below to refresh, or jump back into the catalog
+              for your next track.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            render={<Link href="/courses" />}
+            className="sm:shrink-0"
+          >
+            Browse courses
+          </Button>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">

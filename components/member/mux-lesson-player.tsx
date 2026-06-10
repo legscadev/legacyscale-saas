@@ -5,7 +5,12 @@ import MuxPlayer from '@mux/mux-player-react'
 import { AlertCircle } from 'lucide-react'
 
 import { Card } from '@/components/ui/card'
-import { setLessonCompleteAction } from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+import {
+  setLessonCompleteAction,
+  updateLessonPositionAction,
+} from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+
+const POSITION_SAVE_INTERVAL_MS = 5000
 
 interface MuxLessonPlayerProps {
   lessonId: string
@@ -32,11 +37,32 @@ export function MuxLessonPlayer({
 }: MuxLessonPlayerProps) {
   const [errored, setErrored] = useState(false)
   const firedRef = useRef(alreadyComplete)
+  const lastPositionSaveRef = useRef(0)
 
   const handleEnded = () => {
     if (firedRef.current) return
     firedRef.current = true
     void setLessonCompleteAction(lessonId, true)
+  }
+
+  const savePosition = (target: EventTarget | null) => {
+    const media = target as HTMLMediaElement | null
+    if (!media) return
+    const seconds = Math.floor(media.currentTime)
+    if (seconds < 1) return
+    lastPositionSaveRef.current = Date.now()
+    void updateLessonPositionAction(lessonId, seconds)
+  }
+
+  const handleTimeUpdate = (event: Event) => {
+    if (Date.now() - lastPositionSaveRef.current < POSITION_SAVE_INTERVAL_MS) {
+      return
+    }
+    savePosition(event.target)
+  }
+
+  const handlePause = (event: Event) => {
+    savePosition(event.target)
   }
 
   if (errored) {
@@ -68,6 +94,8 @@ export function MuxLessonPlayer({
         style={{ aspectRatio: '16 / 9', width: '100%' }}
         onEnded={handleEnded}
         onError={() => setErrored(true)}
+        onTimeUpdate={handleTimeUpdate}
+        onPause={handlePause}
       />
     </div>
   )

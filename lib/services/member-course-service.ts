@@ -1,4 +1,8 @@
 import { prisma } from '@/lib/prisma'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+const RESOURCE_BUCKET = 'lesson-resources'
+const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-download
 
 // ============================================
 // MEMBER-SIDE COURSE QUERIES
@@ -172,6 +176,30 @@ const detailSelect = {
           orderIndex: true,
           durationSeconds: true,
           muxPlaybackId: true,
+          // Quiz config (visible to members; correctIndex stays
+          // server-side and is consulted in submitQuizAttempt).
+          passingScore: true,
+          maxAttempts: true,
+          timeLimitMin: true,
+          quizQuestions: {
+            orderBy: { orderIndex: 'asc' as const },
+            select: {
+              id: true,
+              questionText: true,
+              type: true,
+              options: true,
+              orderIndex: true,
+            },
+          },
+          resources: {
+            orderBy: { createdAt: 'asc' as const },
+            select: {
+              id: true,
+              name: true,
+              size: true,
+              mimeType: true,
+            },
+          },
         },
       },
     },
@@ -428,10 +456,214 @@ export async function recordLessonView(userId: string, lessonId: string) {
   ])
 }
 
+// ============================================
+// QUIZ — submit attempt, score server-side
+// ============================================
+
+interface QuizBreakdownItem {
+  questionId: string
+  selected: number | null
+  correctIndex: number
+  explanation: string | null
+}
+
+interface QuizSubmissionResult {
+  attemptId: string
+  passed: boolean
+  score: number
+  total: number
+  passingScore: number
+  breakdown: QuizBreakdownItem[]
+}
+
+/**
+ * Score a quiz attempt server-side and persist it. Never trust the
+ * client's score — we look up correctIndex here and tally.
+ *
+ * Auto-marks the lesson complete if the user passed.
+ */
+export async function submitQuizAttempt(
+  userId: string,
+  lessonId: string,
+  answers: Record<string, number>,
+): Promise<QuizSubmissionResult> {
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, deletedAt: null, type: 'QUIZ' },
+    select: {
+      id: true,
+      passingScore: true,
+      chapter: {
+        select: {
+          courseId: true,
+          course: {
+            select: {
+              status: true,
+              audience: true,
+              deletedAt: true,
+            },
+          },
+        },
+      },
+      quizQuestions: {
+        orderBy: { orderIndex: 'asc' },
+        select: { id: true, correctIndex: true, explanation: true },
+      },
+    },
+  })
+  if (!lesson) throw new Error('Quiz not found')
+
+  const course = lesson.chapter.course
+  if (
+    !course ||
+    course.deletedAt !== null ||
+    course.status !== 'PUBLISHED' ||
+    !(MEMBER_VISIBLE_AUDIENCE as readonly string[]).includes(course.audience)
+  ) {
+    throw new Error('Quiz not accessible')
+  }
+  if (lesson.quizQuestions.length === 0) {
+    throw new Error('Quiz has no questions yet')
+  }
+
+  const breakdown: QuizBreakdownItem[] = lesson.quizQuestions.map((q) => ({
+    questionId: q.id,
+    selected: answers[q.id] ?? null,
+    correctIndex: q.correctIndex,
+    explanation: q.explanation,
+  }))
+  const score = breakdown.filter((b) => b.selected === b.correctIndex).length
+  const total = breakdown.length
+  const pct = Math.round((score / total) * 100)
+  const passingScore = lesson.passingScore ?? 70
+  const passed = pct >= passingScore
+
+  const attempt = await prisma.quizAttempt.create({
+    data: {
+      userId,
+      lessonId,
+      score,
+      total,
+      passed,
+      answers,
+    },
+    select: { id: true },
+  })
+
+  if (passed) {
+    await markLessonProgress(userId, lessonId, true)
+  }
+
+  return {
+    attemptId: attempt.id,
+    passed,
+    score,
+    total,
+    passingScore,
+    breakdown,
+  }
+}
+
+// ============================================
+// RESOURCES — signed-URL download
+// ============================================
+
+/**
+ * Returns a short-lived signed URL for a resource attached to a
+ * lesson in a member-visible course. Throws if the user shouldn't
+ * have access to the parent course.
+ */
+export async function getResourceDownloadUrl(
+  userId: string,
+  resourceId: string,
+): Promise<{ url: string; filename: string }> {
+  const resource = await prisma.lessonResource.findUnique({
+    where: { id: resourceId },
+    select: {
+      id: true,
+      name: true,
+      path: true,
+      lesson: {
+        select: {
+          deletedAt: true,
+          chapter: {
+            select: {
+              course: {
+                select: {
+                  status: true,
+                  audience: true,
+                  deletedAt: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!resource || resource.lesson.deletedAt) {
+    throw new Error('Resource not found')
+  }
+  const course = resource.lesson.chapter.course
+  if (
+    course.deletedAt !== null ||
+    course.status !== 'PUBLISHED' ||
+    !(MEMBER_VISIBLE_AUDIENCE as readonly string[]).includes(course.audience)
+  ) {
+    throw new Error('Resource not accessible')
+  }
+  // Suppress an unused-var warning while keeping userId in the
+  // signature — future tightening (e.g. enrollment check) plugs in
+  // here without changing the call site.
+  void userId
+
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.storage
+    .from(RESOURCE_BUCKET)
+    .createSignedUrl(resource.path, SIGNED_URL_TTL_SEC, {
+      download: resource.name,
+    })
+  if (error || !data?.signedUrl) {
+    throw new Error('Could not generate download link')
+  }
+  return { url: data.signedUrl, filename: resource.name }
+}
+
+// ============================================
+// PROGRESS — track video position for resume
+// ============================================
+
+/**
+ * Persists the user's current playback position so a refresh /
+ * revisit can resume mid-video. Idempotent and intentionally
+ * silent: never throws, never revalidates — the read side only
+ * runs at page load, so chatty re-renders would be wasted.
+ */
+export async function updateLessonPosition(
+  userId: string,
+  lessonId: string,
+  positionSec: number,
+): Promise<void> {
+  if (!Number.isFinite(positionSec) || positionSec < 0) return
+  const seconds = Math.floor(positionSec)
+  await prisma.lessonProgress.upsert({
+    where: { userId_lessonId: { userId, lessonId } },
+    create: {
+      userId,
+      lessonId,
+      completed: false,
+      lastPositionSec: seconds,
+    },
+    update: { lastPositionSec: seconds },
+  })
+}
+
 export const memberCourseService = {
   listCatalog: listCatalogForMember,
   getById: getCourseForMember,
   ensureEnrollment,
   markLessonProgress,
   recordLessonView,
+  submitQuizAttempt,
+  getResourceDownloadUrl,
+  updateLessonPosition,
 }
