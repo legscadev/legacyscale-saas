@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { after } from 'next/server'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress'
 import { CurriculumOutline } from '@/components/member/curriculum-outline'
 import { LessonBody } from '@/components/member/lesson-body'
 import { requireActiveUser } from '@/lib/auth'
+import { computeLessonGating } from '@/lib/lesson-gating'
 import {
   memberCourseService,
   type MemberCourseDetail,
@@ -22,17 +23,21 @@ interface LessonPlayerPageProps {
 
 /**
  * Walk in `direction` (-1 prev, +1 next) until we hit a lesson the
- * user can actually open. Locked lessons (PROCESSING / DRAFT) are
- * skipped so Prev/Next never strand the user on a card they can't
- * play.
+ * user can actually open. Skips status-locked (PROCESSING / DRAFT)
+ * and gating-locked (sequential-unlock) lessons so Prev/Next never
+ * land somewhere the user can't play.
  */
 function findPlayable(
   lessons: OrderedLesson[],
+  unlockedIds: Set<string>,
   fromIdx: number,
   direction: -1 | 1,
 ): OrderedLesson | undefined {
   for (let i = fromIdx + direction; i >= 0 && i < lessons.length; i += direction) {
-    if (lessons[i]!.status === 'READY') return lessons[i]
+    const lesson = lessons[i]!
+    if (lesson.status === 'READY' && unlockedIds.has(lesson.id)) {
+      return lesson
+    }
   }
   return undefined
 }
@@ -52,8 +57,20 @@ export default async function LessonPlayerPage({
   const chapter = course.chapters.find((c) =>
     c.lessons.some((l) => l.id === lessonId),
   )!
-  const prev = findPlayable(ordered, pos, -1)
-  const next = findPlayable(ordered, pos, 1)
+
+  // Sequential unlock — bounce a deep-link to a locked lesson back
+  // to the user's current frontier (or the course detail page if
+  // the course has no playable lessons at all).
+  const gating = computeLessonGating(ordered)
+  if (!gating.unlockedIds.has(lesson.id)) {
+    if (gating.frontierId) {
+      redirect(`/courses/${course.id}/lessons/${gating.frontierId}`)
+    }
+    redirect(`/courses/${course.id}`)
+  }
+
+  const prev = findPlayable(ordered, gating.unlockedIds, pos, -1)
+  const next = findPlayable(ordered, gating.unlockedIds, pos, 1)
 
   // Touch progress + enrollment lastAccessedAt after the response so
   // the resume picker has fresh data without slowing the render.
@@ -143,6 +160,7 @@ export default async function LessonPlayerPage({
                 courseId={course.id}
                 activeLessonId={lesson.id}
                 variant="sidebar"
+                unlockedIds={gating.unlockedIds}
               />
             </div>
           </Card>

@@ -18,6 +18,13 @@ interface CurriculumOutlineProps {
   courseId: string
   activeLessonId?: string
   variant?: 'page' | 'sidebar'
+  /**
+   * Lesson ids the user is allowed to open. If omitted, gating is
+   * not enforced (used by surfaces that haven't migrated yet).
+   * Status-locked lessons (PROCESSING / DRAFT) stay locked
+   * regardless.
+   */
+  unlockedIds?: Set<string>
 }
 
 function lessonTypeIcon(
@@ -42,6 +49,7 @@ export function CurriculumOutline({
   courseId,
   activeLessonId,
   variant = 'page',
+  unlockedIds,
 }: CurriculumOutlineProps) {
   const sidebar = variant === 'sidebar'
 
@@ -80,6 +88,9 @@ export function CurriculumOutline({
                   active={lesson.id === activeLessonId}
                   sidebar={sidebar}
                   withTopBorder={!sidebar && li > 0}
+                  gated={
+                    unlockedIds !== undefined && !unlockedIds.has(lesson.id)
+                  }
                 />
               ))}
             </ul>
@@ -96,6 +107,7 @@ interface LessonRowProps {
   active: boolean
   sidebar: boolean
   withTopBorder: boolean
+  gated: boolean
 }
 
 function LessonRow({
@@ -104,10 +116,12 @@ function LessonRow({
   active,
   sidebar,
   withTopBorder,
+  gated,
 }: LessonRowProps) {
   const { Icon, label } = lessonTypeIcon(lesson.type, lesson.status)
   const completed = lesson.progress?.completed ?? false
-  const locked = lesson.status !== 'READY'
+  const statusLocked = lesson.status !== 'READY'
+  const locked = statusLocked || gated
   const duration = formatDuration(lesson.durationSeconds)
 
   const body = (
@@ -138,8 +152,11 @@ function LessonRow({
           />
           {label}
           {duration ? ` · ${duration}` : ''}
-          {locked && lesson.status === 'PROCESSING'
+          {statusLocked && lesson.status === 'PROCESSING'
             ? ' · still processing'
+            : null}
+          {gated && !statusLocked
+            ? ' · complete previous lesson first'
             : null}
         </p>
       </div>

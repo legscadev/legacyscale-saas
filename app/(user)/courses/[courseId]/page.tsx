@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/shared'
 import { CurriculumOutline } from '@/components/member/curriculum-outline'
 import { requireActiveUser } from '@/lib/auth'
+import { computeLessonGating } from '@/lib/lesson-gating'
 import { memberCourseService } from '@/lib/services/member-course-service'
 import { startCourseAction } from '../actions'
 
@@ -43,10 +44,13 @@ export default async function CourseDetailPage({
   const started = course.progressPercent > 0
   const completed =
     course.lessonsCount > 0 && course.progressPercent === 100
-  const totalSeconds = course.chapters
-    .flatMap((c) => c.lessons)
-    .reduce((sum, l) => sum + (l.durationSeconds ?? 0), 0)
+  const ordered = course.chapters.flatMap((c) => c.lessons)
+  const totalSeconds = ordered.reduce(
+    (sum, l) => sum + (l.durationSeconds ?? 0),
+    0,
+  )
   const totalDuration = formatTotalDuration(totalSeconds)
+  const gating = computeLessonGating(ordered)
 
   return (
     <div className="space-y-6">
@@ -139,6 +143,7 @@ export default async function CourseDetailPage({
             <CurriculumOutline
               chapters={course.chapters}
               courseId={course.id}
+              unlockedIds={gating.unlockedIds}
             />
           ) : (
             <EmptyState
