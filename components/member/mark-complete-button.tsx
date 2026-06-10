@@ -1,32 +1,55 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, CircleCheck } from 'lucide-react'
+import { useTransition } from 'react'
+import { Check, CircleCheck, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { setLessonCompleteAction } from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
 
-/**
- * Visual stub for now — Phase C wires the actual write to
- * lesson_progress via POST /api/progress/[lessonId]/complete.
- */
+interface MarkCompleteButtonProps {
+  lessonId: string
+  completed: boolean
+}
+
 export function MarkCompleteButton({
-  initialComplete = false,
-}: {
-  initialComplete?: boolean
-}) {
-  const [done, setDone] = useState(initialComplete)
+  lessonId,
+  completed,
+}: MarkCompleteButtonProps) {
+  const [isPending, startTransition] = useTransition()
 
   const toggle = () => {
-    const next = !done
-    setDone(next)
-    toast.success(next ? 'Lesson marked complete' : 'Marked as incomplete')
+    const next = !completed
+    startTransition(async () => {
+      const result = await setLessonCompleteAction(lessonId, next)
+      if (result.ok) {
+        toast.success(next ? 'Lesson marked complete' : 'Marked as incomplete')
+      } else {
+        toast.error(result.error ?? 'Could not update progress')
+      }
+    })
   }
 
   return (
-    <Button variant={done ? 'secondary' : 'default'} onClick={toggle}>
-      {done ? <CircleCheck /> : <Check />}
-      {done ? 'Completed' : 'Mark complete'}
+    <Button
+      variant={completed ? 'secondary' : 'default'}
+      onClick={toggle}
+      disabled={isPending}
+    >
+      {isPending ? (
+        <Loader2 className="animate-spin" />
+      ) : completed ? (
+        <CircleCheck />
+      ) : (
+        <Check />
+      )}
+      {isPending
+        ? completed
+          ? 'Unmarking…'
+          : 'Marking…'
+        : completed
+          ? 'Completed'
+          : 'Mark complete'}
     </Button>
   )
 }

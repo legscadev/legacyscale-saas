@@ -293,8 +293,101 @@ export async function ensureEnrollment(userId: string, courseId: string) {
   })
 }
 
+// ============================================
+// PROGRESS — mark a lesson complete (or undo)
+// ============================================
+
+/**
+ * Idempotent upsert of LessonProgress for the given user + lesson.
+ * Always returns the updated course-level progress percent so the
+ * caller can revalidate UI without a second roundtrip.
+ *
+ * Throws if the lesson doesn't belong to a member-visible course.
+ */
+export async function markLessonProgress(
+  userId: string,
+  lessonId: string,
+  completed: boolean,
+) {
+  // Look up the lesson + course so we can authz and aggregate.
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, deletedAt: null },
+    select: {
+      id: true,
+      chapter: {
+        select: {
+          courseId: true,
+          course: {
+            select: {
+              id: true,
+              status: true,
+              audience: true,
+              deletedAt: true,
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!lesson) throw new Error('Lesson not found')
+
+  const course = lesson.chapter.course
+  if (
+    !course ||
+    course.deletedAt !== null ||
+    course.status !== 'PUBLISHED' ||
+    !(MEMBER_VISIBLE_AUDIENCE as readonly string[]).includes(course.audience)
+  ) {
+    throw new Error('Lesson not accessible')
+  }
+
+  // Make sure the user has an enrollment row; lastAccessedAt bump is
+  // a nice side effect for the "Continue learning" hero.
+  await ensureEnrollment(userId, course.id)
+
+  await prisma.lessonProgress.upsert({
+    where: { userId_lessonId: { userId, lessonId } },
+    create: {
+      userId,
+      lessonId,
+      completed,
+      completedAt: completed ? new Date() : null,
+    },
+    update: {
+      completed,
+      completedAt: completed ? new Date() : null,
+    },
+  })
+
+  // Recompute overall % for this course.
+  const [lessonsTotal, completedCount] = await Promise.all([
+    prisma.lesson.count({
+      where: { chapter: { courseId: course.id }, deletedAt: null },
+    }),
+    prisma.lessonProgress.count({
+      where: {
+        userId,
+        completed: true,
+        lesson: { chapter: { courseId: course.id }, deletedAt: null },
+      },
+    }),
+  ])
+  const progressPercent =
+    lessonsTotal > 0 ? Math.round((completedCount / lessonsTotal) * 100) : 0
+
+  // Keep the cached enrollment.progressPercent in sync so the catalog
+  // hero is accurate without re-aggregating per render.
+  await prisma.enrollment.updateMany({
+    where: { userId, courseId: course.id },
+    data: { progressPercent },
+  })
+
+  return { courseId: course.id, progressPercent, completedCount, lessonsTotal }
+}
+
 export const memberCourseService = {
   listCatalog: listCatalogForMember,
   getById: getCourseForMember,
   ensureEnrollment,
+  markLessonProgress,
 }

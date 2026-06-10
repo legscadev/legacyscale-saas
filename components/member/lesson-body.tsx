@@ -1,9 +1,9 @@
-import { Download, FileText, Hammer } from 'lucide-react'
+import { Download, FileText, Hammer, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { VideoFrame } from './video-frame'
+import { MuxLessonPlayer } from './mux-lesson-player'
 import { MarkCompleteButton } from './mark-complete-button'
 import { NotesPanel } from './notes-panel'
 import type { MemberCourseDetail } from '@/lib/services/member-course-service'
@@ -20,13 +20,32 @@ export function LessonBody({ lesson }: LessonBodyProps) {
   if (lesson.type === 'VIDEO') {
     return (
       <>
-        <VideoFrame
-          durationSeconds={lesson.durationSeconds ?? 0}
-          positionSeconds={lesson.progress?.lastPositionSec ?? 0}
-          title={lesson.title}
-        />
+        {lesson.muxPlaybackId ? (
+          <MuxLessonPlayer
+            lessonId={lesson.id}
+            playbackId={lesson.muxPlaybackId}
+            title={lesson.title}
+            startSeconds={lesson.progress?.lastPositionSec ?? 0}
+            alreadyComplete={completed}
+          />
+        ) : (
+          <Card className="flex flex-col items-center gap-3 p-10 text-center">
+            <span className="grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground">
+              <Loader2 className="size-6 animate-spin" />
+            </span>
+            <div className="space-y-1.5">
+              <h2 className="text-lg font-semibold">
+                Video is still processing
+              </h2>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Hang tight — Mux is encoding this upload. It&apos;ll show
+                up here as soon as it&apos;s ready.
+              </p>
+            </div>
+          </Card>
+        )}
         <div className="flex justify-end">
-          <MarkCompleteButton initialComplete={completed} />
+          <MarkCompleteButton lessonId={lesson.id} completed={completed} />
         </div>
         <Card className="gap-0 p-0">
           <Tabs defaultValue="overview" className="p-4">
@@ -83,7 +102,7 @@ export function LessonBody({ lesson }: LessonBodyProps) {
           </div>
         </Card>
         <div className="flex justify-end">
-          <MarkCompleteButton initialComplete={completed} />
+          <MarkCompleteButton lessonId={lesson.id} completed={completed} />
         </div>
       </>
     )
@@ -91,21 +110,26 @@ export function LessonBody({ lesson }: LessonBodyProps) {
 
   // QUIZ
   return (
-    <Card
-      variant="raised"
-      className="flex flex-col items-center gap-3 p-10 text-center"
-    >
-      <span className="grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground">
-        <Hammer className="size-6" />
-      </span>
-      <div className="space-y-1.5">
-        <h2 className="text-lg font-semibold">Quiz lands in Phase E</h2>
-        <p className="max-w-md text-sm text-muted-foreground">
-          The shell is in place. The interactive quiz runner — questions,
-          scoring, retake — ships with the completion + non-video flows
-          phase.
-        </p>
+    <>
+      <Card
+        variant="raised"
+        className="flex flex-col items-center gap-3 p-10 text-center"
+      >
+        <span className="grid size-12 place-items-center rounded-xl bg-muted text-muted-foreground">
+          <Hammer className="size-6" />
+        </span>
+        <div className="space-y-1.5">
+          <h2 className="text-lg font-semibold">Quiz lands in Phase E</h2>
+          <p className="max-w-md text-sm text-muted-foreground">
+            The shell is in place. The interactive quiz runner — questions,
+            scoring, retake — ships with the completion + non-video flows
+            phase.
+          </p>
+        </div>
+      </Card>
+      <div className="flex justify-end">
+        <MarkCompleteButton lessonId={lesson.id} completed={completed} />
       </div>
-    </Card>
+    </>
   )
 }
