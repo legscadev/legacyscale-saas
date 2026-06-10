@@ -213,6 +213,7 @@ export async function getCourseForMember(userId: string, courseId: string) {
             completedAt: true,
             watchedPercent: true,
             lastPositionSec: true,
+            updatedAt: true,
           },
         })
       : Promise.resolve([]),

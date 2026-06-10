@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 
 import { requireActiveUser } from '@/lib/auth'
 import { memberCourseService } from '@/lib/services/member-course-service'
+import { pickResumeLesson } from '@/lib/services/resume-picker'
 
 interface BaseResult {
   ok: boolean
@@ -13,9 +14,9 @@ interface BaseResult {
 /**
  * Click "Start course" / "Continue learning" on a course detail page.
  * Ensures an ACTIVE enrollment row, then redirects into the player at
- * the first incomplete lesson (or chapter 1 / lesson 1 for a fresh
- * enrollment). The player route itself is built in Phase B; for now
- * it'll render the Phase-B-pending stub.
+ * the lesson the user most recently left off on (or chapter 1 / lesson
+ * 1 for a fresh enrollment). The player route itself is built in
+ * Phase B; for now it'll render the Phase-B-pending stub.
  */
 export async function startCourseAction(
   courseId: string,
@@ -27,7 +28,9 @@ export async function startCourseAction(
     return { ok: false, error: 'Course is unavailable' }
   }
 
-  // Materialize an Enrollment row if missing. Idempotent.
+  // Materialize an Enrollment row if missing. Also bumps
+  // lastAccessedAt, so the catalog "Continue learning" hero stays
+  // accurate across sessions.
   const enrollment = await memberCourseService.ensureEnrollment(
     user.id,
     courseId,
@@ -36,15 +39,11 @@ export async function startCourseAction(
     return { ok: false, error: 'Could not enroll in this course' }
   }
 
-  // Find the next lesson to land on. Prefer the first incomplete; fall
-  // back to the very first lesson if everything's already done (or if
-  // the user re-enters a completed course).
   const allLessons = course.chapters.flatMap((c) => c.lessons)
-  if (allLessons.length === 0) {
+  const next = pickResumeLesson(allLessons)
+  if (!next) {
     return { ok: false, error: 'This course has no lessons yet' }
   }
-  const next =
-    allLessons.find((l) => !l.progress?.completed) ?? allLessons[0]!
 
   redirect(`/courses/${courseId}/lessons/${next.id}`)
 }
