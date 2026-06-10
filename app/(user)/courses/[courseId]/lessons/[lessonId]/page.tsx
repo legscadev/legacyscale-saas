@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { after } from 'next/server'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -8,10 +9,32 @@ import { Progress } from '@/components/ui/progress'
 import { CurriculumOutline } from '@/components/member/curriculum-outline'
 import { LessonBody } from '@/components/member/lesson-body'
 import { requireActiveUser } from '@/lib/auth'
-import { memberCourseService } from '@/lib/services/member-course-service'
+import {
+  memberCourseService,
+  type MemberCourseDetail,
+} from '@/lib/services/member-course-service'
+
+type OrderedLesson = MemberCourseDetail['chapters'][number]['lessons'][number]
 
 interface LessonPlayerPageProps {
   params: Promise<{ courseId: string; lessonId: string }>
+}
+
+/**
+ * Walk in `direction` (-1 prev, +1 next) until we hit a lesson the
+ * user can actually open. Locked lessons (PROCESSING / DRAFT) are
+ * skipped so Prev/Next never strand the user on a card they can't
+ * play.
+ */
+function findPlayable(
+  lessons: OrderedLesson[],
+  fromIdx: number,
+  direction: -1 | 1,
+): OrderedLesson | undefined {
+  for (let i = fromIdx + direction; i >= 0 && i < lessons.length; i += direction) {
+    if (lessons[i]!.status === 'READY') return lessons[i]
+  }
+  return undefined
 }
 
 export default async function LessonPlayerPage({
@@ -29,8 +52,12 @@ export default async function LessonPlayerPage({
   const chapter = course.chapters.find((c) =>
     c.lessons.some((l) => l.id === lessonId),
   )!
-  const prev = pos > 0 ? ordered[pos - 1] : undefined
-  const next = pos < ordered.length - 1 ? ordered[pos + 1] : undefined
+  const prev = findPlayable(ordered, pos, -1)
+  const next = findPlayable(ordered, pos, 1)
+
+  // Touch progress + enrollment lastAccessedAt after the response so
+  // the resume picker has fresh data without slowing the render.
+  after(() => memberCourseService.recordLessonView(user.id, lesson.id))
 
   return (
     <div className="space-y-4">

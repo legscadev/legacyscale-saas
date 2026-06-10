@@ -385,9 +385,53 @@ export async function markLessonProgress(
   return { courseId: course.id, progressPercent, completedCount, lessonsTotal }
 }
 
+// ============================================
+// LESSON VIEW — touch on every render
+// ============================================
+
+/**
+ * Side effects that the lesson page kicks off on each render so the
+ * resume picker has fresh "where did I leave off" data:
+ *  - Touches the user's LessonProgress row for this lesson, creating
+ *    it if missing. Bumps watchCount so updatedAt advances on every
+ *    visit — that's how the resume picker finds "most recent."
+ *  - Bumps the parent enrollment's lastAccessedAt so the catalog's
+ *    "Continue learning" hero reflects the right course.
+ *
+ * Idempotent and safe to fire-and-forget via `after()`.
+ */
+export async function recordLessonView(userId: string, lessonId: string) {
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, deletedAt: null },
+    select: { id: true, chapter: { select: { courseId: true } } },
+  })
+  if (!lesson) return
+
+  await Promise.all([
+    prisma.lessonProgress.upsert({
+      where: { userId_lessonId: { userId, lessonId } },
+      create: {
+        userId,
+        lessonId,
+        completed: false,
+        watchCount: 1,
+      },
+      update: { watchCount: { increment: 1 } },
+    }),
+    // updateMany is intentional: stays a no-op if the user has no
+    // enrollment yet (URL deep-link before clicking "Start"). The
+    // first real start-course click materializes the row.
+    prisma.enrollment.updateMany({
+      where: { userId, courseId: lesson.chapter.courseId },
+      data: { lastAccessedAt: new Date() },
+    }),
+  ])
+}
+
 export const memberCourseService = {
   listCatalog: listCatalogForMember,
   getById: getCourseForMember,
   ensureEnrollment,
   markLessonProgress,
+  recordLessonView,
 }
