@@ -166,10 +166,12 @@ const detailSelect = {
         select: {
           id: true,
           title: true,
+          description: true,
           type: true,
           status: true,
           orderIndex: true,
           durationSeconds: true,
+          muxPlaybackId: true,
         },
       },
     },

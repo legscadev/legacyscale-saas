@@ -17,6 +17,7 @@ interface CurriculumOutlineProps {
   chapters: MemberCourseDetail['chapters']
   courseId: string
   activeLessonId?: string
+  variant?: 'page' | 'sidebar'
 }
 
 function lessonTypeIcon(
@@ -40,42 +41,52 @@ export function CurriculumOutline({
   chapters,
   courseId,
   activeLessonId,
+  variant = 'page',
 }: CurriculumOutlineProps) {
+  const sidebar = variant === 'sidebar'
+
   return (
-    <ol className="space-y-3">
-      {chapters.map((chapter, i) => (
-        <li key={chapter.id} className="overflow-hidden rounded-xl border bg-card">
-          <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Chapter {String(i + 1).padStart(2, '0')}
-              </p>
-              <p className="text-sm font-semibold">{chapter.title}</p>
-            </div>
+    <div className={cn('flex flex-col', sidebar ? 'gap-4' : 'gap-6')}>
+      {chapters.map((chapter, ci) => (
+        <div key={chapter.id}>
+          <div className="mb-2 flex items-center justify-between px-1">
+            <h3 className="text-sm font-medium">
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                {String(ci + 1).padStart(2, '0')}
+              </span>{' '}
+              {chapter.title}
+            </h3>
             <span className="text-xs text-muted-foreground">
               {chapter.lessons.length}{' '}
               {chapter.lessons.length === 1 ? 'lesson' : 'lessons'}
             </span>
           </div>
           {chapter.lessons.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-muted-foreground">
+            <p
+              className={cn(
+                'text-sm text-muted-foreground',
+                sidebar ? 'px-3 py-2' : 'rounded-xl border px-4 py-3',
+              )}
+            >
               No lessons yet.
             </p>
           ) : (
-            <ul className="divide-y">
-              {chapter.lessons.map((lesson) => (
+            <ul className={cn(!sidebar && 'overflow-hidden rounded-xl border')}>
+              {chapter.lessons.map((lesson, li) => (
                 <LessonRow
                   key={lesson.id}
                   lesson={lesson}
                   courseId={courseId}
                   active={lesson.id === activeLessonId}
+                  sidebar={sidebar}
+                  withTopBorder={!sidebar && li > 0}
                 />
               ))}
             </ul>
           )}
-        </li>
+        </div>
       ))}
-    </ol>
+    </div>
   )
 }
 
@@ -83,9 +94,17 @@ interface LessonRowProps {
   lesson: MemberCourseDetail['chapters'][number]['lessons'][number]
   courseId: string
   active: boolean
+  sidebar: boolean
+  withTopBorder: boolean
 }
 
-function LessonRow({ lesson, courseId, active }: LessonRowProps) {
+function LessonRow({
+  lesson,
+  courseId,
+  active,
+  sidebar,
+  withTopBorder,
+}: LessonRowProps) {
   const { Icon, label } = lessonTypeIcon(lesson.type, lesson.status)
   const completed = lesson.progress?.completed ?? false
   const locked = lesson.status !== 'READY'
@@ -94,11 +113,11 @@ function LessonRow({ lesson, courseId, active }: LessonRowProps) {
   const body = (
     <>
       {completed ? (
-        <CheckCircle2 className="size-5 shrink-0 text-success" />
+        <CheckCircle2 className="size-4 shrink-0 text-success" />
       ) : locked ? (
-        <Lock className="size-5 shrink-0 text-muted-foreground/60" />
+        <Lock className="size-4 shrink-0 text-muted-foreground/60" />
       ) : (
-        <Circle className="size-5 shrink-0 text-muted-foreground/50" />
+        <Circle className="size-4 shrink-0 text-muted-foreground/50" />
       )}
       <div className="min-w-0 flex-1">
         <p
@@ -127,10 +146,16 @@ function LessonRow({ lesson, courseId, active }: LessonRowProps) {
     </>
   )
 
+  const baseClass = cn(
+    'flex items-center gap-3 px-3 py-2.5 text-sm transition-colors',
+    withTopBorder && 'border-t',
+    sidebar && 'rounded-lg',
+  )
+
   if (locked) {
     return (
       <li
-        className="flex cursor-not-allowed items-center gap-3 px-4 py-3 opacity-70"
+        className={cn(baseClass, 'cursor-not-allowed opacity-70')}
         aria-disabled
       >
         {body}
@@ -142,9 +167,10 @@ function LessonRow({ lesson, courseId, active }: LessonRowProps) {
     <li>
       <Link
         href={`/courses/${courseId}/lessons/${lesson.id}`}
+        scroll={!sidebar}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'flex items-center gap-3 px-4 py-3 transition-colors',
+          baseClass,
           active ? 'bg-primary/10' : 'hover:bg-muted/60',
         )}
       >
