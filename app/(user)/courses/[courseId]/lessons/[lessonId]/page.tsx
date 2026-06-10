@@ -19,6 +19,7 @@ type OrderedLesson = MemberCourseDetail['chapters'][number]['lessons'][number]
 
 interface LessonPlayerPageProps {
   params: Promise<{ courseId: string; lessonId: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 /**
@@ -44,8 +45,11 @@ function findPlayable(
 
 export default async function LessonPlayerPage({
   params,
+  searchParams,
 }: LessonPlayerPageProps) {
   const { courseId, lessonId } = await params
+  const sp = await searchParams
+  const autoPlay = sp.autoplay === '1'
   const user = await requireActiveUser()
   const course = await memberCourseService.getById(user.id, courseId)
   if (!course) notFound()
@@ -71,6 +75,12 @@ export default async function LessonPlayerPage({
 
   const prev = findPlayable(ordered, gating.unlockedIds, pos, -1)
   const next = findPlayable(ordered, gating.unlockedIds, pos, 1)
+  // Next-in-order ignoring gating — the autoplay overlay only fires
+  // after the video ends, which auto-marks the current lesson
+  // complete and lifts the gate on this very next lesson.
+  const nextInOrder = ordered
+    .slice(pos + 1)
+    .find((l) => l.status === 'READY')
 
   // Touch progress + enrollment lastAccessedAt after the response so
   // the resume picker has fresh data without slowing the render.
@@ -129,7 +139,16 @@ export default async function LessonPlayerPage({
             </h1>
           </div>
 
-          <LessonBody lesson={lesson} />
+          <LessonBody
+            lesson={lesson}
+            autoPlay={autoPlay}
+            nextHref={
+              nextInOrder
+                ? `/courses/${course.id}/lessons/${nextInOrder.id}`
+                : undefined
+            }
+            nextTitle={nextInOrder?.title}
+          />
         </div>
 
         <aside className="lg:sticky lg:top-20 lg:self-start">

@@ -1,6 +1,7 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import MuxPlayer from '@mux/mux-player-react'
 import { AlertCircle } from 'lucide-react'
 
@@ -9,6 +10,8 @@ import {
   setLessonCompleteAction,
   updateLessonPositionAction,
 } from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+import { useAutoplayPreference } from '@/hooks/use-autoplay-preference'
+import { AutoNextOverlay } from './auto-next-overlay'
 
 const POSITION_SAVE_INTERVAL_MS = 5000
 
@@ -18,6 +21,11 @@ interface MuxLessonPlayerProps {
   title: string
   startSeconds?: number
   alreadyComplete: boolean
+  /** When true, fires autoplay on mount — used by the chained nav from the overlay. */
+  autoPlay?: boolean
+  /** When set, the post-video autoplay overlay can navigate here. */
+  nextHref?: string
+  nextTitle?: string
 }
 
 /**
@@ -34,15 +42,39 @@ export function MuxLessonPlayer({
   title,
   startSeconds = 0,
   alreadyComplete,
+  autoPlay = false,
+  nextHref,
+  nextTitle,
 }: MuxLessonPlayerProps) {
   const [errored, setErrored] = useState(false)
+  const [showAutoNext, setShowAutoNext] = useState(false)
   const firedRef = useRef(alreadyComplete)
   const lastPositionSaveRef = useRef(0)
+  const { enabled: autoplayEnabled } = useAutoplayPreference()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // Strip the ?autoplay=1 marker from the URL once it's served its
+  // purpose, so a subsequent refresh doesn't re-fire autoplay.
+  useEffect(() => {
+    if (!autoPlay) return
+    router.replace(pathname, { scroll: false })
+  }, [autoPlay, pathname, router])
 
   const handleEnded = () => {
-    if (firedRef.current) return
+    // Always run the mark-complete side effect once; only run the
+    // navigation overlay if autoplay is on and there's somewhere to
+    // go. Await the action before showing the overlay so the next
+    // page's gating check finds the lesson already complete (no
+    // bounce back).
+    const alreadyFired = firedRef.current
     firedRef.current = true
-    void setLessonCompleteAction(lessonId, true)
+    void (async () => {
+      if (!alreadyFired) await setLessonCompleteAction(lessonId, true)
+      if (autoplayEnabled && nextHref && nextTitle) {
+        setShowAutoNext(true)
+      }
+    })()
   }
 
   const savePosition = (target: EventTarget | null) => {
@@ -83,12 +115,13 @@ export function MuxLessonPlayer({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl bg-black ring-1 ring-white/10">
+    <div className="relative overflow-hidden rounded-xl bg-black ring-1 ring-white/10">
       <MuxPlayer
         playbackId={playbackId}
         streamType="on-demand"
         metadata={{ video_title: title }}
         startTime={startSeconds || undefined}
+        autoPlay={autoPlay ? 'any' : undefined}
         accentColor="hsl(var(--primary))"
         primaryColor="#ffffff"
         style={{ aspectRatio: '16 / 9', width: '100%' }}
@@ -97,6 +130,13 @@ export function MuxLessonPlayer({
         onTimeUpdate={handleTimeUpdate}
         onPause={handlePause}
       />
+      {showAutoNext && nextHref && nextTitle ? (
+        <AutoNextOverlay
+          nextHref={nextHref}
+          nextTitle={nextTitle}
+          onCancel={() => setShowAutoNext(false)}
+        />
+      ) : null}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { Loader2 } from 'lucide-react'
 
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AutoplayToggle } from './autoplay-toggle'
 import { MuxLessonPlayer } from './mux-lesson-player'
 import { MarkCompleteButton } from './mark-complete-button'
 import { NotesPanel } from './notes-panel'
@@ -13,9 +14,17 @@ type Lesson = MemberCourseDetail['chapters'][number]['lessons'][number]
 
 interface LessonBodyProps {
   lesson: Lesson
+  autoPlay?: boolean
+  nextHref?: string
+  nextTitle?: string
 }
 
-export function LessonBody({ lesson }: LessonBodyProps) {
+export function LessonBody({
+  lesson,
+  autoPlay,
+  nextHref,
+  nextTitle,
+}: LessonBodyProps) {
   const completed = lesson.progress?.completed ?? false
 
   if (lesson.type === 'VIDEO') {
@@ -28,6 +37,9 @@ export function LessonBody({ lesson }: LessonBodyProps) {
             title={lesson.title}
             startSeconds={lesson.progress?.lastPositionSec ?? 0}
             alreadyComplete={completed}
+            autoPlay={autoPlay}
+            nextHref={nextHref}
+            nextTitle={nextTitle}
           />
         ) : (
           <Card className="flex flex-col items-center gap-3 p-10 text-center">
@@ -45,7 +57,8 @@ export function LessonBody({ lesson }: LessonBodyProps) {
             </div>
           </Card>
         )}
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <AutoplayToggle />
           <MarkCompleteButton lessonId={lesson.id} completed={completed} />
         </div>
         <Card className="gap-0 p-0">
