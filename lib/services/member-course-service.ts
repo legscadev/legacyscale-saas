@@ -1,4 +1,11 @@
+import type { CourseAudience, Role } from '@prisma/client'
+
 import { prisma } from '@/lib/prisma'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { visibleAudiencesFor } from '@/lib/auth/permissions'
+
+const RESOURCE_BUCKET = 'lesson-resources'
+const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-download
 
 // ============================================
 // MEMBER-SIDE COURSE QUERIES
@@ -9,9 +16,20 @@ import { prisma } from '@/lib/prisma'
 // This file is the parallel for members: it never returns anything a
 // member shouldn't see, and folds in the current user's enrollment
 // + progress so the UI doesn't need a second roundtrip.
+//
+// Audience visibility now depends on the user's Role: MEMBER sees
+// MEMBERS+BOTH; TEAM and ADMIN also see INTERNAL. Methods that filter
+// by audience accept the role explicitly OR look it up.
 
-// audience MEMBERS or BOTH is what members are allowed to discover.
-const MEMBER_VISIBLE_AUDIENCE = ['MEMBERS', 'BOTH'] as const
+async function resolveVisibleAudiences(
+  userId: string,
+): Promise<CourseAudience[]> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  })
+  return visibleAudiencesFor(user?.role ?? ('MEMBER' as Role))
+}
 
 // ============================================
 // LIST — catalog grid
@@ -43,11 +61,12 @@ const catalogSelect = {
 } as const
 
 export async function listCatalogForMember(userId: string) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   const rows = await prisma.course.findMany({
     where: {
       deletedAt: null,
       status: 'PUBLISHED',
-      audience: { in: [...MEMBER_VISIBLE_AUDIENCE] },
+      audience: { in: visibleAudiences },
     },
     orderBy: { orderIndex: 'asc' },
     select: catalogSelect,
@@ -166,10 +185,36 @@ const detailSelect = {
         select: {
           id: true,
           title: true,
+          description: true,
           type: true,
           status: true,
           orderIndex: true,
           durationSeconds: true,
+          muxPlaybackId: true,
+          // Quiz config (visible to members; correctIndex stays
+          // server-side and is consulted in submitQuizAttempt).
+          passingScore: true,
+          maxAttempts: true,
+          timeLimitMin: true,
+          quizQuestions: {
+            orderBy: { orderIndex: 'asc' as const },
+            select: {
+              id: true,
+              questionText: true,
+              type: true,
+              options: true,
+              orderIndex: true,
+            },
+          },
+          resources: {
+            orderBy: { createdAt: 'asc' as const },
+            select: {
+              id: true,
+              name: true,
+              size: true,
+              mimeType: true,
+            },
+          },
         },
       },
     },
@@ -177,12 +222,13 @@ const detailSelect = {
 } as const
 
 export async function getCourseForMember(userId: string, courseId: string) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   const course = await prisma.course.findFirst({
     where: {
       id: courseId,
       deletedAt: null,
       status: 'PUBLISHED',
-      audience: { in: [...MEMBER_VISIBLE_AUDIENCE] },
+      audience: { in: visibleAudiences },
     },
     select: detailSelect,
   })
@@ -213,6 +259,7 @@ export async function getCourseForMember(userId: string, courseId: string) {
             completedAt: true,
             watchedPercent: true,
             lastPositionSec: true,
+            updatedAt: true,
           },
         })
       : Promise.resolve([]),
@@ -258,6 +305,7 @@ export type MemberCourseDetail = NonNullable<
  * function doesn't need to gate). Paid integrations land in Sprint 5+.
  */
 export async function ensureEnrollment(userId: string, courseId: string) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   // Confirm the course is actually visible to this member before we
   // create a row.
   const course = await prisma.course.findFirst({
@@ -265,7 +313,7 @@ export async function ensureEnrollment(userId: string, courseId: string) {
       id: courseId,
       deletedAt: null,
       status: 'PUBLISHED',
-      audience: { in: [...MEMBER_VISIBLE_AUDIENCE] },
+      audience: { in: visibleAudiences },
     },
     select: { id: true, accessDays: true },
   })
@@ -290,8 +338,348 @@ export async function ensureEnrollment(userId: string, courseId: string) {
   })
 }
 
+// ============================================
+// PROGRESS — mark a lesson complete (or undo)
+// ============================================
+
+/**
+ * Idempotent upsert of LessonProgress for the given user + lesson.
+ * Always returns the updated course-level progress percent so the
+ * caller can revalidate UI without a second roundtrip.
+ *
+ * Throws if the lesson doesn't belong to a member-visible course.
+ */
+export async function markLessonProgress(
+  userId: string,
+  lessonId: string,
+  completed: boolean,
+) {
+  // Look up the lesson + course so we can authz and aggregate.
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, deletedAt: null },
+    select: {
+      id: true,
+      chapter: {
+        select: {
+          courseId: true,
+          course: {
+            select: {
+              id: true,
+              status: true,
+              audience: true,
+              deletedAt: true,
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!lesson) throw new Error('Lesson not found')
+
+  const course = lesson.chapter.course
+  const visibleAudiences = await resolveVisibleAudiences(userId)
+  if (
+    !course ||
+    course.deletedAt !== null ||
+    course.status !== 'PUBLISHED' ||
+    !visibleAudiences.includes(course.audience)
+  ) {
+    throw new Error('Lesson not accessible')
+  }
+
+  // Make sure the user has an enrollment row; lastAccessedAt bump is
+  // a nice side effect for the "Continue learning" hero.
+  await ensureEnrollment(userId, course.id)
+
+  await prisma.lessonProgress.upsert({
+    where: { userId_lessonId: { userId, lessonId } },
+    create: {
+      userId,
+      lessonId,
+      completed,
+      completedAt: completed ? new Date() : null,
+    },
+    update: {
+      completed,
+      completedAt: completed ? new Date() : null,
+    },
+  })
+
+  // Recompute overall % for this course.
+  const [lessonsTotal, completedCount] = await Promise.all([
+    prisma.lesson.count({
+      where: { chapter: { courseId: course.id }, deletedAt: null },
+    }),
+    prisma.lessonProgress.count({
+      where: {
+        userId,
+        completed: true,
+        lesson: { chapter: { courseId: course.id }, deletedAt: null },
+      },
+    }),
+  ])
+  const progressPercent =
+    lessonsTotal > 0 ? Math.round((completedCount / lessonsTotal) * 100) : 0
+
+  // Keep the cached enrollment.progressPercent in sync so the catalog
+  // hero is accurate without re-aggregating per render.
+  await prisma.enrollment.updateMany({
+    where: { userId, courseId: course.id },
+    data: { progressPercent },
+  })
+
+  return { courseId: course.id, progressPercent, completedCount, lessonsTotal }
+}
+
+// ============================================
+// LESSON VIEW — touch on every render
+// ============================================
+
+/**
+ * Side effects that the lesson page kicks off on each render so the
+ * resume picker has fresh "where did I leave off" data:
+ *  - Touches the user's LessonProgress row for this lesson, creating
+ *    it if missing. Bumps watchCount so updatedAt advances on every
+ *    visit — that's how the resume picker finds "most recent."
+ *  - Bumps the parent enrollment's lastAccessedAt so the catalog's
+ *    "Continue learning" hero reflects the right course.
+ *
+ * Idempotent and safe to fire-and-forget via `after()`.
+ */
+export async function recordLessonView(userId: string, lessonId: string) {
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, deletedAt: null },
+    select: { id: true, chapter: { select: { courseId: true } } },
+  })
+  if (!lesson) return
+
+  await Promise.all([
+    prisma.lessonProgress.upsert({
+      where: { userId_lessonId: { userId, lessonId } },
+      create: {
+        userId,
+        lessonId,
+        completed: false,
+        watchCount: 1,
+      },
+      update: { watchCount: { increment: 1 } },
+    }),
+    // updateMany is intentional: stays a no-op if the user has no
+    // enrollment yet (URL deep-link before clicking "Start"). The
+    // first real start-course click materializes the row.
+    prisma.enrollment.updateMany({
+      where: { userId, courseId: lesson.chapter.courseId },
+      data: { lastAccessedAt: new Date() },
+    }),
+  ])
+}
+
+// ============================================
+// QUIZ — submit attempt, score server-side
+// ============================================
+
+interface QuizBreakdownItem {
+  questionId: string
+  selected: number | null
+  correctIndex: number
+  explanation: string | null
+}
+
+interface QuizSubmissionResult {
+  attemptId: string
+  passed: boolean
+  score: number
+  total: number
+  passingScore: number
+  breakdown: QuizBreakdownItem[]
+}
+
+/**
+ * Score a quiz attempt server-side and persist it. Never trust the
+ * client's score — we look up correctIndex here and tally.
+ *
+ * Auto-marks the lesson complete if the user passed.
+ */
+export async function submitQuizAttempt(
+  userId: string,
+  lessonId: string,
+  answers: Record<string, number>,
+): Promise<QuizSubmissionResult> {
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, deletedAt: null, type: 'QUIZ' },
+    select: {
+      id: true,
+      passingScore: true,
+      chapter: {
+        select: {
+          courseId: true,
+          course: {
+            select: {
+              status: true,
+              audience: true,
+              deletedAt: true,
+            },
+          },
+        },
+      },
+      quizQuestions: {
+        orderBy: { orderIndex: 'asc' },
+        select: { id: true, correctIndex: true, explanation: true },
+      },
+    },
+  })
+  if (!lesson) throw new Error('Quiz not found')
+
+  const course = lesson.chapter.course
+  const visibleAudiences = await resolveVisibleAudiences(userId)
+  if (
+    !course ||
+    course.deletedAt !== null ||
+    course.status !== 'PUBLISHED' ||
+    !visibleAudiences.includes(course.audience)
+  ) {
+    throw new Error('Quiz not accessible')
+  }
+  if (lesson.quizQuestions.length === 0) {
+    throw new Error('Quiz has no questions yet')
+  }
+
+  const breakdown: QuizBreakdownItem[] = lesson.quizQuestions.map((q) => ({
+    questionId: q.id,
+    selected: answers[q.id] ?? null,
+    correctIndex: q.correctIndex,
+    explanation: q.explanation,
+  }))
+  const score = breakdown.filter((b) => b.selected === b.correctIndex).length
+  const total = breakdown.length
+  const pct = Math.round((score / total) * 100)
+  const passingScore = lesson.passingScore ?? 70
+  const passed = pct >= passingScore
+
+  const attempt = await prisma.quizAttempt.create({
+    data: {
+      userId,
+      lessonId,
+      score,
+      total,
+      passed,
+      answers,
+    },
+    select: { id: true },
+  })
+
+  if (passed) {
+    await markLessonProgress(userId, lessonId, true)
+  }
+
+  return {
+    attemptId: attempt.id,
+    passed,
+    score,
+    total,
+    passingScore,
+    breakdown,
+  }
+}
+
+// ============================================
+// RESOURCES — signed-URL download
+// ============================================
+
+/**
+ * Returns a short-lived signed URL for a resource attached to a
+ * lesson in a member-visible course. Throws if the user shouldn't
+ * have access to the parent course.
+ */
+export async function getResourceDownloadUrl(
+  userId: string,
+  resourceId: string,
+): Promise<{ url: string; filename: string }> {
+  const resource = await prisma.lessonResource.findUnique({
+    where: { id: resourceId },
+    select: {
+      id: true,
+      name: true,
+      path: true,
+      lesson: {
+        select: {
+          deletedAt: true,
+          chapter: {
+            select: {
+              course: {
+                select: {
+                  status: true,
+                  audience: true,
+                  deletedAt: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!resource || resource.lesson.deletedAt) {
+    throw new Error('Resource not found')
+  }
+  const course = resource.lesson.chapter.course
+  const visibleAudiences = await resolveVisibleAudiences(userId)
+  if (
+    course.deletedAt !== null ||
+    course.status !== 'PUBLISHED' ||
+    !visibleAudiences.includes(course.audience)
+  ) {
+    throw new Error('Resource not accessible')
+  }
+
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.storage
+    .from(RESOURCE_BUCKET)
+    .createSignedUrl(resource.path, SIGNED_URL_TTL_SEC, {
+      download: resource.name,
+    })
+  if (error || !data?.signedUrl) {
+    throw new Error('Could not generate download link')
+  }
+  return { url: data.signedUrl, filename: resource.name }
+}
+
+// ============================================
+// PROGRESS — track video position for resume
+// ============================================
+
+/**
+ * Persists the user's current playback position so a refresh /
+ * revisit can resume mid-video. Idempotent and intentionally
+ * silent: never throws, never revalidates — the read side only
+ * runs at page load, so chatty re-renders would be wasted.
+ */
+export async function updateLessonPosition(
+  userId: string,
+  lessonId: string,
+  positionSec: number,
+): Promise<void> {
+  if (!Number.isFinite(positionSec) || positionSec < 0) return
+  const seconds = Math.floor(positionSec)
+  await prisma.lessonProgress.upsert({
+    where: { userId_lessonId: { userId, lessonId } },
+    create: {
+      userId,
+      lessonId,
+      completed: false,
+      lastPositionSec: seconds,
+    },
+    update: { lastPositionSec: seconds },
+  })
+}
+
 export const memberCourseService = {
   listCatalog: listCatalogForMember,
   getById: getCourseForMember,
   ensureEnrollment,
+  markLessonProgress,
+  recordLessonView,
+  submitQuizAttempt,
+  getResourceDownloadUrl,
+  updateLessonPosition,
 }

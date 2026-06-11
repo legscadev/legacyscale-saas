@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 const ROLES = [
   { value: 'all', label: 'Any role' },
   { value: 'ADMIN', label: 'Admin' },
+  { value: 'TEAM', label: 'Team' },
   { value: 'MEMBER', label: 'Member' },
 ]
 

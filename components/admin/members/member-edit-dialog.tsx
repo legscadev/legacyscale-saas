@@ -26,7 +26,7 @@ import { PasswordInput } from '@/components/auth/password-input'
 import { nameSchema, passwordSchema } from '@/lib/validations/common'
 import { userRoleSchema } from '@/lib/validations/user'
 
-type Role = 'ADMIN' | 'MEMBER'
+type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
 type FieldErrors = Partial<
   Record<'name' | 'role' | 'password' | 'confirm', string[]>
 >
@@ -47,6 +47,7 @@ interface MemberEditDialogProps {
 
 const ROLES: { value: Role; label: string }[] = [
   { value: 'MEMBER', label: 'Member' },
+  { value: 'TEAM', label: 'Team — sees internal courses' },
   { value: 'ADMIN', label: 'Admin' },
 ]
 

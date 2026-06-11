@@ -35,7 +35,7 @@ interface MemberActionsMenuProps {
   memberId: string
   memberName: string
   memberEmail: string
-  memberRole: 'ADMIN' | 'MEMBER'
+  memberRole: 'ADMIN' | 'TEAM' | 'MEMBER'
   isActive: boolean
   isArchived: boolean
   isSelf: boolean
