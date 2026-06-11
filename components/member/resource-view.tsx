@@ -42,20 +42,28 @@ export function ResourceView({
         ) : null}
       </div>
 
-      {resources.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No attachments uploaded yet.
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {resources.map((r) => (
-            <li key={r.id}>
-              <ResourceRow resource={r} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <ResourceList resources={resources} />
     </Card>
+  )
+}
+
+/** Bare list — reused in the lesson Resources tab without a Card wrapper. */
+export function ResourceList({ resources }: { resources: Resource[] }) {
+  if (resources.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No attachments uploaded yet.
+      </p>
+    )
+  }
+  return (
+    <ul className="space-y-2">
+      {resources.map((r) => (
+        <li key={r.id}>
+          <ResourceRow resource={r} />
+        </li>
+      ))}
+    </ul>
   )
 }
 

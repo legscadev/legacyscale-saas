@@ -7,7 +7,7 @@ import { MuxLessonPlayer } from './mux-lesson-player'
 import { MarkCompleteButton } from './mark-complete-button'
 import { NotesPanel } from './notes-panel'
 import { QuizRunner } from './quiz-runner'
-import { ResourceView } from './resource-view'
+import { ResourceList, ResourceView } from './resource-view'
 import type { MemberCourseDetail } from '@/lib/services/member-course-service'
 
 type Lesson = MemberCourseDetail['chapters'][number]['lessons'][number]
@@ -28,6 +28,7 @@ export function LessonBody({
   const completed = lesson.progress?.completed ?? false
 
   if (lesson.type === 'VIDEO') {
+    const hasResources = lesson.resources.length > 0
     return (
       <>
         {lesson.muxPlaybackId ? (
@@ -66,6 +67,14 @@ export function LessonBody({
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
+              {hasResources ? (
+                <TabsTrigger value="resources">
+                  Resources
+                  <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium tabular-nums text-muted-foreground">
+                    {lesson.resources.length}
+                  </span>
+                </TabsTrigger>
+              ) : null}
             </TabsList>
             <TabsContent value="overview" className="pt-4">
               {lesson.description ? (
@@ -81,6 +90,11 @@ export function LessonBody({
             <TabsContent value="notes" className="pt-4">
               <NotesPanel />
             </TabsContent>
+            {hasResources ? (
+              <TabsContent value="resources" className="pt-4">
+                <ResourceList resources={lesson.resources} />
+              </TabsContent>
+            ) : null}
           </Tabs>
         </Card>
       </>

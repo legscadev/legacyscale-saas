@@ -4,8 +4,10 @@ import { notFound } from 'next/navigation'
 import {
   ArrowLeft,
   BookOpen,
+  CheckCircle2,
   Clock,
   Infinity as InfinityIcon,
+  Layers,
   Play,
   Sparkles,
 } from 'lucide-react'
@@ -15,8 +17,10 @@ import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/shared'
 import { CurriculumOutline } from '@/components/member/curriculum-outline'
+import { UpNextCard } from '@/components/member/up-next-card'
 import { requireActiveUser } from '@/lib/auth'
 import { computeLessonGating } from '@/lib/lesson-gating'
+import { pickResumeLesson } from '@/lib/services/resume-picker'
 import { memberCourseService } from '@/lib/services/member-course-service'
 import { startCourseAction } from '../actions'
 
@@ -51,9 +55,13 @@ export default async function CourseDetailPage({
   )
   const totalDuration = formatTotalDuration(totalSeconds)
   const gating = computeLessonGating(ordered)
+  const upNext = pickResumeLesson(ordered)
+  const upNextChapter = upNext
+    ? course.chapters.find((c) => c.lessons.some((l) => l.id === upNext.id))
+    : null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <Button
         variant="ghost"
         size="sm"
@@ -64,34 +72,41 @@ export default async function CourseDetailPage({
         All courses
       </Button>
 
-      <div className="relative h-44 overflow-hidden rounded-2xl sm:h-56 md:h-64 lg:h-72">
-        {course.coverImageUrl ? (
-          <>
-            <Image
-              src={course.coverImageUrl}
-              alt={course.title}
-              fill
-              priority
-              sizes="(min-width: 1024px) 1024px, 100vw"
-              className="object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
-          </>
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-brand-500 to-brand-700" />
-        )}
-        <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
-          <h1 className="max-w-2xl text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            {course.title}
-          </h1>
-          {course.description ? (
-            <p
-              className="mt-2 max-w-2xl text-sm text-white/85"
-              dangerouslySetInnerHTML={{ __html: course.description }}
-            />
-          ) : null}
-          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-white/90">
-            <span>{course.lessonsCount} lessons</span>
+      {/* Compact hero — cover (or branded gradient) on the left,
+          title + meta + primary CTA on the right. Replaces the
+          empty red block. */}
+      <header className="grid gap-6 sm:grid-cols-[minmax(220px,300px)_1fr]">
+        <CourseCover
+          title={course.title}
+          coverImageUrl={course.coverImageUrl}
+        />
+        <div className="flex flex-col gap-4">
+          <div className="space-y-2">
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Course
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight">
+              {course.title}
+            </h1>
+            {course.description ? (
+              <div
+                className="text-sm text-muted-foreground [&_a]:text-primary [&_a]:underline"
+                dangerouslySetInnerHTML={{ __html: course.description }}
+              />
+            ) : null}
+          </div>
+
+          <div className="mt-auto flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Layers className="size-4" />
+              {course.chapters.length}{' '}
+              {course.chapters.length === 1 ? 'chapter' : 'chapters'}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <BookOpen className="size-4" />
+              {course.lessonsCount}{' '}
+              {course.lessonsCount === 1 ? 'lesson' : 'lessons'}
+            </span>
             {totalDuration ? (
               <span className="flex items-center gap-1.5">
                 <Clock className="size-4" />
@@ -105,9 +120,57 @@ export default async function CourseDetailPage({
                 : 'Lifetime access'}
             </span>
           </div>
-        </div>
-      </div>
 
+          <form
+            action={async () => {
+              'use server'
+              await startCourseAction(courseId)
+            }}
+          >
+            <Button
+              type="submit"
+              size="lg"
+              disabled={course.lessonsCount === 0}
+              className="w-full sm:w-auto"
+            >
+              <Play />
+              {completed
+                ? 'Replay course'
+                : started
+                  ? 'Continue learning'
+                  : 'Start course'}
+            </Button>
+          </form>
+        </div>
+      </header>
+
+      {/* Inline progress strip — only meaningful once started. */}
+      {started ? (
+        <Card className="gap-3 p-5">
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2">
+              {completed ? (
+                <CheckCircle2 className="size-4 text-success" />
+              ) : (
+                <Play className="size-4 text-primary" />
+              )}
+              <span className="font-medium">
+                {completed ? 'Course complete' : 'In progress'}
+              </span>
+              <span className="text-muted-foreground">
+                {course.completedLessons} of {course.lessonsCount}{' '}
+                {course.lessonsCount === 1 ? 'lesson' : 'lessons'}
+              </span>
+            </span>
+            <span className="text-sm font-medium tabular-nums">
+              {course.progressPercent}%
+            </span>
+          </div>
+          <Progress value={course.progressPercent} />
+        </Card>
+      ) : null}
+
+      {/* Completion celebration — only fires at 100%. */}
       {completed ? (
         <Card
           variant="raised"
@@ -122,8 +185,8 @@ export default async function CourseDetailPage({
             </h2>
             <p className="text-sm text-muted-foreground">
               All {course.lessonsCount} lessons are done — revisit any
-              chapter below to refresh, or jump back into the catalog
-              for your next track.
+              chapter below, or jump back into the catalog for your next
+              track.
             </p>
           </div>
           <Button
@@ -136,9 +199,19 @@ export default async function CourseDetailPage({
         </Card>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Curriculum</h2>
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Curriculum
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              {course.chapters.length}{' '}
+              {course.chapters.length === 1 ? 'chapter' : 'chapters'} ·{' '}
+              {course.lessonsCount}{' '}
+              {course.lessonsCount === 1 ? 'lesson' : 'lessons'}
+            </span>
+          </div>
           {course.chapters.length > 0 ? (
             <CurriculumOutline
               chapters={course.chapters}
@@ -155,42 +228,99 @@ export default async function CourseDetailPage({
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <Card className="gap-4 p-5">
-            {started ? (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Your progress</span>
-                  <span className="font-medium tabular-nums">
-                    {course.progressPercent}%
-                  </span>
-                </div>
-                <Progress value={course.progressPercent} />
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {course.lessonsCount}{' '}
-                {course.lessonsCount === 1 ? 'lesson' : 'lessons'} ready when
-                you are.
-              </p>
-            )}
-            <form
-              action={async () => {
-                'use server'
-                await startCourseAction(courseId)
-              }}
-            >
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={course.lessonsCount === 0}
-              >
-                <Play />
-                {started ? 'Continue learning' : 'Start course'}
-              </Button>
-            </form>
+          {upNext && upNextChapter && !completed ? (
+            <UpNextCard
+              chapterTitle={upNextChapter.title}
+              lesson={upNext}
+              href={`/courses/${course.id}/lessons/${upNext.id}`}
+              ctaLabel={started ? 'Resume' : 'Start lesson'}
+            />
+          ) : null}
+
+          <Card className="gap-3 p-5">
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Course details
+            </p>
+            <dl className="space-y-2.5 text-sm">
+              <DetailRow
+                icon={Layers}
+                label="Chapters"
+                value={String(course.chapters.length)}
+              />
+              <DetailRow
+                icon={BookOpen}
+                label="Lessons"
+                value={String(course.lessonsCount)}
+              />
+              {totalDuration ? (
+                <DetailRow
+                  icon={Clock}
+                  label="Total time"
+                  value={totalDuration}
+                />
+              ) : null}
+              <DetailRow
+                icon={InfinityIcon}
+                label="Access"
+                value={
+                  course.accessDays
+                    ? `${course.accessDays} days`
+                    : 'Lifetime'
+                }
+              />
+            </dl>
           </Card>
         </aside>
       </div>
+    </div>
+  )
+}
+
+function CourseCover({
+  title,
+  coverImageUrl,
+}: {
+  title: string
+  coverImageUrl: string | null
+}) {
+  return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 ring-1 ring-foreground/[0.06]">
+      {coverImageUrl ? (
+        <Image
+          src={coverImageUrl}
+          alt={title}
+          fill
+          priority
+          sizes="(min-width: 1024px) 300px, (min-width: 640px) 50vw, 100vw"
+          className="object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-5xl font-bold tracking-tight text-white/85">
+            {title.charAt(0).toUpperCase()}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetailRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Layers
+  label: string
+  value: string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="flex items-center gap-2 text-muted-foreground">
+        <Icon className="size-4" />
+        {label}
+      </dt>
+      <dd className="font-medium tabular-nums">{value}</dd>
     </div>
   )
 }
