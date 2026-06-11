@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select'
 import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
 
-type Role = 'ADMIN' | 'MEMBER'
+type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
 type FieldErrors = Partial<Record<'name' | 'email' | 'role', string[]>>
 
 interface MemberCreateDialogProps {
@@ -36,6 +36,7 @@ interface MemberCreateDialogProps {
 
 const ROLES: { value: Role; label: string }[] = [
   { value: 'MEMBER', label: 'Member' },
+  { value: 'TEAM', label: 'Team — sees internal courses' },
   { value: 'ADMIN', label: 'Admin' },
 ]
 

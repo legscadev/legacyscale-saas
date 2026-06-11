@@ -33,6 +33,7 @@ const STATUS_MAP: Record<string, { label: string; tone: Tone }> = {
   REVOKED: { label: 'Revoked', tone: 'danger' },
   // User
   ADMIN: { label: 'Admin', tone: 'info' },
+  TEAM: { label: 'Team', tone: 'info' },
   MEMBER: { label: 'Member', tone: 'neutral' },
   PAUSED: { label: 'Paused', tone: 'danger' },
 }

@@ -1,5 +1,8 @@
+import type { CourseAudience, Role } from '@prisma/client'
+
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { visibleAudiencesFor } from '@/lib/auth/permissions'
 
 const RESOURCE_BUCKET = 'lesson-resources'
 const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-download
@@ -13,9 +16,20 @@ const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-downloa
 // This file is the parallel for members: it never returns anything a
 // member shouldn't see, and folds in the current user's enrollment
 // + progress so the UI doesn't need a second roundtrip.
+//
+// Audience visibility now depends on the user's Role: MEMBER sees
+// MEMBERS+BOTH; TEAM and ADMIN also see INTERNAL. Methods that filter
+// by audience accept the role explicitly OR look it up.
 
-// audience MEMBERS or BOTH is what members are allowed to discover.
-const MEMBER_VISIBLE_AUDIENCE = ['MEMBERS', 'BOTH'] as const
+async function resolveVisibleAudiences(
+  userId: string,
+): Promise<CourseAudience[]> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  })
+  return visibleAudiencesFor(user?.role ?? ('MEMBER' as Role))
+}
 
 // ============================================
 // LIST — catalog grid
@@ -47,11 +61,12 @@ const catalogSelect = {
 } as const
 
 export async function listCatalogForMember(userId: string) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   const rows = await prisma.course.findMany({
     where: {
       deletedAt: null,
       status: 'PUBLISHED',
-      audience: { in: [...MEMBER_VISIBLE_AUDIENCE] },
+      audience: { in: visibleAudiences },
     },
     orderBy: { orderIndex: 'asc' },
     select: catalogSelect,
@@ -207,12 +222,13 @@ const detailSelect = {
 } as const
 
 export async function getCourseForMember(userId: string, courseId: string) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   const course = await prisma.course.findFirst({
     where: {
       id: courseId,
       deletedAt: null,
       status: 'PUBLISHED',
-      audience: { in: [...MEMBER_VISIBLE_AUDIENCE] },
+      audience: { in: visibleAudiences },
     },
     select: detailSelect,
   })
@@ -289,6 +305,7 @@ export type MemberCourseDetail = NonNullable<
  * function doesn't need to gate). Paid integrations land in Sprint 5+.
  */
 export async function ensureEnrollment(userId: string, courseId: string) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   // Confirm the course is actually visible to this member before we
   // create a row.
   const course = await prisma.course.findFirst({
@@ -296,7 +313,7 @@ export async function ensureEnrollment(userId: string, courseId: string) {
       id: courseId,
       deletedAt: null,
       status: 'PUBLISHED',
-      audience: { in: [...MEMBER_VISIBLE_AUDIENCE] },
+      audience: { in: visibleAudiences },
     },
     select: { id: true, accessDays: true },
   })
@@ -360,11 +377,12 @@ export async function markLessonProgress(
   if (!lesson) throw new Error('Lesson not found')
 
   const course = lesson.chapter.course
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   if (
     !course ||
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !(MEMBER_VISIBLE_AUDIENCE as readonly string[]).includes(course.audience)
+    !visibleAudiences.includes(course.audience)
   ) {
     throw new Error('Lesson not accessible')
   }
@@ -513,11 +531,12 @@ export async function submitQuizAttempt(
   if (!lesson) throw new Error('Quiz not found')
 
   const course = lesson.chapter.course
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   if (
     !course ||
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !(MEMBER_VISIBLE_AUDIENCE as readonly string[]).includes(course.audience)
+    !visibleAudiences.includes(course.audience)
   ) {
     throw new Error('Quiz not accessible')
   }
@@ -604,17 +623,14 @@ export async function getResourceDownloadUrl(
     throw new Error('Resource not found')
   }
   const course = resource.lesson.chapter.course
+  const visibleAudiences = await resolveVisibleAudiences(userId)
   if (
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !(MEMBER_VISIBLE_AUDIENCE as readonly string[]).includes(course.audience)
+    !visibleAudiences.includes(course.audience)
   ) {
     throw new Error('Resource not accessible')
   }
-  // Suppress an unused-var warning while keeping userId in the
-  // signature — future tightening (e.g. enrollment check) plugs in
-  // here without changing the call site.
-  void userId
 
   const supabase = createAdminClient()
   const { data, error } = await supabase.storage

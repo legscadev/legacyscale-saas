@@ -7,7 +7,7 @@ import {
   optionalUrlSchema,
 } from './common'
 
-export const userRoleSchema = z.enum(['ADMIN', 'MEMBER'])
+export const userRoleSchema = z.enum(['ADMIN', 'TEAM', 'MEMBER'])
 export type UserRole = z.infer<typeof userRoleSchema>
 
 export const createUserSchema = z.object({

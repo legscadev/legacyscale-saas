@@ -19,7 +19,13 @@ export interface ShellUser {
   name: string | null
   email: string
   avatarUrl: string | null
-  role: 'ADMIN' | 'MEMBER'
+  role: 'ADMIN' | 'TEAM' | 'MEMBER'
+}
+
+function roleLabel(role: ShellUser['role']): string {
+  if (role === 'ADMIN') return 'Administrator'
+  if (role === 'TEAM') return 'Team'
+  return 'Member'
 }
 
 interface UserMenuProps {
@@ -107,7 +113,7 @@ export function UserMenu({
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>
-            {user.role === 'ADMIN' ? 'Administrator' : 'Member'}
+            {roleLabel(user.role)}
           </DropdownMenuLabel>
           <DropdownMenuItem render={<Link href={profileHref} />}>
             <UserRound />

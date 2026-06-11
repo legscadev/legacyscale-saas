@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/select'
 import type { MemberListItem } from '@/lib/services/member-service'
 
-type Role = 'ADMIN' | 'MEMBER'
+type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
 type StatusChoice = 'active' | 'suspended'
 
 interface BulkActionBarProps {
@@ -267,6 +267,7 @@ export function BulkActionBar({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ADMIN">Admin</SelectItem>
+                <SelectItem value="TEAM">Team</SelectItem>
                 <SelectItem value="MEMBER">Member</SelectItem>
               </SelectContent>
             </Select>
@@ -386,7 +387,9 @@ export function BulkActionBar({
 }
 
 function roleLabel(role: Role) {
-  return role === 'ADMIN' ? 'Admin' : 'Member'
+  if (role === 'ADMIN') return 'Admin'
+  if (role === 'TEAM') return 'Team'
+  return 'Member'
 }
 
 function toCsv(rows: MemberListItem[]) {
