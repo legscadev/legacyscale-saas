@@ -1,12 +1,13 @@
 import { cn } from '@/lib/utils'
 
-type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
+type Tone = 'success' | 'warning' | 'danger' | 'info' | 'violet' | 'neutral'
 
 const TONE_CLASS: Record<Tone, string> = {
   success: 'bg-success/10 text-success',
   warning: 'bg-warning/10 text-warning',
   danger: 'bg-error/10 text-error',
   info: 'bg-primary/10 text-primary',
+  violet: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
   neutral: 'bg-muted text-muted-foreground',
 }
 
@@ -15,6 +16,7 @@ const DOT_CLASS: Record<Tone, string> = {
   warning: 'bg-warning',
   danger: 'bg-error',
   info: 'bg-primary',
+  violet: 'bg-violet-500',
   neutral: 'bg-muted-foreground',
 }
 
@@ -33,7 +35,7 @@ const STATUS_MAP: Record<string, { label: string; tone: Tone }> = {
   REVOKED: { label: 'Revoked', tone: 'danger' },
   // User
   ADMIN: { label: 'Admin', tone: 'info' },
-  TEAM: { label: 'Team', tone: 'info' },
+  TEAM: { label: 'Team', tone: 'violet' },
   MEMBER: { label: 'Member', tone: 'neutral' },
   PAUSED: { label: 'Paused', tone: 'danger' },
 }
