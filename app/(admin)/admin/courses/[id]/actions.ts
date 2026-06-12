@@ -12,6 +12,10 @@ import {
 } from '@/lib/services/chapter-service'
 import { lessonService } from '@/lib/services/lesson-service'
 import {
+  moduleService,
+  type ModuleListItem,
+} from '@/lib/services/module-service'
+import {
   courseStructureService,
   type SyncResult,
 } from '@/lib/services/course-structure-service'
@@ -20,9 +24,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   createChapterSchema,
   createLessonSchema,
+  createModuleSchema,
   lessonTypeSchema,
   updateChapterSchema,
   updateLessonSchema,
+  updateModuleSchema,
 } from '@/lib/validations/course'
 
 interface BaseResult {
@@ -45,6 +51,14 @@ export interface CreateLessonResult extends BaseResult {
 
 export interface UpdateLessonResult extends BaseResult {
   lesson?: LessonListItem
+}
+
+export interface CreateModuleResult extends BaseResult {
+  module?: ModuleListItem
+}
+
+export interface UpdateModuleResult extends BaseResult {
+  module?: ModuleListItem
 }
 
 const reorderSchema = z.object({
@@ -327,6 +341,11 @@ const syncChapterInputSchema = z
     tempId: z.string().min(1).optional(),
     title: z.string().min(1).max(200),
     orderIndex: z.number().int().min(0),
+    // Optional parent module: undefined = leave untouched in DB,
+    // null = move to / create as loose chapter, UUID = module-bound.
+    // Modules themselves are managed via /api/admin/modules/* —
+    // this field only carries the chapter→module link.
+    moduleId: z.string().uuid().nullable().optional(),
     lessons: z.array(syncLessonInputSchema),
   })
   .refine((d) => Boolean(d.id) || Boolean(d.tempId), {
@@ -636,4 +655,93 @@ export async function getResourceDownloadUrlAction(
     return { ok: false, error: 'Could not generate download link' }
   }
   return { ok: true, url: data.signedUrl }
+}
+
+// ===========================================================
+// MODULE CRUD  (Phase 3)
+// ===========================================================
+//
+// Modules are an optional grouping layer between Course and Chapter.
+// CRUD happens through these standalone actions — they do NOT flow
+// through saveCourseStructureAction (chapters/lessons still do).
+// That keeps the structure-sync transaction tight and lets module
+// edits land independently of chapter saves.
+
+export async function createModuleAction(
+  courseId: string,
+  input: { title?: string; description?: string } = {},
+): Promise<CreateModuleResult> {
+  await requireAdmin()
+
+  const parsed = createModuleSchema.safeParse({
+    courseId,
+    title: input.title ?? 'New module',
+    description: input.description,
+  })
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  try {
+    const moduleRow = await moduleService.create({
+      courseId,
+      title: parsed.data.title,
+      description: parsed.data.description ?? null,
+    })
+    revalidatePath(`/admin/courses/${courseId}`)
+    return { ok: true, module: moduleRow }
+  } catch (err) {
+    console.error('Module create failed:', err)
+    return { ok: false, error: 'Could not create module' }
+  }
+}
+
+export async function updateModuleAction(
+  moduleId: string,
+  input: { title?: string; description?: string | null },
+): Promise<UpdateModuleResult> {
+  await requireAdmin()
+
+  const parsed = updateModuleSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  try {
+    const moduleRow = await moduleService.update(moduleId, parsed.data)
+    revalidatePath(`/admin/courses/${moduleRow.courseId}`)
+    return { ok: true, module: moduleRow }
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2025'
+    ) {
+      return { ok: false, error: 'Module not found' }
+    }
+    console.error('Module update failed:', err)
+    return { ok: false, error: 'Could not update module' }
+  }
+}
+
+export async function deleteModuleAction(
+  moduleId: string,
+): Promise<BaseResult> {
+  await requireAdmin()
+
+  // Look up the courseId before delete so we can revalidate even
+  // though the row is about to disappear.
+  const existing = await prisma.module.findUnique({
+    where: { id: moduleId },
+    select: { courseId: true },
+  })
+  if (!existing) return { ok: false, error: 'Module not found' }
+
+  try {
+    await moduleService.delete(moduleId)
+    revalidatePath(`/admin/courses/${existing.courseId}`)
+    return { ok: true }
+  } catch (err) {
+    console.error('Module delete failed:', err)
+    return { ok: false, error: 'Could not delete module' }
+  }
 }

@@ -89,22 +89,66 @@ export const courseResponseSchema = z.object({
 })
 
 // ============================================
+// MODULE
+// ============================================
+
+export const createModuleSchema = z.object({
+  courseId: idSchema,
+  title: z.string().min(1, 'Title is required').max(200, 'Title is too long'),
+  description: z.string().max(2000, 'Description is too long').optional(),
+})
+
+export const updateModuleSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    description: z.string().max(2000).nullable().optional(),
+    orderIndex: z.number().int().min(0).optional(),
+  })
+  .refine(
+    (data) => Object.values(data).some((v) => v !== undefined),
+    { message: 'Nothing to update' },
+  )
+
+export const reorderModulesSchema = z.object({
+  courseId: idSchema,
+  orderedIds: z.array(idSchema).min(1, 'Order list cannot be empty'),
+})
+
+export const moduleResponseSchema = z.object({
+  id: idSchema,
+  courseId: idSchema,
+  title: z.string(),
+  description: z.string().nullable(),
+  orderIndex: z.number(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+})
+
+// ============================================
 // CHAPTER
 // ============================================
 
+// `moduleId` is optional and nullable: null/missing = loose chapter
+// (sits directly on the course); a UUID = chapter belongs to that
+// module. The server enforces that the module, if set, belongs to
+// the same course.
 export const createChapterSchema = z.object({
   courseId: idSchema,
+  moduleId: idSchema.nullish(),
   title: z.string().min(1, 'Title is required').max(200, 'Title is too long'),
 })
 
 export const updateChapterSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   orderIndex: z.number().int().min(0).optional(),
+  // Moving between modules (or out to loose). undefined = no change.
+  moduleId: idSchema.nullish(),
 })
 
 export const chapterResponseSchema = z.object({
   id: idSchema,
   courseId: idSchema,
+  moduleId: idSchema.nullable(),
   title: z.string(),
   orderIndex: z.number(),
   createdAt: z.coerce.date(),
@@ -181,6 +225,9 @@ export const submitQuizSchema = z.object({
 
 export type CreateCourseInput = z.infer<typeof createCourseSchema>
 export type UpdateCourseInput = z.infer<typeof updateCourseSchema>
+export type CreateModuleInput = z.infer<typeof createModuleSchema>
+export type UpdateModuleInput = z.infer<typeof updateModuleSchema>
+export type ReorderModulesInput = z.infer<typeof reorderModulesSchema>
 export type CreateChapterInput = z.infer<typeof createChapterSchema>
 export type UpdateChapterInput = z.infer<typeof updateChapterSchema>
 export type CreateLessonInput = z.infer<typeof createLessonSchema>

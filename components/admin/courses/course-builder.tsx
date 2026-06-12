@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   ExternalLink,
+  FolderPlus,
   Layers,
   Plus,
   Save,
@@ -42,8 +43,11 @@ import {
 } from '@/components/ui/alert-dialog'
 import { EmptyState, StatusBadge } from '@/components/shared'
 import {
+  createModuleAction,
+  deleteModuleAction,
   getLessonStatusAction,
   saveCourseStructureAction,
+  updateModuleAction,
   type SaveStructureResult,
 } from '@/app/(admin)/admin/courses/[id]/actions'
 import type { CourseDetail } from '@/lib/services/course-service'
@@ -51,8 +55,11 @@ import type {
   ChapterListItem,
   LessonListItem,
 } from '@/lib/services/chapter-service'
+import type { ModuleListItem } from '@/lib/services/module-service'
 import { BuilderChapter } from './builder-chapter'
+import { BuilderModule } from './builder-module'
 import { LessonEditorDialog } from './lesson-editor-dialog'
+import { ModuleDialog, type ModuleDialogValues } from './module-dialog'
 
 // Local row types extend the server-shaped items with an optional
 // tempId so new rows can be added client-side before the next Save
@@ -72,21 +79,46 @@ const LESSON_DEFAULT_TITLE: Record<LessonType, string> = {
 
 interface CourseBuilderProps {
   course: CourseDetail
+  modules: ModuleListItem[]
   chapters: ChapterListItem[]
 }
 
+// State model:
+// - `modules` carries the course's module list in display order.
+//   Modules persist immediately via server actions (no batching), so
+//   we don't track a saved snapshot for them — module state is always
+//   in sync with the server.
+// - `chapters` is a flat list. Each chapter carries `moduleId` (null
+//   for loose chapters that sit directly on the course). Chapters
+//   batch until Save; orderIndex is scoped per parent (module or
+//   loose group) on serialization.
 export function CourseBuilder({
   course,
+  modules: initialModules,
   chapters: initialChapters,
 }: CourseBuilderProps) {
   const router = useRouter()
 
+  const [modules, setModules] = useState<ModuleListItem[]>(initialModules)
   const [chapters, setChapters] = useState<LocalChapter[]>(initialChapters)
   const [saving, setSaving] = useState(false)
   // Tracks the snapshot we last successfully synced to the server.
   // Used both for the Discard button and for the isDirty check.
   const [savedSnapshot, setSavedSnapshot] = useState<LocalChapter[]>(
     initialChapters,
+  )
+
+  // Module dialog state. `editingModuleId === null && createOpen`
+  // means create; a UUID means edit.
+  const [moduleDialogOpen, setModuleDialogOpen] = useState(false)
+  const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
+  // Confirm delete on a module — chapters under it become loose.
+  const [pendingDeleteModuleId, setPendingDeleteModuleId] = useState<
+    string | null
+  >(null)
+  // Which modules are collapsed in the UI. Default: all expanded.
+  const [collapsedModuleIds, setCollapsedModuleIds] = useState<Set<string>>(
+    () => new Set(),
   )
   const [pendingNav, setPendingNav] = useState<string | null>(null)
   // { chapterId, lessonId } — null when no editor open. Stored as
@@ -116,6 +148,10 @@ export function CourseBuilder({
   const dndContextId = useId()
 
   const lessonCount = chapters.reduce((n, c) => n + c.lessons.length, 0)
+  const looseChapters = useMemo(
+    () => chapters.filter((c) => c.moduleId === null),
+    [chapters],
+  )
 
   // isDirty by JSON comparison of the normalized shape — captures
   // adds, deletes, renames, type changes, and reorders without needing
@@ -246,23 +282,32 @@ export function CourseBuilder({
     [],
   )
 
-  const addChapter = useCallback(() => {
-    const tempId = `temp-ch-${crypto.randomUUID()}`
-    const now = new Date()
-    setChapters((prev) => [
-      ...prev,
-      {
-        id: tempId,
-        tempId,
-        courseId: course.id,
-        title: 'New chapter',
-        orderIndex: prev.length,
-        createdAt: now,
-        updatedAt: now,
-        lessons: [],
-      },
-    ])
-  }, [course.id])
+  // moduleId === null adds a loose chapter; a UUID nests it under
+  // that module. New chapters always slot at the end of their scope.
+  const addChapter = useCallback(
+    (moduleId: string | null) => {
+      const tempId = `temp-ch-${crypto.randomUUID()}`
+      const now = new Date()
+      setChapters((prev) => {
+        const siblings = prev.filter((c) => c.moduleId === moduleId)
+        return [
+          ...prev,
+          {
+            id: tempId,
+            tempId,
+            courseId: course.id,
+            moduleId,
+            title: 'New chapter',
+            orderIndex: siblings.length,
+            createdAt: now,
+            updatedAt: now,
+            lessons: [],
+          },
+        ]
+      })
+    },
+    [course.id],
+  )
 
   const renameChapter = useCallback(
     (id: string, nextTitle: string) => {
@@ -275,28 +320,132 @@ export function CourseBuilder({
     setChapters((prev) => prev.filter((c) => c.id !== id))
   }, [])
 
-  const moveChapter = useCallback((id: string, dir: -1 | 1) => {
-    setChapters((prev) => {
-      const index = prev.findIndex((c) => c.id === id)
-      if (index === -1) return prev
-      const target = index + dir
-      if (target < 0 || target >= prev.length) return prev
-      const next = [...prev]
-      const [moved] = next.splice(index, 1)
-      next.splice(target, 0, moved!)
+  // ===========================================================
+  // Module ops — persist immediately (no batching).
+  // ===========================================================
+
+  const openCreateModule = useCallback(() => {
+    setEditingModuleId(null)
+    setModuleDialogOpen(true)
+  }, [])
+
+  const openEditModule = useCallback((moduleId: string) => {
+    setEditingModuleId(moduleId)
+    setModuleDialogOpen(true)
+  }, [])
+
+  const editingModule = editingModuleId
+    ? (modules.find((m) => m.id === editingModuleId) ?? null)
+    : null
+
+  const onModuleSubmit = useCallback(
+    async (values: ModuleDialogValues): Promise<{ ok: boolean }> => {
+      if (editingModuleId === null) {
+        const result = await createModuleAction(course.id, {
+          title: values.title,
+          description: values.description ?? undefined,
+        })
+        if (!result.ok || !result.module) {
+          toast.error(result.error ?? 'Could not create module')
+          return { ok: false }
+        }
+        setModules((prev) => [...prev, result.module!])
+        toast.success('Module created')
+        return { ok: true }
+      }
+
+      const result = await updateModuleAction(editingModuleId, values)
+      if (!result.ok || !result.module) {
+        toast.error(result.error ?? 'Could not update module')
+        return { ok: false }
+      }
+      setModules((prev) =>
+        prev.map((m) => (m.id === editingModuleId ? result.module! : m)),
+      )
+      toast.success('Module updated')
+      return { ok: true }
+    },
+    [course.id, editingModuleId],
+  )
+
+  const onModuleDeleteConfirm = useCallback(async () => {
+    if (!pendingDeleteModuleId) return
+    const moduleId = pendingDeleteModuleId
+    setPendingDeleteModuleId(null)
+
+    const result = await deleteModuleAction(moduleId)
+    if (!result.ok) {
+      toast.error(result.error ?? 'Could not delete module')
+      return
+    }
+    setModules((prev) => prev.filter((m) => m.id !== moduleId))
+    // Chapters that were under this module become loose locally —
+    // the server already did the SetNull via FK cascade. Update local
+    // state AND the saved snapshot so isDirty stays accurate.
+    const detach = (cs: LocalChapter[]) =>
+      cs.map((c) => (c.moduleId === moduleId ? { ...c, moduleId: null } : c))
+    setChapters(detach)
+    setSavedSnapshot(detach)
+    toast.success('Module deleted')
+  }, [pendingDeleteModuleId])
+
+  const toggleModuleCollapsed = useCallback((moduleId: string) => {
+    setCollapsedModuleIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(moduleId)) next.delete(moduleId)
+      else next.add(moduleId)
       return next
     })
   }, [])
 
-  const moveChapterTo = useCallback((id: string, to: number) => {
+  // Up/down arrows reorder within the chapter's own scope (module or
+  // loose group). Crossing scopes is intentionally not supported by
+  // the arrows — that's a "move chapter to module" UX we're not
+  // building in v1.
+  const moveChapter = useCallback((id: string, dir: -1 | 1) => {
     setChapters((prev) => {
-      const from = prev.findIndex((c) => c.id === id)
-      if (from === -1 || from === to) return prev
-      if (to < 0 || to >= prev.length) return prev
+      const target = prev.find((c) => c.id === id)
+      if (!target) return prev
+      const sameScope = prev.filter((c) => c.moduleId === target.moduleId)
+      const scopeIndex = sameScope.findIndex((c) => c.id === id)
+      const swapWith = sameScope[scopeIndex + dir]
+      if (!swapWith) return prev
+
+      // Re-emit the array with the two ids swapped in their absolute
+      // positions. Other items stay where they are.
+      const fromAbs = prev.indexOf(target)
+      const toAbs = prev.indexOf(swapWith)
       const next = [...prev]
-      const [moved] = next.splice(from, 1)
-      next.splice(to, 0, moved!)
+      next[fromAbs] = swapWith
+      next[toAbs] = target
       return next
+    })
+  }, [])
+
+  // dnd-kit reorder within the same scope only. Returns void early
+  // when the two chapters live in different parents.
+  const moveChapterTo = useCallback((activeId: string, overId: string) => {
+    setChapters((prev) => {
+      const active = prev.find((c) => c.id === activeId)
+      const over = prev.find((c) => c.id === overId)
+      if (!active || !over) return prev
+      if (active.moduleId !== over.moduleId) return prev
+
+      const sameScope = prev.filter((c) => c.moduleId === active.moduleId)
+      const from = sameScope.findIndex((c) => c.id === activeId)
+      const to = sameScope.findIndex((c) => c.id === overId)
+      if (from === -1 || to === -1 || from === to) return prev
+
+      const reordered = [...sameScope]
+      const [moved] = reordered.splice(from, 1)
+      reordered.splice(to, 0, moved!)
+
+      // Splice the reordered scope back into the absolute order:
+      // walk prev, substitute scope-matching slots with reordered.
+      let scopeCursor = 0
+      return prev.map((c) =>
+        c.moduleId === active.moduleId ? reordered[scopeCursor++]! : c,
+      )
     })
   }, [])
 
@@ -403,9 +552,9 @@ export function CourseBuilder({
       const overType = over.data.current?.type
 
       if (activeType === 'chapter' && overType === 'chapter') {
-        const to = chapters.findIndex((c) => c.id === over.id)
-        if (to === -1) return
-        moveChapterTo(String(active.id), to)
+        // moveChapterTo no-ops when active/over live in different
+        // scopes (modules vs loose), so it's safe to call blindly.
+        moveChapterTo(String(active.id), String(over.id))
         return
       }
 
@@ -585,16 +734,22 @@ export function CourseBuilder({
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
-          {chapters.length === 0 ? (
+          {modules.length === 0 && chapters.length === 0 ? (
             <EmptyState
               icon={Layers}
               title="Start building your course"
-              description="Add a chapter, then fill it with video, quiz, and resource lessons."
+              description="Add a module to group related chapters, or add a chapter directly to the course."
             >
-              <Button onClick={addChapter}>
-                <Plus />
-                Add chapter
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={openCreateModule}>
+                  <FolderPlus />
+                  Add module
+                </Button>
+                <Button variant="outline" onClick={() => addChapter(null)}>
+                  <Plus />
+                  Add chapter
+                </Button>
+              </div>
             </EmptyState>
           ) : (
             <DndContext
@@ -603,45 +758,98 @@ export function CourseBuilder({
               collisionDetection={closestCenter}
               onDragEnd={onDragEnd}
             >
-              <SortableContext
-                items={chapters.map((c) => c.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {chapters.map((ch, i) => (
-                  <BuilderChapter
-                    key={ch.id}
-                    chapter={ch}
-                    index={i}
-                    total={chapters.length}
-                    onRename={(t) => renameChapter(ch.id, t)}
-                    onRemove={() => removeChapter(ch.id)}
-                    onMove={(dir) => moveChapter(ch.id, dir)}
-                    onAddLesson={(type) => addLesson(ch.id, type)}
-                    onRenameLesson={(lessonId, title) =>
-                      renameLesson(ch.id, lessonId, title)
-                    }
-                    onRemoveLesson={(lessonId) =>
-                      removeLesson(ch.id, lessonId)
-                    }
-                    onMoveLesson={(from, to) => moveLesson(ch.id, from, to)}
-                    onEditLesson={(lesson) =>
-                      openLessonEditor(ch.id, lesson as LocalLesson)
-                    }
-                  />
-                ))}
-              </SortableContext>
+              {modules.map((m) => {
+                const moduleChapters = chapters.filter(
+                  (c) => c.moduleId === m.id,
+                )
+                return (
+                  <div key={m.id} className="mb-4">
+                    <SortableContext
+                      items={moduleChapters.map((c) => c.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <BuilderModule
+                        module={m}
+                        chapters={moduleChapters}
+                        collapsed={collapsedModuleIds.has(m.id)}
+                        onToggleCollapsed={() => toggleModuleCollapsed(m.id)}
+                        onEdit={() => openEditModule(m.id)}
+                        onRemove={() => setPendingDeleteModuleId(m.id)}
+                        onAddChapter={() => addChapter(m.id)}
+                        onRenameChapter={renameChapter}
+                        onRemoveChapter={removeChapter}
+                        onMoveChapter={moveChapter}
+                        onAddLesson={addLesson}
+                        onRenameLesson={renameLesson}
+                        onRemoveLesson={removeLesson}
+                        onMoveLesson={moveLesson}
+                        onEditLesson={openLessonEditor}
+                      />
+                    </SortableContext>
+                  </div>
+                )
+              })}
+
+              {looseChapters.length > 0 ? (
+                <div className="space-y-3">
+                  {modules.length > 0 ? (
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Unassigned chapters
+                    </p>
+                  ) : null}
+                  <SortableContext
+                    items={looseChapters.map((c) => c.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {looseChapters.map((ch, i) => (
+                      <BuilderChapter
+                        key={ch.id}
+                        chapter={ch}
+                        index={i}
+                        total={looseChapters.length}
+                        onRename={(t) => renameChapter(ch.id, t)}
+                        onRemove={() => removeChapter(ch.id)}
+                        onMove={(dir) => moveChapter(ch.id, dir)}
+                        onAddLesson={(type) => addLesson(ch.id, type)}
+                        onRenameLesson={(lessonId, title) =>
+                          renameLesson(ch.id, lessonId, title)
+                        }
+                        onRemoveLesson={(lessonId) =>
+                          removeLesson(ch.id, lessonId)
+                        }
+                        onMoveLesson={(from, to) =>
+                          moveLesson(ch.id, from, to)
+                        }
+                        onEditLesson={(lesson) =>
+                          openLessonEditor(ch.id, lesson as LocalLesson)
+                        }
+                      />
+                    ))}
+                  </SortableContext>
+                </div>
+              ) : null}
             </DndContext>
           )}
 
-          {chapters.length > 0 ? (
-            <Button
-              variant="outline"
-              className="w-full border-dashed"
-              onClick={addChapter}
-            >
-              <Plus />
-              Add chapter
-            </Button>
+          {modules.length > 0 || chapters.length > 0 ? (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 border-dashed"
+                onClick={openCreateModule}
+              >
+                <FolderPlus />
+                Add module
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 border-dashed"
+                onClick={() => addChapter(null)}
+              >
+                <Plus />
+                Add chapter
+              </Button>
+            </div>
           ) : null}
         </div>
 
@@ -820,6 +1028,49 @@ export function CourseBuilder({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ModuleDialog
+        open={moduleDialogOpen}
+        onOpenChange={setModuleDialogOpen}
+        mode={editingModule ? 'edit' : 'create'}
+        initial={
+          editingModule
+            ? {
+                title: editingModule.title,
+                description: editingModule.description,
+              }
+            : undefined
+        }
+        onSubmit={onModuleSubmit}
+      />
+
+      <AlertDialog
+        open={pendingDeleteModuleId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteModuleId(null)
+        }}
+      >
+        <AlertDialogContent className="overflow-hidden sm:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this module?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The module will be removed. Chapters inside it become loose
+              chapters on this course — no lessons are deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void onModuleDeleteConfirm()
+              }}
+            >
+              Delete module
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -845,13 +1096,28 @@ function DetailRow({
 // Serialization helpers
 // ===========================================================
 
+// Compute each chapter's per-parent orderIndex by walking the flat
+// list and bucketing per moduleId. The flat array's order is the
+// source of truth for display position; scoped orderIndex is just a
+// projection for the server.
+function withScopedOrder(chapters: LocalChapter[]) {
+  const counters = new Map<string | null, number>()
+  return chapters.map((c) => {
+    const key = c.moduleId
+    const idx = counters.get(key) ?? 0
+    counters.set(key, idx + 1)
+    return { chapter: c, orderIndex: idx }
+  })
+}
+
 function serialize(chapters: LocalChapter[]): string {
   return JSON.stringify(
-    chapters.map((c, ci) => ({
+    withScopedOrder(chapters).map(({ chapter: c, orderIndex }) => ({
       id: c.tempId ? null : c.id,
       tempId: c.tempId ?? null,
+      moduleId: c.moduleId,
       title: c.title,
-      orderIndex: ci,
+      orderIndex,
       lessons: c.lessons.map((l, li) => ({
         id: l.tempId ? null : l.id,
         tempId: l.tempId ?? null,
@@ -866,11 +1132,12 @@ function serialize(chapters: LocalChapter[]): string {
 
 function toSyncPayload(chapters: LocalChapter[]) {
   return {
-    chapters: chapters.map((c, ci) => ({
+    chapters: withScopedOrder(chapters).map(({ chapter: c, orderIndex }) => ({
       id: c.tempId ? undefined : c.id,
       tempId: c.tempId,
       title: c.title.trim() || 'Untitled chapter',
-      orderIndex: ci,
+      moduleId: c.moduleId ?? null,
+      orderIndex,
       lessons: c.lessons.map((l, li) => ({
         id: l.tempId ? undefined : l.id,
         tempId: l.tempId,

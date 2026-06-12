@@ -160,6 +160,7 @@ model Course {
 
   // Relations
   chapters    Chapter[]
+  modules     Module[]
   enrollments Enrollment[]
 
   @@index([status])
@@ -168,20 +169,51 @@ model Course {
   @@map("courses")
 }
 
+/// Optional grouping layer between Course and Chapter. A course may
+/// have any number of modules; chapters may sit directly on a course
+/// (moduleId = null) OR under a module. Modules and loose chapters
+/// share the same top-level ordering space (orderIndex on the course).
+model Module {
+  id          String    @id @default(uuid())
+  courseId    String    @map("course_id")
+  title       String
+  description String?
+  orderIndex  Int       @default(0) @map("order_index")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapters Chapter[]
+
+  @@index([courseId, orderIndex])
+  @@index([deletedAt])
+  @@map("modules")
+}
+
 model Chapter {
   id         String    @id @default(uuid())
   courseId   String    @map("course_id")
+  // Optional parent module. Null means the chapter sits directly on
+  // the course (a "loose" chapter). courseId stays denormalized so
+  // RLS and ordering queries don't need to traverse the module.
+  moduleId   String?   @map("module_id")
   title      String
   orderIndex Int       @default(0) @map("order_index")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
   deletedAt  DateTime? @map("deleted_at")
 
-  // Relations
+  // Relations. Module delete uses SetNull so removing a module turns
+  // its chapters into loose chapters on the same course rather than
+  // cascading the delete down.
   course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module  Module?  @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   lessons Lesson[]
 
   @@index([courseId, orderIndex])
+  @@index([moduleId, orderIndex])
   @@map("chapters")
 }
 

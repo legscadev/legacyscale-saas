@@ -30,6 +30,13 @@ export interface SyncChapterInput {
   tempId?: string
   title: string
   orderIndex: number
+  // Parent module. `undefined` = leave whatever's in the DB alone.
+  // `null` = the chapter is loose (sits directly on the course).
+  // A UUID = the chapter belongs to that module. The structure sync
+  // does NOT manage modules themselves — those go through the
+  // dedicated /api/admin/modules/* routes; this field only carries
+  // the chapter→module link so reorders and renames preserve it.
+  moduleId?: string | null
   lessons: SyncLessonInput[]
 }
 
@@ -130,15 +137,26 @@ async function syncCourseStructure(
       let realChapterId: string
 
       if (chapter.id) {
+        const chapterUpdate: Prisma.ChapterUpdateInput = {
+          title: chapter.title,
+          orderIndex: chapter.orderIndex,
+        }
+        if (chapter.moduleId !== undefined) {
+          chapterUpdate.module =
+            chapter.moduleId === null
+              ? { disconnect: true }
+              : { connect: { id: chapter.moduleId } }
+        }
         await tx.chapter.update({
           where: { id: chapter.id, courseId },
-          data: { title: chapter.title, orderIndex: chapter.orderIndex },
+          data: chapterUpdate,
         })
         realChapterId = chapter.id
       } else {
         const created = await tx.chapter.create({
           data: {
             courseId,
+            moduleId: chapter.moduleId ?? null,
             title: chapter.title,
             orderIndex: chapter.orderIndex,
           },

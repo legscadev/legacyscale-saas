@@ -6,6 +6,7 @@ import {
   BookOpen,
   CheckCircle2,
   Clock,
+  FolderOpen,
   Infinity as InfinityIcon,
   Layers,
   Play,
@@ -97,6 +98,13 @@ export default async function CourseDetailPage({
           </div>
 
           <div className="mt-auto flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            {course.modulesCount > 0 ? (
+              <span className="flex items-center gap-1.5">
+                <FolderOpen className="size-4" />
+                {course.modulesCount}{' '}
+                {course.modulesCount === 1 ? 'module' : 'modules'}
+              </span>
+            ) : null}
             <span className="flex items-center gap-1.5">
               <Layers className="size-4" />
               {course.chapters.length}{' '}
@@ -206,6 +214,11 @@ export default async function CourseDetailPage({
               Curriculum
             </h2>
             <span className="text-xs text-muted-foreground">
+              {course.modulesCount > 0
+                ? `${course.modulesCount} ${
+                    course.modulesCount === 1 ? 'module' : 'modules'
+                  } · `
+                : ''}
               {course.chapters.length}{' '}
               {course.chapters.length === 1 ? 'chapter' : 'chapters'} ·{' '}
               {course.lessonsCount}{' '}
@@ -214,7 +227,8 @@ export default async function CourseDetailPage({
           </div>
           {course.chapters.length > 0 ? (
             <CurriculumOutline
-              chapters={course.chapters}
+              modules={course.modules}
+              looseChapters={course.looseChapters}
               courseId={course.id}
               unlockedIds={gating.unlockedIds}
             />

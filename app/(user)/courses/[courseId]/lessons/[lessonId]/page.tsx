@@ -102,6 +102,12 @@ export default async function LessonPlayerPage({
 
   const chapterNumber =
     course.chapters.findIndex((c) => c.id === chapter.id) + 1
+  // Resolve the parent module (if any) for the breadcrumb. Loose
+  // chapters surface no module label.
+  const parentModule =
+    course.modules.find((m) =>
+      m.chapters.some((c) => c.id === chapter.id),
+    ) ?? null
   const upNextChapter = nextInOrder
     ? course.chapters.find((c) =>
         c.lessons.some((l) => l.id === nextInOrder.id),
@@ -167,6 +173,14 @@ export default async function LessonPlayerPage({
               the bare CHAPTER label we had before. */}
           <header className="space-y-2">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              {parentModule ? (
+                <>
+                  <span>{parentModule.title}</span>
+                  <span aria-hidden className="text-muted-foreground/40">
+                    •
+                  </span>
+                </>
+              ) : null}
               <span>
                 Chapter {String(chapterNumber).padStart(2, '0')} ·{' '}
                 {chapter.title}
@@ -231,7 +245,8 @@ export default async function LessonPlayerPage({
             </div>
             <div className="max-h-[50vh] overflow-y-auto p-3">
               <CurriculumOutline
-                chapters={course.chapters}
+                modules={course.modules}
+                looseChapters={course.looseChapters}
                 courseId={course.id}
                 activeLessonId={lesson.id}
                 variant="sidebar"

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 const chapterListSelect = {
   id: true,
   courseId: true,
+  moduleId: true,
   title: true,
   orderIndex: true,
   createdAt: true,
@@ -47,22 +48,34 @@ async function listByCourse(courseId: string) {
 
 interface CreateChapterInput {
   courseId: string
+  // null/missing → loose chapter (sits directly on the course).
+  // A UUID → chapter belongs to that module. orderIndex is scoped to
+  // the parent (module or course top-level), so a new loose chapter
+  // and a new chapter in module X both get the next slot in their own
+  // ordering space.
+  moduleId?: string | null
   title: string
 }
 
-async function createChapter({ courseId, title }: CreateChapterInput) {
-  // Find the next orderIndex among non-deleted siblings — soft-deleted
-  // rows are excluded so the new chapter slots in at the end of the
-  // visible list.
+async function createChapter({
+  courseId,
+  moduleId,
+  title,
+}: CreateChapterInput) {
+  const siblingWhere: Prisma.ChapterWhereInput = {
+    courseId,
+    moduleId: moduleId ?? null,
+    deletedAt: null,
+  }
   const last = await prisma.chapter.findFirst({
-    where: { courseId, deletedAt: null },
+    where: siblingWhere,
     orderBy: { orderIndex: 'desc' },
     select: { orderIndex: true },
   })
   const orderIndex = (last?.orderIndex ?? -1) + 1
 
   return prisma.chapter.create({
-    data: { courseId, title, orderIndex },
+    data: { courseId, moduleId: moduleId ?? null, title, orderIndex },
     select: chapterListSelect,
   })
 }
@@ -70,16 +83,60 @@ async function createChapter({ courseId, title }: CreateChapterInput) {
 interface UpdateChapterInput {
   title?: string
   orderIndex?: number
+  // `undefined` = no change. `null` = move out to loose. A UUID =
+  // move into that module. Use moveChapter() to also auto-bump
+  // orderIndex into the new scope; this method trusts whatever the
+  // caller passes.
+  moduleId?: string | null
 }
 
 async function updateChapter(id: string, input: UpdateChapterInput) {
   const data: Prisma.ChapterUpdateInput = {}
   if (input.title !== undefined) data.title = input.title
   if (input.orderIndex !== undefined) data.orderIndex = input.orderIndex
+  if (input.moduleId !== undefined) {
+    data.module =
+      input.moduleId === null
+        ? { disconnect: true }
+        : { connect: { id: input.moduleId } }
+  }
 
   return prisma.chapter.update({
     where: { id },
     data,
+    select: chapterListSelect,
+  })
+}
+
+/**
+ * Move a chapter between parents (module → module, module → loose,
+ * or loose → module) and slot it at the end of the new scope's
+ * ordering. Use when the caller doesn't want to think about the new
+ * orderIndex value.
+ */
+async function moveChapter(id: string, moduleId: string | null) {
+  const chapter = await prisma.chapter.findUnique({
+    where: { id },
+    select: { courseId: true },
+  })
+  if (!chapter) throw new Error('Chapter not found')
+
+  const last = await prisma.chapter.findFirst({
+    where: { courseId: chapter.courseId, moduleId, deletedAt: null },
+    orderBy: { orderIndex: 'desc' },
+    select: { orderIndex: true },
+  })
+  const orderIndex = (last?.orderIndex ?? -1) + 1
+
+  return prisma.chapter.update({
+    where: { id },
+    data: {
+      module:
+        moduleId === null
+          ? { disconnect: true }
+          : { connect: { id: moduleId } },
+      orderIndex,
+    },
     select: chapterListSelect,
   })
 }
@@ -113,6 +170,7 @@ export const chapterService = {
   list: listByCourse,
   create: createChapter,
   update: updateChapter,
+  move: moveChapter,
   delete: deleteChapter,
   reorder: reorderChapters,
 }

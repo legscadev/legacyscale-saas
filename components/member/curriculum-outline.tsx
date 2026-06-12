@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Circle,
   FileText,
+  FolderOpen,
   GraduationCap,
   Loader2,
   Lock,
@@ -15,11 +16,13 @@ import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import type { MemberCourseDetail } from '@/lib/services/member-course-service'
 
+type Module = MemberCourseDetail['modules'][number]
 type Chapter = MemberCourseDetail['chapters'][number]
 type Lesson = Chapter['lessons'][number]
 
 interface CurriculumOutlineProps {
-  chapters: MemberCourseDetail['chapters']
+  modules: MemberCourseDetail['modules']
+  looseChapters: MemberCourseDetail['looseChapters']
   courseId: string
   activeLessonId?: string
   variant?: 'page' | 'sidebar'
@@ -63,7 +66,8 @@ function chapterProgress(chapter: Chapter): {
 }
 
 export function CurriculumOutline({
-  chapters,
+  modules,
+  looseChapters,
   courseId,
   activeLessonId,
   variant = 'page',
@@ -72,7 +76,8 @@ export function CurriculumOutline({
   if (variant === 'sidebar') {
     return (
       <SidebarOutline
-        chapters={chapters}
+        modules={modules}
+        looseChapters={looseChapters}
         courseId={courseId}
         activeLessonId={activeLessonId}
         unlockedIds={unlockedIds}
@@ -81,7 +86,8 @@ export function CurriculumOutline({
   }
   return (
     <PageOutline
-      chapters={chapters}
+      modules={modules}
+      looseChapters={looseChapters}
       courseId={courseId}
       unlockedIds={unlockedIds}
     />
@@ -93,70 +99,136 @@ export function CurriculumOutline({
 // ============================================
 
 function PageOutline({
-  chapters,
+  modules,
+  looseChapters,
   courseId,
   unlockedIds,
 }: {
-  chapters: Chapter[]
+  modules: Module[]
+  looseChapters: Chapter[]
   courseId: string
   unlockedIds?: Set<string>
 }) {
+  // Number chapters globally across modules + loose so the prefix
+  // numbering stays continuous as members scan through.
+  let chapterCursor = 0
+  const renderChapter = (chapter: Chapter) => {
+    const index = chapterCursor++
+    return (
+      <ChapterCard
+        key={chapter.id}
+        chapter={chapter}
+        index={index}
+        courseId={courseId}
+        unlockedIds={unlockedIds}
+      />
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      {chapters.map((chapter, ci) => {
-        const { completed, total, percent } = chapterProgress(chapter)
-        const chapterDone = total > 0 && completed === total
-        return (
-          <Card key={chapter.id} className="gap-0 overflow-hidden p-0">
-            <div className="space-y-2.5 border-b bg-muted/30 px-5 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    className={cn(
-                      'inline-flex size-7 shrink-0 items-center justify-center rounded-md font-mono text-[11px] font-semibold tabular-nums',
-                      chapterDone
-                        ? 'bg-success/15 text-success'
-                        : 'bg-muted text-muted-foreground',
-                    )}
-                  >
-                    {String(ci + 1).padStart(2, '0')}
-                  </span>
-                  <h3 className="min-w-0 truncate text-sm font-semibold">
-                    {chapter.title}
-                  </h3>
-                </div>
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {completed} / {total}{' '}
-                  {total === 1 ? 'lesson' : 'lessons'}
-                </span>
-              </div>
-              {total > 0 ? (
-                <Progress value={percent} className="h-1" />
-              ) : null}
+    <div className="flex flex-col gap-6">
+      {modules.map((m) => (
+        <section key={m.id} className="space-y-3">
+          <ModuleHeader module={m} />
+          {m.chapters.length === 0 ? (
+            <p className="rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground">
+              No chapters in this module yet.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {m.chapters.map(renderChapter)}
             </div>
-            {total === 0 ? (
-              <p className="px-5 py-4 text-sm text-muted-foreground">
-                No lessons yet.
-              </p>
-            ) : (
-              <ul className="divide-y">
-                {chapter.lessons.map((lesson) => (
-                  <PageLessonRow
-                    key={lesson.id}
-                    lesson={lesson}
-                    courseId={courseId}
-                    gated={
-                      unlockedIds !== undefined &&
-                      !unlockedIds.has(lesson.id)
-                    }
-                  />
-                ))}
-              </ul>
-            )}
-          </Card>
-        )
-      })}
+          )}
+        </section>
+      ))}
+
+      {looseChapters.length > 0 ? (
+        <section className="space-y-3">
+          {modules.length > 0 ? (
+            <h2 className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Additional chapters
+            </h2>
+          ) : null}
+          <div className="flex flex-col gap-4">
+            {looseChapters.map(renderChapter)}
+          </div>
+        </section>
+      ) : null}
     </div>
+  )
+}
+
+function ModuleHeader({ module: m }: { module: Module }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border bg-muted/30 px-4 py-3">
+      <FolderOpen className="size-5 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1 space-y-1">
+        <h2 className="text-base font-semibold tracking-tight">{m.title}</h2>
+        {m.description ? (
+          <p className="text-sm text-muted-foreground">{m.description}</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function ChapterCard({
+  chapter,
+  index,
+  courseId,
+  unlockedIds,
+}: {
+  chapter: Chapter
+  index: number
+  courseId: string
+  unlockedIds?: Set<string>
+}) {
+  const { completed, total, percent } = chapterProgress(chapter)
+  const chapterDone = total > 0 && completed === total
+  return (
+    <Card className="gap-0 overflow-hidden p-0">
+      <div className="space-y-2.5 border-b bg-muted/30 px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className={cn(
+                'inline-flex size-7 shrink-0 items-center justify-center rounded-md font-mono text-[11px] font-semibold tabular-nums',
+                chapterDone
+                  ? 'bg-success/15 text-success'
+                  : 'bg-muted text-muted-foreground',
+              )}
+            >
+              {String(index + 1).padStart(2, '0')}
+            </span>
+            <h3 className="min-w-0 truncate text-sm font-semibold">
+              {chapter.title}
+            </h3>
+          </div>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {completed} / {total} {total === 1 ? 'lesson' : 'lessons'}
+          </span>
+        </div>
+        {total > 0 ? <Progress value={percent} className="h-1" /> : null}
+      </div>
+      {total === 0 ? (
+        <p className="px-5 py-4 text-sm text-muted-foreground">
+          No lessons yet.
+        </p>
+      ) : (
+        <ul className="divide-y">
+          {chapter.lessons.map((lesson) => (
+            <PageLessonRow
+              key={lesson.id}
+              lesson={lesson}
+              courseId={courseId}
+              gated={
+                unlockedIds !== undefined && !unlockedIds.has(lesson.id)
+              }
+            />
+          ))}
+        </ul>
+      )}
+    </Card>
   )
 }
 
@@ -241,61 +313,120 @@ function PageLessonRow({
 // ============================================
 
 function SidebarOutline({
-  chapters,
+  modules,
+  looseChapters,
   courseId,
   activeLessonId,
   unlockedIds,
 }: {
-  chapters: Chapter[]
+  modules: Module[]
+  looseChapters: Chapter[]
   courseId: string
   activeLessonId?: string
   unlockedIds?: Set<string>
 }) {
+  let chapterCursor = 0
+  const renderChapter = (chapter: Chapter) => {
+    const index = chapterCursor++
+    return (
+      <SidebarChapter
+        key={chapter.id}
+        chapter={chapter}
+        index={index}
+        courseId={courseId}
+        activeLessonId={activeLessonId}
+        unlockedIds={unlockedIds}
+      />
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      {chapters.map((chapter, ci) => {
-        const { completed, total, percent } = chapterProgress(chapter)
-        return (
-          <div key={chapter.id}>
-            <div className="mb-2 space-y-1 px-1">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="min-w-0 truncate text-sm font-medium">
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    {String(ci + 1).padStart(2, '0')}
-                  </span>{' '}
-                  {chapter.title}
-                </h3>
-                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                  {completed} / {total}
-                </span>
-              </div>
-              {total > 0 ? (
-                <Progress value={percent} className="h-1" />
-              ) : null}
-            </div>
-            {total === 0 ? (
-              <p className="px-3 py-2 text-sm text-muted-foreground">
-                No lessons yet.
+    <div className="flex flex-col gap-6">
+      {modules.map((m) => (
+        <div key={m.id} className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <FolderOpen className="size-3.5 text-primary" />
+            <h2 className="min-w-0 truncate text-xs font-semibold uppercase tracking-[0.12em] text-foreground/80">
+              {m.title}
+            </h2>
+          </div>
+          <div className="flex flex-col gap-4">
+            {m.chapters.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-muted-foreground">
+                No chapters yet.
               </p>
             ) : (
-              <ul className="flex flex-col">
-                {chapter.lessons.map((lesson) => (
-                  <SidebarLessonRow
-                    key={lesson.id}
-                    lesson={lesson}
-                    courseId={courseId}
-                    active={lesson.id === activeLessonId}
-                    gated={
-                      unlockedIds !== undefined &&
-                      !unlockedIds.has(lesson.id)
-                    }
-                  />
-                ))}
-              </ul>
+              m.chapters.map(renderChapter)
             )}
           </div>
-        )
-      })}
+        </div>
+      ))}
+
+      {looseChapters.length > 0 ? (
+        <div className="space-y-3">
+          {modules.length > 0 ? (
+            <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Additional chapters
+            </h2>
+          ) : null}
+          <div className="flex flex-col gap-4">
+            {looseChapters.map(renderChapter)}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function SidebarChapter({
+  chapter,
+  index,
+  courseId,
+  activeLessonId,
+  unlockedIds,
+}: {
+  chapter: Chapter
+  index: number
+  courseId: string
+  activeLessonId?: string
+  unlockedIds?: Set<string>
+}) {
+  const { completed, total, percent } = chapterProgress(chapter)
+  return (
+    <div>
+      <div className="mb-2 space-y-1 px-1">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="min-w-0 truncate text-sm font-medium">
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              {String(index + 1).padStart(2, '0')}
+            </span>{' '}
+            {chapter.title}
+          </h3>
+          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+            {completed} / {total}
+          </span>
+        </div>
+        {total > 0 ? <Progress value={percent} className="h-1" /> : null}
+      </div>
+      {total === 0 ? (
+        <p className="px-3 py-2 text-sm text-muted-foreground">
+          No lessons yet.
+        </p>
+      ) : (
+        <ul className="flex flex-col">
+          {chapter.lessons.map((lesson) => (
+            <SidebarLessonRow
+              key={lesson.id}
+              lesson={lesson}
+              courseId={courseId}
+              active={lesson.id === activeLessonId}
+              gated={
+                unlockedIds !== undefined && !unlockedIds.has(lesson.id)
+              }
+            />
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
