@@ -88,31 +88,35 @@ export default async function AdminProgressMemberDetailPage({
         </div>
       </SectionCard>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
+          size="sm"
           title="Enrollments"
           value={kpis.totalEnrollments}
           icon={GraduationCap}
           tone="neutral"
         />
         <StatCard
+          size="sm"
           title="Completed"
           value={kpis.completedCourses}
           icon={CheckCircle2}
           tone="success"
         />
         <StatCard
+          size="sm"
           title="Avg progress"
           value={`${kpis.avgProgressPercent}%`}
           icon={TrendingUp}
           tone="brand"
         />
         <StatCard
+          size="sm"
           title="Lessons · 30d"
           value={kpis.completedLessonsLast30d}
           icon={Sparkles}
           tone="violet"
-          description="Completed in last 30 days"
+          description="Last 30 days"
         />
       </div>
 

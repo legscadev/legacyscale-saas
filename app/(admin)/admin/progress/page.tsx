@@ -51,27 +51,31 @@ export default async function AdminProgressOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
+          size="sm"
           title="Active members"
           value={kpis.activeMembers}
           icon={Users}
           tone="info"
         />
         <StatCard
+          size="sm"
           title="Total enrollments"
           value={kpis.totalEnrollments}
           icon={GraduationCap}
           tone="neutral"
         />
         <StatCard
+          size="sm"
           title="Avg progress"
           value={`${kpis.avgProgressPercent}%`}
           icon={TrendingUp}
           tone="brand"
-          description="Across active enrollments"
+          description="Active enrollments"
         />
         <StatCard
+          size="sm"
           title="Completion rate"
           value={`${kpis.completionRate}%`}
           icon={CheckCircle2}
@@ -79,6 +83,7 @@ export default async function AdminProgressOverviewPage() {
           description="Completed / non-revoked"
         />
         <StatCard
+          size="sm"
           title="Weekly active"
           value={kpis.weeklyActiveLearners}
           icon={Zap}

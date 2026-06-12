@@ -35,6 +35,18 @@ const TONE_GLOW: Record<StatTone, string> = {
   neutral: 'from-muted/40',
 }
 
+// Compact-variant tone treatment — flat tinted background + matching
+// foreground colour, no gradient or shadow. Designed to read at small
+// sizes without the heavy premium badging of the default variant.
+const TONE_BADGE_SM: Record<StatTone, string> = {
+  brand: 'bg-brand-500/10 text-brand-600 dark:text-brand-400',
+  success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  info: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  violet: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  neutral: 'bg-muted text-muted-foreground',
+}
+
 interface StatCardProps {
   title: string
   value: string | number
@@ -46,6 +58,10 @@ interface StatCardProps {
     value: number
     isPositive: boolean
   }
+  /** "default" is the full-bleed premium card. "sm" is a compact
+   *  rectangle for dense dashboards — no accent bar, no hover lift,
+   *  smaller padding + typography. */
+  size?: 'default' | 'sm'
   className?: string
 }
 
@@ -56,8 +72,52 @@ export function StatCard({
   icon: Icon,
   tone = 'neutral',
   trend,
+  size = 'default',
   className,
 }: StatCardProps) {
+  if (size === 'sm') {
+    return (
+      <Card className={cn('gap-0 p-3', className)}>
+        <div className="flex items-center justify-between gap-2">
+          <p className="truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            {title}
+          </p>
+          {Icon ? (
+            <span
+              className={cn(
+                'flex size-7 shrink-0 items-center justify-center rounded-md',
+                TONE_BADGE_SM[tone],
+              )}
+            >
+              <Icon className="size-3.5" />
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1.5 text-xl font-semibold tabular-nums">{value}</p>
+        {(description || trend) && (
+          <div className="mt-0.5 flex items-center gap-1.5">
+            {trend && (
+              <span
+                className={cn(
+                  'text-[11px] font-semibold',
+                  trend.isPositive ? 'text-success' : 'text-destructive',
+                )}
+              >
+                {trend.isPositive ? '+' : ''}
+                {trend.value}%
+              </span>
+            )}
+            {description && (
+              <span className="truncate text-[11px] text-muted-foreground">
+                {description}
+              </span>
+            )}
+          </div>
+        )}
+      </Card>
+    )
+  }
+
   return (
     <Card
       className={cn(

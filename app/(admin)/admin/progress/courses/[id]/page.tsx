@@ -166,38 +166,44 @@ export default async function AdminProgressCohortPage({
         </div>
       </SectionCard>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <StatCard
+          size="sm"
           title="Enrolled"
           value={kpis.enrolled}
           icon={UsersIcon}
           tone="info"
         />
         <StatCard
+          size="sm"
           title="In progress"
           value={kpis.active}
           icon={PlayCircle}
           tone="neutral"
         />
         <StatCard
+          size="sm"
           title="Completed"
           value={kpis.completed}
           icon={CheckCircle2}
           tone="success"
         />
         <StatCard
+          size="sm"
           title="Avg progress"
           value={`${kpis.avgProgressPercent}%`}
           icon={TrendingUp}
           tone="brand"
         />
         <StatCard
+          size="sm"
           title="Completion rate"
           value={`${kpis.completionRate}%`}
           icon={GraduationCap}
           tone="success"
         />
         <StatCard
+          size="sm"
           title="Weekly active"
           value={kpis.weeklyActive}
           icon={Zap}
