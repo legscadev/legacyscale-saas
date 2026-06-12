@@ -18,18 +18,45 @@ import {
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
 import { getInitials, relativeTime } from '@/lib/format'
-import { adminProgressService } from '@/lib/services/admin-progress-service'
+import {
+  adminProgressService,
+  rangeLabel,
+  type RangeFilter,
+} from '@/lib/services/admin-progress-service'
+import { OverviewRangePicker } from '@/components/admin/progress/overview-range-picker'
 
-export default async function AdminProgressOverviewPage() {
+interface PageProps {
+  searchParams: Promise<{ range?: string }>
+}
+
+function parseRange(raw: string | undefined): RangeFilter {
+  return raw === '7d' || raw === '90d' || raw === 'all' ? raw : '30d'
+}
+
+export default async function AdminProgressOverviewPage({
+  searchParams,
+}: PageProps) {
+  const params = await searchParams
+  const range = parseRange(params.range)
+  const window = rangeLabel(range)
+
   const [kpis, engaged, topCourses, recent] = await Promise.all([
-    adminProgressService.getOverviewKpis(),
-    adminProgressService.getMostEngagedMembers(5),
-    adminProgressService.getTopCourses(5),
-    adminProgressService.getRecentCompletions(10),
+    adminProgressService.getOverviewKpis(range),
+    adminProgressService.getMostEngagedMembers(5, range),
+    adminProgressService.getTopCourses(5, range),
+    adminProgressService.getRecentCompletions(10, range),
   ])
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          Showing data for{' '}
+          <span className="font-medium text-foreground">{window}</span>.
+        </p>
+        <OverviewRangePicker initialRange={range} />
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           size="sm"
@@ -37,13 +64,15 @@ export default async function AdminProgressOverviewPage() {
           value={kpis.activeMembers}
           icon={Users}
           tone="info"
+          description="Platform total"
         />
         <StatCard
           size="sm"
-          title="Total enrollments"
-          value={kpis.totalEnrollments}
+          title="Enrollments"
+          value={kpis.enrollmentsInRange}
           icon={GraduationCap}
           tone="neutral"
+          description={`Started · ${window}`}
         />
         <StatCard
           size="sm"
@@ -51,7 +80,7 @@ export default async function AdminProgressOverviewPage() {
           value={`${kpis.avgProgressPercent}%`}
           icon={TrendingUp}
           tone="brand"
-          description="Active enrollments"
+          description={`Touched · ${window}`}
         />
         <StatCard
           size="sm"
@@ -59,22 +88,22 @@ export default async function AdminProgressOverviewPage() {
           value={`${kpis.completionRate}%`}
           icon={CheckCircle2}
           tone="success"
-          description="Completed / non-revoked"
+          description={`Completed · ${window}`}
         />
         <StatCard
           size="sm"
-          title="Weekly active"
-          value={kpis.weeklyActiveLearners}
+          title="Active learners"
+          value={kpis.activeLearners}
           icon={Zap}
           tone="violet"
-          description="Last 7 days"
+          description={`Active · ${window}`}
         />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard
           title="Most engaged members"
-          description="Top 5 by lessons completed in the last 30 days."
+          description={`Top 5 by lessons completed in the ${window}.`}
         >
           {engaged.length === 0 ? (
             <EmptyState
@@ -112,7 +141,7 @@ export default async function AdminProgressOverviewPage() {
                         {m.completedLessons}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        lessons · 30d
+                        lessons · {window}
                       </p>
                     </div>
                   </Link>
@@ -124,7 +153,7 @@ export default async function AdminProgressOverviewPage() {
 
         <SectionCard
           title="Top courses"
-          description="Ranked by total non-revoked enrollments."
+          description={`Ranked by enrollments started in the ${window}.`}
         >
           {topCourses.length === 0 ? (
             <EmptyState
@@ -176,13 +205,17 @@ export default async function AdminProgressOverviewPage() {
 
       <SectionCard
         title="Recent completions"
-        description="The last 10 members to finish a course."
+        description={`Last 10 members to finish a course in the ${window}.`}
       >
         {recent.length === 0 ? (
           <EmptyState
             icon={CheckCircle2}
             title="No completions yet"
-            description="When members finish courses, they'll show up here."
+            description={
+              range === 'all'
+                ? "When members finish courses, they'll show up here."
+                : `No course completions in the ${window}.`
+            }
           />
         ) : (
           <ul className="-mx-3 divide-y">

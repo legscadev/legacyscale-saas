@@ -31,6 +31,7 @@ import { prisma } from '@/lib/prisma'
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000
 
 /** Hard upper bound on rows returned by exportCourseCohortCsv. Chosen
  *  to keep the response body and memory footprint safe for the
@@ -39,32 +40,102 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 const CSV_EXPORT_MAX_ROWS = 10_000
 
 // ============================================
+// SHARED — DATE RANGE FILTER
+// ============================================
+
+/**
+ * Overview/dashboard date-range filter. Methods that accept this
+ * narrow their date-based aggregations (engagement, completions,
+ * activity) to the implied window. "all" disables the window —
+ * useful for the admin's "lifetime stats" view.
+ */
+export type RangeFilter = '7d' | '30d' | '90d' | 'all'
+
+/** Cutoff `Date` for a RangeFilter. Returns null for "all" so callers
+ *  can omit the date filter entirely. */
+export function rangeStart(range: RangeFilter): Date | null {
+  switch (range) {
+    case '7d':
+      return new Date(Date.now() - SEVEN_DAYS_MS)
+    case '30d':
+      return new Date(Date.now() - THIRTY_DAYS_MS)
+    case '90d':
+      return new Date(Date.now() - NINETY_DAYS_MS)
+    case 'all':
+      return null
+  }
+}
+
+/** Human label for a RangeFilter, suitable for KPI descriptions. */
+export function rangeLabel(range: RangeFilter): string {
+  switch (range) {
+    case '7d':
+      return 'last 7 days'
+    case '30d':
+      return 'last 30 days'
+    case '90d':
+      return 'last 90 days'
+    case 'all':
+      return 'all time'
+  }
+}
+
+// ============================================
 // STEP 2 — OVERVIEW
 // ============================================
 
 export interface OverviewKpis {
-  /** Members + Team users that are active (excludes deleted/disabled). */
+  /** Members + Team users that are active (platform snapshot —
+   *  range-independent). */
   activeMembers: number
-  /** Non-revoked enrollments (ACTIVE + EXPIRED + completed). */
-  totalEnrollments: number
-  /** Average progress across ACTIVE enrollments, 0-100. */
+  /** Non-revoked enrollments started in the selected range
+   *  (all-time when range = "all"). */
+  enrollmentsInRange: number
+  /** Average progress across enrollments touched in the selected
+   *  range (enrolled / accessed / completed in window). 0-100. */
   avgProgressPercent: number
-  /** Completed / non-revoked enrollments, 0-100. */
+  /** Completions in range / non-revoked enrollments touched in range.
+   *  0-100. */
   completionRate: number
-  /** Distinct users whose `lastAccessedAt` falls in the last 7 days. */
-  weeklyActiveLearners: number
+  /** Distinct users whose `lastAccessedAt` falls in the selected
+   *  range. Renders as "Active learners". */
+  activeLearners: number
+  /** Echoed back so the page can label the strip. */
+  range: RangeFilter
 }
 
-async function getOverviewKpis(): Promise<OverviewKpis> {
+async function getOverviewKpis(
+  range: RangeFilter = '30d',
+): Promise<OverviewKpis> {
   await requireAdmin()
-  const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS)
+  const start = rangeStart(range)
+
+  // "Touched in range" = enrollment has any relevant timestamp
+  // (enrolled, last accessed, or completed) within the window. Same
+  // filter feeds both the avg-progress and completion-rate
+  // denominators below.
+  const touchedFilter = start
+    ? {
+        OR: [
+          { enrolledAt: { gte: start } },
+          { lastAccessedAt: { gte: start } },
+          { completedAt: { gte: start } },
+        ],
+      }
+    : {}
+  const enrolledFilter = start ? { enrolledAt: { gte: start } } : {}
+  const completedFilter = start
+    ? { completedAt: { gte: start } }
+    : { completedAt: { not: null } }
+  const accessedFilter = start ? { lastAccessedAt: { gte: start } } : {}
 
   const [
     activeMembers,
-    nonRevokedTotal,
-    completedTotal,
+    enrollmentsInRange,
+    completedInRange,
+    touchedTotal,
     progressAgg,
-    weeklyActiveRows,
+    activeLearnerRows,
   ] = await Promise.all([
     prisma.user.count({
       where: {
@@ -74,17 +145,18 @@ async function getOverviewKpis(): Promise<OverviewKpis> {
       },
     }),
     prisma.enrollment.count({
-      where: { status: { not: 'REVOKED' } },
+      where: { status: { not: 'REVOKED' }, ...enrolledFilter },
     }),
+    prisma.enrollment.count({ where: completedFilter }),
     prisma.enrollment.count({
-      where: { completedAt: { not: null } },
+      where: { status: { not: 'REVOKED' }, ...touchedFilter },
     }),
     prisma.enrollment.aggregate({
-      where: { status: 'ACTIVE' },
+      where: { status: { not: 'REVOKED' }, ...touchedFilter },
       _avg: { progressPercent: true },
     }),
     prisma.enrollment.findMany({
-      where: { lastAccessedAt: { gte: sevenDaysAgo } },
+      where: accessedFilter,
       select: { userId: true },
       distinct: ['userId'],
     }),
@@ -92,13 +164,14 @@ async function getOverviewKpis(): Promise<OverviewKpis> {
 
   return {
     activeMembers,
-    totalEnrollments: nonRevokedTotal,
+    enrollmentsInRange,
     avgProgressPercent: Math.round(progressAgg._avg.progressPercent ?? 0),
     completionRate:
-      nonRevokedTotal > 0
-        ? Math.round((completedTotal / nonRevokedTotal) * 100)
+      touchedTotal > 0
+        ? Math.round((completedInRange / touchedTotal) * 100)
         : 0,
-    weeklyActiveLearners: weeklyActiveRows.length,
+    activeLearners: activeLearnerRows.length,
+    range,
   }
 }
 
@@ -110,19 +183,22 @@ export interface EngagedMember {
   role: Role
   /** Lessons completed in the last 30 days. */
   completedLessons: number
-  /** Most recent completion timestamp (last 30 days only). */
+  /** Most recent completion timestamp within the queried range. */
   lastActivity: Date | null
 }
 
-async function getMostEngagedMembers(limit = 5): Promise<EngagedMember[]> {
+async function getMostEngagedMembers(
+  limit = 5,
+  range: RangeFilter = '30d',
+): Promise<EngagedMember[]> {
   await requireAdmin()
-  const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_MS)
+  const start = rangeStart(range)
 
   const grouped = await prisma.lessonProgress.groupBy({
     by: ['userId'],
     where: {
       completed: true,
-      completedAt: { gte: thirtyDaysAgo },
+      ...(start ? { completedAt: { gte: start } } : {}),
     },
     _count: { _all: true },
     _max: { completedAt: true },
@@ -171,13 +247,22 @@ export interface TopCourseItem {
   avgProgressPercent: number
 }
 
-async function getTopCourses(limit = 5): Promise<TopCourseItem[]> {
+async function getTopCourses(
+  limit = 5,
+  range: RangeFilter = '30d',
+): Promise<TopCourseItem[]> {
   await requireAdmin()
-  // Rank courses by total enrollments (non-revoked). Pulls top N then
-  // fetches course meta + completion counts in parallel.
+  // Rank courses by enrollments started in the selected window
+  // (all-time when range = "all"). Pulls top N then fetches course
+  // meta + completion counts in parallel.
+  const start = rangeStart(range)
+  const enrollmentWhere = {
+    status: { not: 'REVOKED' as const },
+    ...(start ? { enrolledAt: { gte: start } } : {}),
+  }
   const grouped = await prisma.enrollment.groupBy({
     by: ['courseId'],
-    where: { status: { not: 'REVOKED' } },
+    where: enrollmentWhere,
     _count: { _all: true },
     _avg: { progressPercent: true },
     orderBy: { _count: { userId: 'desc' } },
@@ -194,7 +279,10 @@ async function getTopCourses(limit = 5): Promise<TopCourseItem[]> {
     }),
     prisma.enrollment.groupBy({
       by: ['courseId'],
-      where: { courseId: { in: courseIds }, completedAt: { not: null } },
+      where: {
+        courseId: { in: courseIds },
+        completedAt: start ? { gte: start } : { not: null },
+      },
       _count: { _all: true },
     }),
   ])
@@ -239,10 +327,16 @@ export interface RecentCompletion {
   }
 }
 
-async function getRecentCompletions(limit = 10): Promise<RecentCompletion[]> {
+async function getRecentCompletions(
+  limit = 10,
+  range: RangeFilter = '30d',
+): Promise<RecentCompletion[]> {
   await requireAdmin()
+  const start = rangeStart(range)
   const rows = await prisma.enrollment.findMany({
-    where: { completedAt: { not: null } },
+    where: {
+      completedAt: start ? { gte: start } : { not: null },
+    },
     orderBy: { completedAt: 'desc' },
     take: limit,
     select: {
