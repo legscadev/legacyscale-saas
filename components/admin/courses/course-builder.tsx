@@ -1,13 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   ExternalLink,
-  FolderPlus,
   Layers,
+  LayersPlus,
   Plus,
   Save,
   Undo2,
@@ -19,9 +26,11 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCenter,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -29,6 +38,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -449,6 +459,50 @@ export function CourseBuilder({
     })
   }, [])
 
+  // Cross-scope move: chapter changes moduleId AND lands at a specific
+  // position within the destination. `toModuleId === null` lands it in
+  // the loose-chapter group. When `overChapterId` is given, the chapter
+  // is inserted just before that chapter; otherwise it goes at the end
+  // of the destination scope.
+  const moveChapterAcross = useCallback(
+    (activeId: string, toModuleId: string | null, overChapterId?: string) => {
+      setChapters((prev) => {
+        const active = prev.find((c) => c.id === activeId)
+        if (!active) return prev
+        if (active.moduleId === toModuleId) return prev
+
+        const moved = { ...active, moduleId: toModuleId }
+        const without = prev.filter((c) => c.id !== activeId)
+
+        // Find insertion position in the flat array. We want `moved`
+        // placed so the destination scope ordering reads correctly when
+        // filtered later. The easiest correct approach: locate the
+        // anchor element in `without` and splice `moved` next to it.
+        let insertIndex: number
+        if (overChapterId) {
+          insertIndex = without.findIndex((c) => c.id === overChapterId)
+          if (insertIndex === -1) insertIndex = without.length
+        } else {
+          // No anchor — drop at the end of the destination scope.
+          // Find the last index whose moduleId matches the destination
+          // and insert AFTER it. If the destination is empty, append at
+          // the bottom (the relative order of other scopes is preserved
+          // by `without`'s original ordering).
+          let lastIdx = -1
+          for (let i = 0; i < without.length; i++) {
+            if (without[i]!.moduleId === toModuleId) lastIdx = i
+          }
+          insertIndex = lastIdx === -1 ? without.length : lastIdx + 1
+        }
+
+        const next = [...without]
+        next.splice(insertIndex, 0, moved)
+        return next
+      })
+    },
+    [],
+  )
+
   const addLesson = useCallback(
     (chapterId: string, type: LessonType) => {
       const tempId = `temp-l-${crypto.randomUUID()}`
@@ -543,18 +597,107 @@ export function CourseBuilder({
     [patchChapter],
   )
 
+  // Pre-drag snapshot for Escape-cancel. onDragOver mutates chapters
+  // live (cross-scope preview), so if the user cancels we need to put
+  // the chapter back where it started instead of leaving it where it
+  // last hovered.
+  const dragSnapshotRef = useRef<LocalChapter[] | null>(null)
+
+  const onDragStart = useCallback(() => {
+    dragSnapshotRef.current = chapters
+  }, [chapters])
+
+  // Live cross-scope preview. While dragging a chapter into a different
+  // module (or the loose bucket), update state immediately so the user
+  // sees the chapter slot itself into the destination as their pointer
+  // moves. Same-scope reorders are handled by SortableContext's built-in
+  // animation + the final commit in onDragEnd — we don't need to touch
+  // state here for those.
+  const onDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const activeType = active.data.current?.type
+      if (activeType !== 'chapter') return
+
+      const activeChapter = chapters.find((c) => c.id === active.id)
+      if (!activeChapter) return
+
+      const overType = over.data.current?.type
+      let targetScope: string | null
+      let anchorId: string | undefined
+
+      if (overType === 'chapter') {
+        const overChapter = chapters.find((c) => c.id === over.id)
+        if (!overChapter) return
+        targetScope = overChapter.moduleId
+        anchorId = String(over.id)
+      } else if (overType === 'module-container') {
+        targetScope = String(over.id)
+      } else if (overType === 'loose-container') {
+        targetScope = null
+      } else {
+        return
+      }
+
+      if (activeChapter.moduleId === targetScope) return
+      moveChapterAcross(String(active.id), targetScope, anchorId)
+    },
+    [chapters, moveChapterAcross],
+  )
+
+  const onDragCancel = useCallback(() => {
+    if (dragSnapshotRef.current) {
+      setChapters(dragSnapshotRef.current)
+      dragSnapshotRef.current = null
+    }
+  }, [])
+
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
+      // Drop completed successfully — discard the snapshot. Anything
+      // before this point that mattered already lives in chapters.
+      dragSnapshotRef.current = null
+
       const { active, over } = event
       if (!over || active.id === over.id) return
 
       const activeType = active.data.current?.type
       const overType = over.data.current?.type
 
-      if (activeType === 'chapter' && overType === 'chapter') {
-        // moveChapterTo no-ops when active/over live in different
-        // scopes (modules vs loose), so it's safe to call blindly.
-        moveChapterTo(String(active.id), String(over.id))
+      if (activeType === 'chapter') {
+        const activeChapter = chapters.find((c) => c.id === active.id)
+        if (!activeChapter) return
+
+        // By the time onDragEnd fires, onDragOver has already pulled the
+        // chapter into its destination scope (if it ever crossed one).
+        // So this branch only needs to handle the same-scope reorder
+        // anchored on the hovered chapter — moveChapterTo no-ops if the
+        // chapter is already at the right slot.
+        let toContainer: string | null
+        let overChapterId: string | undefined
+        if (overType === 'chapter') {
+          const overChapter = chapters.find((c) => c.id === over.id)
+          if (!overChapter) return
+          toContainer = overChapter.moduleId
+          overChapterId = String(over.id)
+        } else if (overType === 'module-container') {
+          toContainer = String(over.id)
+        } else if (overType === 'loose-container') {
+          toContainer = null
+        } else {
+          return
+        }
+
+        if (activeChapter.moduleId === toContainer) {
+          if (overChapterId) moveChapterTo(String(active.id), overChapterId)
+          return
+        }
+        // Fallback — onDragOver may have been skipped (e.g. very fast
+        // drag with no intermediate over event). Apply the cross-scope
+        // move now.
+        moveChapterAcross(String(active.id), toContainer, overChapterId)
         return
       }
 
@@ -572,7 +715,7 @@ export function CourseBuilder({
         moveLesson(fromChapter, from, to)
       }
     },
-    [chapters, moveChapterTo, moveLesson],
+    [chapters, moveChapterTo, moveChapterAcross, moveLesson],
   )
 
   // ===========================================================
@@ -742,7 +885,7 @@ export function CourseBuilder({
             >
               <div className="flex gap-2">
                 <Button onClick={openCreateModule}>
-                  <FolderPlus />
+                  <LayersPlus />
                   Add module
                 </Button>
                 <Button variant="outline" onClick={() => addChapter(null)}>
@@ -756,6 +899,9 @@ export function CourseBuilder({
               id={dndContextId}
               sensors={sensors}
               collisionDetection={closestCenter}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragCancel={onDragCancel}
               onDragEnd={onDragEnd}
             >
               {modules.map((m) => {
@@ -790,13 +936,13 @@ export function CourseBuilder({
                 )
               })}
 
-              {looseChapters.length > 0 ? (
-                <div className="space-y-3">
-                  {modules.length > 0 ? (
-                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Unassigned chapters
-                    </p>
-                  ) : null}
+              {/* Loose-chapter section is visible whenever there are
+                  any loose chapters, OR whenever modules exist (so the
+                  user has somewhere to drop a chapter out of a module).
+                  When there are no modules at all, hide the section so
+                  the empty-state below renders cleanly. */}
+              {looseChapters.length > 0 || modules.length > 0 ? (
+                <LooseChapterDropZone hasModules={modules.length > 0}>
                   <SortableContext
                     items={looseChapters.map((c) => c.id)}
                     strategy={verticalListSortingStrategy}
@@ -826,7 +972,7 @@ export function CourseBuilder({
                       />
                     ))}
                   </SortableContext>
-                </div>
+                </LooseChapterDropZone>
               ) : null}
             </DndContext>
           )}
@@ -838,7 +984,7 @@ export function CourseBuilder({
                 className="flex-1 border-dashed"
                 onClick={openCreateModule}
               >
-                <FolderPlus />
+                <LayersPlus />
                 Add module
               </Button>
               <Button
@@ -1091,6 +1237,59 @@ function DetailRow({
     </div>
   )
 }
+
+// Drop target for the loose-chapter scope (chapters that sit directly
+// on the course, no parent module). Mirrors the module-body droppable
+// so cross-scope drags onto loose-land at the end of the list.
+function LooseChapterDropZone({
+  hasModules,
+  children,
+}: {
+  hasModules: boolean
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: LOOSE_CONTAINER_ID,
+    data: { type: 'loose-container' as const },
+  })
+
+  // When modules exist we render a label + always-visible drop frame so
+  // the user has a discoverable target for "move chapter out of module".
+  // Without modules, the section is just the list itself (no need for a
+  // labeled bucket — the chapters ARE the course at that point).
+  if (!hasModules) {
+    return (
+      <div ref={setNodeRef} className="space-y-3">
+        {children}
+      </div>
+    )
+  }
+
+  return (
+    <div ref={setNodeRef} className="space-y-3">
+      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        Unassigned chapters
+      </p>
+      <div
+        className={cn(
+          'space-y-3 rounded-md border border-dashed border-transparent p-2 transition-colors',
+          isOver && 'border-primary/50 bg-primary/5',
+        )}
+      >
+        {children}
+        {/* Always-visible hint when the bucket is empty — without it
+            the dropzone has no visible footprint and feels broken. */}
+        <p className="rounded-md border border-dashed px-4 py-3 text-center text-xs text-muted-foreground">
+          {isOver
+            ? 'Drop here to remove from module'
+            : 'Drop a chapter here to remove it from its module'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+const LOOSE_CONTAINER_ID = '__loose_container__'
 
 // ===========================================================
 // Serialization helpers
