@@ -1,8 +1,10 @@
 import type {
+  CourseStatus,
   EnrollmentSource,
   EnrollmentStatus,
   LessonStatus,
   LessonType,
+  Prisma,
   Role,
 } from '@prisma/client'
 
@@ -576,6 +578,337 @@ async function getMemberCourseProgress(
   }
 }
 
+// ============================================
+// STEP 4 — COURSES LIST + COHORT + CSV EXPORT
+// ============================================
+
+export interface CourseListRow {
+  id: string
+  title: string
+  thumbnailUrl: string | null
+  status: CourseStatus
+  enrolledCount: number
+  activeCount: number
+  completedCount: number
+  avgProgressPercent: number
+  completionRate: number
+}
+
+async function listCoursesWithProgress(): Promise<CourseListRow[]> {
+  const courses = await prisma.course.findMany({
+    where: { deletedAt: null },
+    orderBy: { orderIndex: 'asc' },
+    select: {
+      id: true,
+      title: true,
+      thumbnailUrl: true,
+      status: true,
+      enrollments: {
+        where: { status: { not: 'REVOKED' } },
+        select: {
+          status: true,
+          progressPercent: true,
+          completedAt: true,
+        },
+      },
+    },
+  })
+
+  return courses.map((c) => {
+    const enrolled = c.enrollments.length
+    const active = c.enrollments.filter(
+      (e) => e.status === 'ACTIVE' && !e.completedAt,
+    ).length
+    const completed = c.enrollments.filter((e) => e.completedAt).length
+    const avg =
+      enrolled > 0
+        ? Math.round(
+            c.enrollments.reduce((s, e) => s + e.progressPercent, 0) /
+              enrolled,
+          )
+        : 0
+    const completionRate =
+      enrolled > 0 ? Math.round((completed / enrolled) * 100) : 0
+    return {
+      id: c.id,
+      title: c.title,
+      thumbnailUrl: c.thumbnailUrl,
+      status: c.status,
+      enrolledCount: enrolled,
+      activeCount: active,
+      completedCount: completed,
+      avgProgressPercent: avg,
+      completionRate,
+    }
+  })
+}
+
+export interface CourseProgressSummary {
+  course: {
+    id: string
+    title: string
+    thumbnailUrl: string | null
+    status: CourseStatus
+  }
+  kpis: {
+    enrolled: number
+    active: number
+    completed: number
+    avgProgressPercent: number
+    completionRate: number
+    /** Distinct users with lastAccessedAt in the last 7 days. */
+    weeklyActive: number
+  }
+}
+
+async function getCourseProgressSummary(
+  courseId: string,
+): Promise<CourseProgressSummary | null> {
+  const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS)
+
+  const [
+    course,
+    nonRevoked,
+    active,
+    completed,
+    progressAgg,
+    weeklyActiveRows,
+  ] = await Promise.all([
+    prisma.course.findUnique({
+      where: { id: courseId, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        thumbnailUrl: true,
+        status: true,
+      },
+    }),
+    prisma.enrollment.count({
+      where: { courseId, status: { not: 'REVOKED' } },
+    }),
+    prisma.enrollment.count({
+      where: { courseId, status: 'ACTIVE', completedAt: null },
+    }),
+    prisma.enrollment.count({
+      where: { courseId, completedAt: { not: null } },
+    }),
+    prisma.enrollment.aggregate({
+      where: { courseId, status: { not: 'REVOKED' } },
+      _avg: { progressPercent: true },
+    }),
+    prisma.enrollment.findMany({
+      where: { courseId, lastAccessedAt: { gte: sevenDaysAgo } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }),
+  ])
+
+  if (!course) return null
+
+  return {
+    course,
+    kpis: {
+      enrolled: nonRevoked,
+      active,
+      completed,
+      avgProgressPercent: Math.round(progressAgg._avg.progressPercent ?? 0),
+      completionRate:
+        nonRevoked > 0 ? Math.round((completed / nonRevoked) * 100) : 0,
+      weeklyActive: weeklyActiveRows.length,
+    },
+  }
+}
+
+export interface CohortFilters {
+  search?: string
+  role?: 'ALL' | 'MEMBER' | 'TEAM'
+  /** ACTIVE = in progress; COMPLETED = completedAt set; EXPIRED = expired. */
+  status?: 'ALL' | 'ACTIVE' | 'COMPLETED' | 'EXPIRED'
+}
+
+export interface CohortRow {
+  enrollmentId: string
+  user: {
+    id: string
+    name: string | null
+    email: string
+    avatarUrl: string | null
+    role: Role
+  }
+  status: EnrollmentStatus
+  source: EnrollmentSource
+  progressPercent: number
+  enrolledAt: Date
+  lastAccessedAt: Date | null
+  completedAt: Date | null
+}
+
+export interface CohortResult {
+  rows: CohortRow[]
+  total: number
+  page: number
+  totalPages: number
+}
+
+/**
+ * Build the Prisma where-clause shared by getCourseCohort and
+ * exportCourseCohortCsv. Centralising it keeps the export and the
+ * paginated view in sync — whatever the operator sees on screen is
+ * exactly what they download.
+ */
+function buildCohortWhere(
+  courseId: string,
+  filters: CohortFilters,
+): Prisma.EnrollmentWhereInput {
+  const search = filters.search?.trim() ?? ''
+  const role = filters.role ?? 'ALL'
+  const status = filters.status ?? 'ALL'
+  const roleFilter: Role[] =
+    role === 'ALL' ? ['MEMBER', 'TEAM'] : [role as Role]
+
+  const where: Prisma.EnrollmentWhereInput = {
+    courseId,
+    status: { not: 'REVOKED' },
+    user: {
+      role: { in: roleFilter },
+      deletedAt: null,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+  }
+
+  if (status === 'ACTIVE') {
+    where.status = 'ACTIVE'
+    where.completedAt = null
+  } else if (status === 'COMPLETED') {
+    where.completedAt = { not: null }
+  } else if (status === 'EXPIRED') {
+    where.status = 'EXPIRED'
+  }
+
+  return where
+}
+
+const COHORT_SELECT = {
+  id: true,
+  status: true,
+  source: true,
+  progressPercent: true,
+  enrolledAt: true,
+  lastAccessedAt: true,
+  completedAt: true,
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      avatarUrl: true,
+      role: true,
+    },
+  },
+} satisfies Prisma.EnrollmentSelect
+
+async function getCourseCohort(
+  courseId: string,
+  filters: CohortFilters,
+  page: number,
+  limit: number,
+): Promise<CohortResult> {
+  const where = buildCohortWhere(courseId, filters)
+  const safePage = Math.max(1, page)
+  const safeLimit = Math.max(1, Math.min(100, limit))
+
+  const [rows, total] = await Promise.all([
+    prisma.enrollment.findMany({
+      where,
+      orderBy: [{ progressPercent: 'desc' }, { enrolledAt: 'desc' }],
+      skip: (safePage - 1) * safeLimit,
+      take: safeLimit,
+      select: COHORT_SELECT,
+    }),
+    prisma.enrollment.count({ where }),
+  ])
+
+  return {
+    rows: rows.map((r) => ({
+      enrollmentId: r.id,
+      user: r.user,
+      status: r.status,
+      source: r.source,
+      progressPercent: r.progressPercent,
+      enrolledAt: r.enrolledAt,
+      lastAccessedAt: r.lastAccessedAt,
+      completedAt: r.completedAt,
+    })),
+    total,
+    page: safePage,
+    totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+  }
+}
+
+/**
+ * Same filter shape as getCourseCohort but no pagination — pulls the
+ * full filtered list and formats it as CSV. Caller is expected to set
+ * the Content-Disposition header for download.
+ */
+async function exportCourseCohortCsv(
+  courseId: string,
+  filters: CohortFilters,
+): Promise<string> {
+  const where = buildCohortWhere(courseId, filters)
+
+  const rows = await prisma.enrollment.findMany({
+    where,
+    orderBy: [{ progressPercent: 'desc' }, { enrolledAt: 'desc' }],
+    select: COHORT_SELECT,
+  })
+
+  const header = [
+    'Name',
+    'Email',
+    'Role',
+    'Status',
+    'Progress %',
+    'Enrolled at',
+    'Last accessed',
+    'Completed at',
+    'Source',
+  ]
+
+  const escape = (value: string | number | null | undefined): string => {
+    if (value === null || value === undefined) return ''
+    const str = String(value)
+    // RFC 4180 — wrap in double quotes if the field has a comma, newline,
+    // or double quote. Escape embedded double quotes by doubling them.
+    if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`
+    return str
+  }
+
+  const iso = (date: Date | null) => (date ? date.toISOString() : '')
+
+  const body = rows.map((r) =>
+    [
+      escape(r.user.name),
+      escape(r.user.email),
+      escape(r.user.role),
+      escape(r.completedAt ? 'COMPLETED' : r.status),
+      escape(r.progressPercent),
+      escape(iso(r.enrolledAt)),
+      escape(iso(r.lastAccessedAt)),
+      escape(iso(r.completedAt)),
+      escape(r.source),
+    ].join(','),
+  )
+
+  return [header.join(','), ...body].join('\n')
+}
+
 export const adminProgressService = {
   getOverviewKpis,
   getMostEngagedMembers,
@@ -584,4 +917,8 @@ export const adminProgressService = {
   listMembersWithProgress,
   getMemberProgress,
   getMemberCourseProgress,
+  listCoursesWithProgress,
+  getCourseProgressSummary,
+  getCourseCohort,
+  exportCourseCohortCsv,
 }
