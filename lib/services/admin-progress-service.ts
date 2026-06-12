@@ -346,6 +346,7 @@ export interface RecentCompletion {
     name: string | null
     email: string
     avatarUrl: string | null
+    role: Role
   }
   course: {
     id: string
@@ -369,7 +370,13 @@ async function getRecentCompletions(
       id: true,
       completedAt: true,
       user: {
-        select: { id: true, name: true, email: true, avatarUrl: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true,
+          role: true,
+        },
       },
       course: { select: { id: true, title: true } },
     },
@@ -495,11 +502,24 @@ export interface MemberListRow {
   lastActivity: Date | null
 }
 
+export interface MembersListTotals {
+  /** Total enrollments summed across every row in the filtered set
+   *  (not just the current page). */
+  totalEnrollments: number
+  /** Sum of `completedCourses` across the filtered set. */
+  completedCourses: number
+  /** Avg of `avgProgressPercent` across the filtered set. 0-100. */
+  avgProgressPercent: number
+}
+
 export interface MembersListResult {
   rows: MemberListRow[]
   total: number
   page: number
   totalPages: number
+  /** Aggregates across the entire filtered set, used by the new
+   *  reporting strip above the table. */
+  totals: MembersListTotals
 }
 
 const MEMBERS_SORTERS: Record<
@@ -613,11 +633,23 @@ async function listMembersWithProgress(
   const safeLimit = Math.max(1, Math.min(100, limit))
   const skip = (safePage - 1) * safeLimit
 
+  const totalEnrollments = rows.reduce((s, r) => s + r.totalEnrollments, 0)
+  const completedCourses = rows.reduce((s, r) => s + r.completedCourses, 0)
+  const avgProgressPercent =
+    total > 0
+      ? Math.round(rows.reduce((s, r) => s + r.avgProgressPercent, 0) / total)
+      : 0
+
   return {
     rows: rows.slice(skip, skip + safeLimit),
     total,
     page: safePage,
     totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+    totals: {
+      totalEnrollments,
+      completedCourses,
+      avgProgressPercent,
+    },
   }
 }
 
@@ -912,10 +944,35 @@ export interface CourseListRow {
   completionRate: number
 }
 
-async function listCoursesWithProgress(): Promise<CourseListRow[]> {
+export interface CoursesListTotals {
+  totalCourses: number
+  totalEnrollments: number
+  totalCompleted: number
+  /** Avg of `completionRate` across the returned rows. 0-100. */
+  avgCompletionRate: number
+}
+
+export interface CoursesListResult {
+  rows: CourseListRow[]
+  totals: CoursesListTotals
+}
+
+export interface CoursesListFilters {
+  /** Filter by course status. ALL = no filter. */
+  status?: 'ALL' | CourseStatus
+}
+
+async function listCoursesWithProgress(
+  filters: CoursesListFilters = {},
+): Promise<CoursesListResult> {
   await requireAdmin()
+  const statusFilter = filters.status ?? 'ALL'
+
   const courses = await prisma.course.findMany({
-    where: { deletedAt: null },
+    where: {
+      deletedAt: null,
+      ...(statusFilter !== 'ALL' ? { status: statusFilter } : {}),
+    },
     orderBy: { orderIndex: 'asc' },
     select: {
       id: true,
@@ -933,7 +990,7 @@ async function listCoursesWithProgress(): Promise<CourseListRow[]> {
     },
   })
 
-  return courses.map((c) => {
+  const rows: CourseListRow[] = courses.map((c) => {
     const enrolled = c.enrollments.length
     const active = c.enrollments.filter(
       (e) => e.status === 'ACTIVE' && !e.completedAt,
@@ -960,6 +1017,25 @@ async function listCoursesWithProgress(): Promise<CourseListRow[]> {
       completionRate,
     }
   })
+
+  const totalEnrollments = rows.reduce((s, r) => s + r.enrolledCount, 0)
+  const totalCompleted = rows.reduce((s, r) => s + r.completedCount, 0)
+  const avgCompletionRate =
+    rows.length > 0
+      ? Math.round(
+          rows.reduce((s, r) => s + r.completionRate, 0) / rows.length,
+        )
+      : 0
+
+  return {
+    rows,
+    totals: {
+      totalCourses: rows.length,
+      totalEnrollments,
+      totalCompleted,
+      avgCompletionRate,
+    },
+  }
 }
 
 export interface CourseProgressSummary {

@@ -1,10 +1,22 @@
 import Link from 'next/link'
-import { ChevronRight, Users } from 'lucide-react'
+import {
+  CheckCircle2,
+  ChevronRight,
+  GraduationCap,
+  TrendingUp,
+  Users,
+} from 'lucide-react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { EmptyState, SectionCard, StatusBadge } from '@/components/shared'
+import {
+  EmptyState,
+  SectionCard,
+  StatStrip,
+  StatusBadge,
+  type StatStripCell,
+} from '@/components/shared'
 import { cn } from '@/lib/utils'
 import { getInitials, progressTone, relativeTime } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
@@ -56,7 +68,6 @@ export default async function AdminProgressMembersPage({
     sort,
   )
 
-  // Build the shared querystring used by Export CSV + pagination links.
   function buildQs(overrides: Record<string, string | null> = {}): string {
     const next = new URLSearchParams()
     if (search) next.set('search', search)
@@ -79,8 +90,37 @@ export default async function AdminProgressMembersPage({
     return `/admin/progress/members${qs ? `?${qs}` : ''}`
   }
 
+  const cells: StatStripCell[] = [
+    {
+      label: 'Members',
+      value: result.total,
+      icon: Users,
+      description: search || role !== 'ALL' ? 'Filtered' : 'With enrollments',
+    },
+    {
+      label: 'Enrollments',
+      value: result.totals.totalEnrollments,
+      icon: GraduationCap,
+      description: 'Sum across filter',
+    },
+    {
+      label: 'Avg progress',
+      value: `${result.totals.avgProgressPercent}%`,
+      icon: TrendingUp,
+      description: 'Mean per member',
+    },
+    {
+      label: 'Completed courses',
+      value: result.totals.completedCourses,
+      icon: CheckCircle2,
+      description: 'Across filtered members',
+    },
+  ]
+
   return (
     <div className="space-y-4">
+      <StatStrip cells={cells} />
+
       <MembersListFilters
         initialSearch={search}
         initialRole={role}
@@ -111,16 +151,28 @@ export default async function AdminProgressMembersPage({
           </div>
         ) : (
           <>
+            <div className="sticky top-0 z-10 flex items-center gap-4 border-b bg-muted/40 px-5 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
+              <div className="size-9 shrink-0" />
+              <div className="min-w-0 flex-1">Member</div>
+              <div className="hidden w-40 shrink-0 md:block">Avg progress</div>
+              <div className="hidden w-24 shrink-0 text-right md:block">
+                Completed
+              </div>
+              <div className="hidden w-28 shrink-0 text-right sm:block">
+                Last activity
+              </div>
+              <div className="size-4 shrink-0" />
+            </div>
             <ul className="divide-y">
               {result.rows.map((m) => (
                 <li key={m.id}>
                   <Link
                     href={`/admin/progress/members/${m.id}`}
-                    className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-muted/40"
+                    className="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-muted/40"
                   >
-                    <Avatar>
+                    <Avatar className="size-9">
                       {m.avatarUrl ? <AvatarImage src={m.avatarUrl} /> : null}
-                      <AvatarFallback>
+                      <AvatarFallback className="text-xs">
                         {getInitials(m.name, m.email)}
                       </AvatarFallback>
                     </Avatar>
@@ -137,7 +189,7 @@ export default async function AdminProgressMembersPage({
                       </p>
                     </div>
 
-                    <div className="hidden w-32 shrink-0 md:block">
+                    <div className="hidden w-40 shrink-0 md:block">
                       <div className="flex items-center gap-2">
                         <Progress
                           value={m.avgProgressPercent}
@@ -152,19 +204,10 @@ export default async function AdminProgressMembersPage({
                           {m.avgProgressPercent}%
                         </span>
                       </div>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        avg across {m.totalEnrollments}{' '}
-                        {m.totalEnrollments === 1 ? 'course' : 'courses'}
-                      </p>
                     </div>
 
-                    <div className="hidden w-24 shrink-0 text-right md:block">
-                      <p className="text-sm font-semibold tabular-nums">
-                        {m.completedCourses}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        completed
-                      </p>
+                    <div className="hidden w-24 shrink-0 text-right text-sm font-medium tabular-nums md:block">
+                      {m.completedCourses}
                     </div>
 
                     <div className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground sm:block">

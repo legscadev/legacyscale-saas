@@ -2,9 +2,7 @@ import Link from 'next/link'
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   GraduationCap,
-  Hourglass,
   Sparkles,
   TrendingUp,
   Users,
@@ -12,15 +10,17 @@ import {
 } from 'lucide-react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Progress } from '@/components/ui/progress'
 import {
   EmptyState,
   SectionCard,
-  StatCard,
+  StatStrip,
   StatusBadge,
+  type StatStripCell,
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
 import { getInitials, relativeTime } from '@/lib/format'
+import type { Role } from '@prisma/client'
+
 import {
   adminProgressService,
   rangeLabel,
@@ -36,6 +36,30 @@ function parseRange(raw: string | undefined): RangeFilter {
   return raw === '7d' || raw === '90d' || raw === 'all' ? raw : '30d'
 }
 
+type HighlightType = 'Stuck' | 'Engaged' | 'Completed'
+
+interface HighlightRow {
+  key: string
+  type: HighlightType
+  user: {
+    id: string
+    name: string | null
+    email: string
+    avatarUrl: string | null
+    role: Role
+  }
+  courseTitle: string | null
+  signal: string
+  signalTone: 'positive' | 'warning' | 'neutral'
+  when: Date | null
+}
+
+const TYPE_PILL: Record<HighlightType, string> = {
+  Stuck: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  Engaged: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  Completed: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
+}
+
 export default async function AdminProgressOverviewPage({
   searchParams,
 }: PageProps) {
@@ -43,296 +67,181 @@ export default async function AdminProgressOverviewPage({
   const range = parseRange(params.range)
   const window = rangeLabel(range)
 
-  const [kpis, engaged, topCourses, recent, stuck] = await Promise.all([
+  const [kpis, engaged, recent, stuck] = await Promise.all([
     adminProgressService.getOverviewKpis(range),
     adminProgressService.getMostEngagedMembers(5, range),
-    adminProgressService.getTopCourses(5, range),
-    adminProgressService.getRecentCompletions(10, range),
+    adminProgressService.getRecentCompletions(5, range),
     adminProgressService.getStuckLearners(5),
   ])
 
+  // Merge the three highlight sources into one sortable, scannable
+  // table — the operator's weekly check-in fits in a single glance.
+  const highlights: HighlightRow[] = [
+    ...stuck.map((s) => ({
+      key: `stuck-${s.enrollmentId}`,
+      type: 'Stuck' as const,
+      user: s.user,
+      courseTitle: s.course.title,
+      signal: `${s.progressPercent}% · ${s.daysSinceLastAccess}d cold`,
+      signalTone: 'warning' as const,
+      when: s.lastAccessedAt ?? s.enrolledAt,
+    })),
+    ...recent.map((r) => ({
+      key: `done-${r.enrollmentId}`,
+      type: 'Completed' as const,
+      user: r.user,
+      courseTitle: r.course.title,
+      signal: '100%',
+      signalTone: 'positive' as const,
+      when: r.completedAt,
+    })),
+    ...engaged.map((e) => ({
+      key: `engaged-${e.id}`,
+      type: 'Engaged' as const,
+      user: {
+        id: e.id,
+        name: e.name,
+        email: e.email,
+        avatarUrl: e.avatarUrl,
+        role: e.role,
+      },
+      courseTitle: null,
+      signal: `${e.completedLessons} lessons`,
+      signalTone: 'positive' as const,
+      when: e.lastActivity,
+    })),
+  ].sort((a, b) => (b.when?.getTime() ?? 0) - (a.when?.getTime() ?? 0))
+
+  const cells: StatStripCell[] = [
+    {
+      label: 'Active members',
+      value: kpis.activeMembers,
+      icon: Users,
+      description: 'Platform total',
+    },
+    {
+      label: 'Active learners',
+      value: kpis.activeLearners,
+      icon: Zap,
+      description: window,
+    },
+    {
+      label: 'Avg progress',
+      value: `${kpis.avgProgressPercent}%`,
+      icon: TrendingUp,
+      description: window,
+    },
+    {
+      label: 'Completion rate',
+      value: `${kpis.completionRate}%`,
+      icon: CheckCircle2,
+      description: window,
+    },
+  ]
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          Showing data for{' '}
-          <span className="font-medium text-foreground">{window}</span>.
+          Reporting for{' '}
+          <span className="font-medium text-foreground">{window}</span>
         </p>
         <OverviewRangePicker initialRange={range} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard
-          size="sm"
-          title="Active members"
-          value={kpis.activeMembers}
-          icon={Users}
-          tone="info"
-          description="Platform total"
-        />
-        <StatCard
-          size="sm"
-          title="Enrollments"
-          value={kpis.enrollmentsInRange}
-          icon={GraduationCap}
-          tone="neutral"
-          description={`Started · ${window}`}
-        />
-        <StatCard
-          size="sm"
-          title="Avg progress"
-          value={`${kpis.avgProgressPercent}%`}
-          icon={TrendingUp}
-          tone="brand"
-          description={`Touched · ${window}`}
-        />
-        <StatCard
-          size="sm"
-          title="Completion rate"
-          value={`${kpis.completionRate}%`}
-          icon={CheckCircle2}
-          tone="success"
-          description={`Completed · ${window}`}
-        />
-        <StatCard
-          size="sm"
-          title="Avg time to complete"
-          value={
-            kpis.avgTimeToCompletionDays === null
-              ? '—'
-              : `${kpis.avgTimeToCompletionDays}d`
-          }
-          icon={Hourglass}
-          tone="warning"
-          description={`Enrolled → completed · ${window}`}
-        />
-        <StatCard
-          size="sm"
-          title="Active learners"
-          value={kpis.activeLearners}
-          icon={Zap}
-          tone="violet"
-          description={`Active · ${window}`}
-        />
-      </div>
+      <StatStrip cells={cells} />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <SectionCard
-          title="Most engaged members"
-          description={`Top 5 by lessons completed in the ${window}.`}
-        >
-          {engaged.length === 0 ? (
+      <SectionCard
+        title="Highlights"
+        description="Stuck members, recent completions, and most engaged learners — merged so the most important signals surface together."
+        flush
+      >
+        {highlights.length === 0 ? (
+          <div className="p-6">
             <EmptyState
               icon={Sparkles}
-              title="No engagement yet"
-              description="Member lesson completions will surface here."
+              title="Nothing to flag right now"
+              description="Member activity, completions, and stalled progress will surface here."
             />
-          ) : (
-            <ul className="-mx-3 divide-y">
-              {engaged.map((m) => (
-                <li key={m.id}>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-4 border-b bg-muted/40 px-5 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="w-20 shrink-0">Signal</div>
+              <div className="flex-1">Member</div>
+              <div className="hidden flex-1 sm:block">Course</div>
+              <div className="hidden w-40 shrink-0 text-right md:block">
+                Detail
+              </div>
+              <div className="w-20 shrink-0 text-right">When</div>
+            </div>
+            <ul className="divide-y">
+              {highlights.map((h) => (
+                <li key={h.key}>
                   <Link
-                    href={`/admin/progress/members/${m.id}`}
-                    className="flex items-center gap-3 rounded-md px-3 py-3 transition-colors hover:bg-muted/40"
+                    href={`/admin/progress/members/${h.user.id}`}
+                    className="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-muted/40"
                   >
-                    <Avatar>
-                      {m.avatarUrl ? <AvatarImage src={m.avatarUrl} /> : null}
-                      <AvatarFallback>
-                        {getInitials(m.name, m.email)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-medium">
-                          {m.name ?? m.email.split('@')[0]}
-                        </p>
-                        <StatusBadge status={m.role} />
-                      </div>
-                      <p className="truncate text-xs text-muted-foreground">
-                        Last activity {relativeTime(m.lastActivity)}
-                      </p>
+                    <div className="w-20 shrink-0">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+                          TYPE_PILL[h.type],
+                        )}
+                      >
+                        {h.type === 'Stuck' ? (
+                          <AlertTriangle className="size-3" />
+                        ) : h.type === 'Completed' ? (
+                          <CheckCircle2 className="size-3" />
+                        ) : (
+                          <Sparkles className="size-3" />
+                        )}
+                        {h.type}
+                      </span>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold tabular-nums">
-                        {m.completedLessons}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        lessons · {window}
-                      </p>
+
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Avatar className="size-7">
+                        {h.user.avatarUrl ? (
+                          <AvatarImage src={h.user.avatarUrl} />
+                        ) : null}
+                        <AvatarFallback className="text-[10px]">
+                          {getInitials(h.user.name, h.user.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-sm font-medium">
+                            {h.user.name ?? h.user.email.split('@')[0]}
+                          </p>
+                          <StatusBadge status={h.user.role} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground sm:block">
+                      {h.courseTitle ?? '—'}
+                    </div>
+
+                    <div
+                      className={cn(
+                        'hidden w-40 shrink-0 text-right text-xs tabular-nums md:block',
+                        h.signalTone === 'positive' && 'text-success',
+                        h.signalTone === 'warning' &&
+                          'text-amber-600 dark:text-amber-400',
+                      )}
+                    >
+                      {h.signal}
+                    </div>
+
+                    <div className="w-20 shrink-0 text-right text-xs text-muted-foreground">
+                      {relativeTime(h.when)}
                     </div>
                   </Link>
                 </li>
               ))}
             </ul>
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title="Top courses"
-          description={`Ranked by enrollments started in the ${window}.`}
-        >
-          {topCourses.length === 0 ? (
-            <EmptyState
-              icon={GraduationCap}
-              title="No enrollments yet"
-              description="Once members enroll, their courses will rank here."
-            />
-          ) : (
-            <ul className="divide-y">
-              {topCourses.map((c) => (
-                <li
-                  key={c.id}
-                  className="space-y-2 py-3 first:pt-0 last:pb-0"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <Link
-                      href={`/admin/progress/courses/${c.id}`}
-                      className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
-                    >
-                      {c.title}
-                    </Link>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {c.enrolledCount} enrolled · {c.completedCount}{' '}
-                      completed
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Progress
-                      value={c.avgProgressPercent}
-                      className="h-1.5 flex-1"
-                    />
-                    <span
-                      className={cn(
-                        'shrink-0 text-xs tabular-nums',
-                        c.completionRate >= 50
-                          ? 'text-success'
-                          : 'text-muted-foreground',
-                      )}
-                    >
-                      {c.completionRate}%
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </SectionCard>
-      </div>
-
-      <SectionCard
-        title="Stuck learners"
-        description="Members who started a course, made some progress, then went quiet for 7+ days. Range-independent — these are who to nudge regardless of the window above."
-      >
-        {stuck.length === 0 ? (
-          <EmptyState
-            icon={Sparkles}
-            title="Nobody is stuck right now"
-            description="Every in-progress member has touched a lesson in the last 7 days."
-          />
-        ) : (
-          <ul className="-mx-3 divide-y">
-            {stuck.map((s) => (
-              <li key={s.enrollmentId}>
-                <Link
-                  href={`/admin/progress/members/${s.user.id}`}
-                  className="flex items-center gap-3 rounded-md px-3 py-3 transition-colors hover:bg-muted/40"
-                >
-                  <Avatar>
-                    {s.user.avatarUrl ? (
-                      <AvatarImage src={s.user.avatarUrl} />
-                    ) : null}
-                    <AvatarFallback>
-                      {getInitials(s.user.name, s.user.email)}
-                    </AvatarFallback>
-                  </Avatar>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium">
-                        {s.user.name ?? s.user.email.split('@')[0]}
-                      </p>
-                      <StatusBadge status={s.user.role} />
-                    </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      stuck on{' '}
-                      <span className="font-medium text-foreground">
-                        {s.course.title}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="hidden w-32 shrink-0 sm:block">
-                    <div className="flex items-center gap-2">
-                      <Progress
-                        value={s.progressPercent}
-                        className="h-1.5 flex-1"
-                      />
-                      <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">
-                        {s.progressPercent}%
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-                    <AlertTriangle className="size-3.5" />
-                    {s.daysSinceLastAccess}d
-                  </div>
-
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      <SectionCard
-        title="Recent completions"
-        description={`Last 10 members to finish a course in the ${window}.`}
-      >
-        {recent.length === 0 ? (
-          <EmptyState
-            icon={CheckCircle2}
-            title="No completions yet"
-            description={
-              range === 'all'
-                ? "When members finish courses, they'll show up here."
-                : `No course completions in the ${window}.`
-            }
-          />
-        ) : (
-          <ul className="-mx-3 divide-y">
-            {recent.map((r) => (
-              <li key={r.enrollmentId}>
-                <Link
-                  href={`/admin/progress/members/${r.user.id}`}
-                  className="flex items-center gap-3 rounded-md px-3 py-3 transition-colors hover:bg-muted/40"
-                >
-                  <Avatar>
-                    {r.user.avatarUrl ? (
-                      <AvatarImage src={r.user.avatarUrl} />
-                    ) : null}
-                    <AvatarFallback>
-                      {getInitials(r.user.name, r.user.email)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">
-                      <span className="font-medium">
-                        {r.user.name ?? r.user.email.split('@')[0]}
-                      </span>{' '}
-                      <span className="text-muted-foreground">completed</span>{' '}
-                      <span className="font-medium">{r.course.title}</span>
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {relativeTime(r.completedAt)}
-                    </p>
-                  </div>
-                  <CheckCircle2 className="size-4 shrink-0 text-success" />
-                </Link>
-              </li>
-            ))}
-          </ul>
+          </>
         )}
       </SectionCard>
     </div>
