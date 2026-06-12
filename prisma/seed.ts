@@ -41,13 +41,27 @@ async function main() {
   })
   console.log('✅ Sample course created:', course.title)
 
-  // Create sample chapter
+  // Create sample module
+  const moduleRow = await prisma.module.upsert({
+    where: { id: 'sample-module-1' },
+    update: {},
+    create: {
+      id: 'sample-module-1',
+      courseId: course.id,
+      title: 'Foundations',
+      orderIndex: 0,
+    },
+  })
+  console.log('✅ Sample module created:', moduleRow.title)
+
+  // Create sample chapter (nested under the module)
   const chapter = await prisma.chapter.upsert({
     where: { id: 'sample-chapter-1' },
     update: {},
     create: {
       id: 'sample-chapter-1',
       courseId: course.id,
+      moduleId: moduleRow.id,
       title: 'Getting Started',
       orderIndex: 0,
     },

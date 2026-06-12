@@ -37,6 +37,7 @@
 -- ============================================================
 ALTER TABLE users              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE courses            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE modules            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chapters           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lessons            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_questions     ENABLE ROW LEVEL SECURITY;
@@ -131,7 +132,36 @@ CREATE POLICY "courses_admin_all"
 
 
 -- ============================================================
+-- MODULES  (members: parent course published & not deleted)
+-- Modules are an optional grouping layer between Course and Chapter.
+-- Visibility mirrors chapters: members can see modules whose parent
+-- course is PUBLISHED and not soft-deleted; admins see all.
+-- ============================================================
+DROP POLICY IF EXISTS "modules_select_published" ON modules;
+DROP POLICY IF EXISTS "modules_admin_all"        ON modules;
+
+CREATE POLICY "modules_select_published"
+  ON modules FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM courses c
+      WHERE c.id = modules.course_id
+        AND c.status = 'PUBLISHED'
+        AND c.deleted_at IS NULL
+    )
+    OR is_admin()
+  );
+
+CREATE POLICY "modules_admin_all"
+  ON modules FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
 -- CHAPTERS  (members: parent course published & not deleted)
+-- chapter.course_id stays denormalized even when module_id is set,
+-- so this policy doesn't need to traverse the module.
 -- ============================================================
 DROP POLICY IF EXISTS "chapters_select_published" ON chapters;
 DROP POLICY IF EXISTS "chapters_admin_all"        ON chapters;
@@ -368,7 +398,7 @@ CREATE POLICY "announcement_reads_admin_all"
 --   SELECT relname, relrowsecurity
 --   FROM pg_class
 --   WHERE relname IN (
---     'users','courses','chapters','lessons','quiz_questions',
+--     'users','courses','modules','chapters','lessons','quiz_questions',
 --     'quiz_attempts','enrollments','lesson_progress','notes',
 --     'announcements','announcement_reads'
 --   );

@@ -161,6 +161,51 @@ export type MemberCatalogCourse = Awaited<
 // DETAIL — single course with curriculum + per-lesson progress overlay
 // ============================================
 
+// Chapter select reused for both module-bound and loose chapters.
+// Lessons carry quiz config + resource metadata (correctIndex stays
+// server-side and is consulted in submitQuizAttempt).
+const chapterWithLessonsSelect = {
+  id: true,
+  title: true,
+  orderIndex: true,
+  lessons: {
+    where: { deletedAt: null },
+    orderBy: { orderIndex: 'asc' as const },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      type: true,
+      status: true,
+      orderIndex: true,
+      durationSeconds: true,
+      muxPlaybackId: true,
+      passingScore: true,
+      maxAttempts: true,
+      timeLimitMin: true,
+      quizQuestions: {
+        orderBy: { orderIndex: 'asc' as const },
+        select: {
+          id: true,
+          questionText: true,
+          type: true,
+          options: true,
+          orderIndex: true,
+        },
+      },
+      resources: {
+        orderBy: { createdAt: 'asc' as const },
+        select: {
+          id: true,
+          name: true,
+          size: true,
+          mimeType: true,
+        },
+      },
+    },
+  },
+} as const
+
 const detailSelect = {
   id: true,
   title: true,
@@ -172,52 +217,28 @@ const detailSelect = {
   isFree: true,
   accessDays: true,
   publishedAt: true,
-  chapters: {
+  modules: {
     where: { deletedAt: null },
     orderBy: { orderIndex: 'asc' as const },
     select: {
       id: true,
       title: true,
+      description: true,
       orderIndex: true,
-      lessons: {
+      chapters: {
         where: { deletedAt: null },
         orderBy: { orderIndex: 'asc' as const },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          type: true,
-          status: true,
-          orderIndex: true,
-          durationSeconds: true,
-          muxPlaybackId: true,
-          // Quiz config (visible to members; correctIndex stays
-          // server-side and is consulted in submitQuizAttempt).
-          passingScore: true,
-          maxAttempts: true,
-          timeLimitMin: true,
-          quizQuestions: {
-            orderBy: { orderIndex: 'asc' as const },
-            select: {
-              id: true,
-              questionText: true,
-              type: true,
-              options: true,
-              orderIndex: true,
-            },
-          },
-          resources: {
-            orderBy: { createdAt: 'asc' as const },
-            select: {
-              id: true,
-              name: true,
-              size: true,
-              mimeType: true,
-            },
-          },
-        },
+        select: chapterWithLessonsSelect,
       },
     },
+  },
+  // Top-level `chapters` here is the LOOSE list — chapters with
+  // moduleId IS NULL. The composed flat list (for resume picker /
+  // navigation) is built below in curriculum order.
+  chapters: {
+    where: { deletedAt: null, moduleId: null },
+    orderBy: { orderIndex: 'asc' as const },
+    select: chapterWithLessonsSelect,
   },
 } as const
 
@@ -234,10 +255,12 @@ export async function getCourseForMember(userId: string, courseId: string) {
   })
   if (!course) return null
 
-  // Per-lesson progress overlay.
-  const lessonIds = course.chapters.flatMap((c) =>
-    c.lessons.map((l) => l.id),
-  )
+  // Per-lesson progress overlay. Collect lesson ids across both
+  // module-bound chapters and loose chapters.
+  const moduleChapters = course.modules.flatMap((m) => m.chapters)
+  const allChaptersRaw = [...moduleChapters, ...course.chapters]
+  const lessonIds = allChaptersRaw.flatMap((c) => c.lessons.map((l) => l.id))
+
   const [enrollment, progress] = await Promise.all([
     prisma.enrollment.findUnique({
       where: { userId_courseId: { userId, courseId } },
@@ -266,20 +289,42 @@ export async function getCourseForMember(userId: string, courseId: string) {
   ])
   const progressByLesson = new Map(progress.map((p) => [p.lessonId, p]))
 
-  const chapters = course.chapters.map((c) => ({
+  // Overlay progress inline so TypeScript keeps every lesson field
+  // through the spread. A generic helper here ends up widening
+  // `lesson` down to just `{ id }`.
+  const modules = course.modules.map((m) => ({
+    ...m,
+    chapters: m.chapters.map((c) => ({
+      ...c,
+      lessons: c.lessons.map((l) => ({
+        ...l,
+        progress: progressByLesson.get(l.id) ?? null,
+      })),
+    })),
+  }))
+  const looseChapters = course.chapters.map((c) => ({
     ...c,
     lessons: c.lessons.map((l) => ({
       ...l,
       progress: progressByLesson.get(l.id) ?? null,
     })),
   }))
+  // Flat, curriculum-ordered chapter list: walk modules in order,
+  // then loose chapters. Existing consumers like the resume picker
+  // and the lesson player's prev/next lookup use this flat list, so
+  // it has to traverse in display order.
+  const chapters = [...modules.flatMap((m) => m.chapters), ...looseChapters]
+
   const lessonsTotal = lessonIds.length
   const completedLessons = progress.filter((p) => p.completed).length
 
   return {
     ...course,
+    modules,
+    looseChapters,
     chapters,
     enrollment,
+    modulesCount: modules.length,
     lessonsCount: lessonsTotal,
     completedLessons,
     progressPercent:
