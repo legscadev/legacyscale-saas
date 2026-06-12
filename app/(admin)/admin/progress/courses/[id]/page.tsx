@@ -31,6 +31,7 @@ import {
 } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 import type { CohortSort } from '@/lib/services/admin-progress-service'
+import { ChapterFunnel } from '@/components/admin/progress/chapter-funnel'
 import { CohortFilters } from '@/components/admin/progress/cohort-filters'
 
 const PAGE_SIZE = 20
@@ -74,7 +75,7 @@ export default async function AdminProgressCohortPage({
   const sort = parseSort(sp.sort)
   const page = Math.max(1, Number.parseInt(sp.page ?? '1', 10) || 1)
 
-  const [summary, cohort] = await Promise.all([
+  const [summary, cohort, funnel] = await Promise.all([
     adminProgressService.getCourseProgressSummary(id),
     adminProgressService.getCourseCohort(
       id,
@@ -83,6 +84,11 @@ export default async function AdminProgressCohortPage({
       PAGE_SIZE,
       sort,
     ),
+    adminProgressService.getCourseChapterFunnel(id, {
+      search,
+      role,
+      status,
+    }),
   ])
 
   if (!summary) notFound()
@@ -228,6 +234,13 @@ export default async function AdminProgressCohortPage({
           description="Last 7 days"
         />
       </div>
+
+      <SectionCard
+        title="Completion funnel"
+        description={`How the ${funnel.cohortSize}-person cohort moves through the course. The chapter with the biggest drop-off is highlighted.`}
+      >
+        <ChapterFunnel data={funnel} />
+      </SectionCard>
 
       <SectionCard
         title="Cohort"

@@ -1295,6 +1295,139 @@ async function exportCourseCohortCsv(
   return lines.join('\n')
 }
 
+export interface ChapterFunnelItem {
+  chapterId: string
+  chapterTitle: string
+  moduleTitle: string | null
+  /** Lessons in this chapter (denominator for the per-user
+   *  "completed all" check). */
+  totalLessons: number
+  /** Users in the cohort who have completed at least one lesson in
+   *  this chapter. */
+  startedCount: number
+  /** Users in the cohort who have completed every lesson in this
+   *  chapter. */
+  completedCount: number
+  startedPercent: number
+  completedPercent: number
+}
+
+export interface ChapterFunnelResult {
+  cohortSize: number
+  chapters: ChapterFunnelItem[]
+}
+
+/**
+ * Per-chapter completion funnel scoped to the given cohort filter.
+ * Two passes through the cohort's LessonProgress: one fetch, then a
+ * per-user / per-chapter rollup in memory. Cheap for realistic course
+ * sizes (a course typically has < 100 lessons).
+ *
+ * Chapters with zero lessons are still returned with both counts at
+ * zero — they show up as visible holes in the funnel so admins know
+ * which chapters are still being authored.
+ */
+async function getCourseChapterFunnel(
+  courseId: string,
+  filters: CohortFilters,
+): Promise<ChapterFunnelResult> {
+  await requireAdmin()
+  const where = buildCohortWhere(courseId, filters)
+
+  const [cohort, chapters] = await Promise.all([
+    prisma.enrollment.findMany({
+      where,
+      select: { userId: true },
+    }),
+    prisma.chapter.findMany({
+      where: { courseId, deletedAt: null },
+      orderBy: { orderIndex: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        module: { select: { title: true } },
+        lessons: {
+          where: { deletedAt: null },
+          select: { id: true },
+        },
+      },
+    }),
+  ])
+
+  const cohortUserIds = cohort.map((c) => c.userId)
+  const cohortSize = cohortUserIds.length
+
+  if (cohortSize === 0 || chapters.length === 0) {
+    return {
+      cohortSize,
+      chapters: chapters.map((ch) => ({
+        chapterId: ch.id,
+        chapterTitle: ch.title,
+        moduleTitle: ch.module?.title ?? null,
+        totalLessons: ch.lessons.length,
+        startedCount: 0,
+        completedCount: 0,
+        startedPercent: 0,
+        completedPercent: 0,
+      })),
+    }
+  }
+
+  const allLessonIds = chapters.flatMap((ch) => ch.lessons.map((l) => l.id))
+
+  const completions = allLessonIds.length
+    ? await prisma.lessonProgress.findMany({
+        where: {
+          userId: { in: cohortUserIds },
+          lessonId: { in: allLessonIds },
+          completed: true,
+        },
+        select: { userId: true, lessonId: true },
+      })
+    : []
+
+  // Build user → set of completed lesson IDs once; then per-chapter
+  // membership tests are O(lessons-in-chapter) per user.
+  const completedByUser = new Map<string, Set<string>>()
+  for (const row of completions) {
+    let set = completedByUser.get(row.userId)
+    if (!set) {
+      set = new Set()
+      completedByUser.set(row.userId, set)
+    }
+    set.add(row.lessonId)
+  }
+
+  const funnel = chapters.map((ch) => {
+    let started = 0
+    let completedAll = 0
+    const total = ch.lessons.length
+    for (const userId of cohortUserIds) {
+      const set = completedByUser.get(userId)
+      if (!set) continue
+      let inChapter = 0
+      for (const lesson of ch.lessons) {
+        if (set.has(lesson.id)) inChapter++
+      }
+      if (inChapter === 0) continue
+      started++
+      if (total > 0 && inChapter === total) completedAll++
+    }
+    return {
+      chapterId: ch.id,
+      chapterTitle: ch.title,
+      moduleTitle: ch.module?.title ?? null,
+      totalLessons: total,
+      startedCount: started,
+      completedCount: completedAll,
+      startedPercent: Math.round((started / cohortSize) * 100),
+      completedPercent: Math.round((completedAll / cohortSize) * 100),
+    }
+  })
+
+  return { cohortSize, chapters: funnel }
+}
+
 export const adminProgressService = {
   getOverviewKpis,
   getMostEngagedMembers,
@@ -1309,4 +1442,5 @@ export const adminProgressService = {
   getCourseProgressSummary,
   getCourseCohort,
   exportCourseCohortCsv,
+  getCourseChapterFunnel,
 }
