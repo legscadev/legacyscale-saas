@@ -478,6 +478,86 @@ async function getStuckLearners(limit = 5): Promise<StuckLearner[]> {
   })
 }
 
+export interface CompletionsByWeekItem {
+  /** Midnight on the Monday of this bucket's ISO week, in local time. */
+  weekStart: Date
+  /** Short label for the bar tooltip / axis (e.g. "Sep 23"). */
+  label: string
+  /** Count of enrollments whose `completedAt` fell in this week. */
+  count: number
+}
+
+/**
+ * Course completions bucketed by ISO week, for the dashboard's
+ * completions-over-time bar chart. Always returns exactly `weeks`
+ * entries, padded with zeros for weeks that had no completions, so
+ * the chart x-axis stays even.
+ */
+async function getCompletionsByWeek(
+  weeks = 12,
+): Promise<CompletionsByWeekItem[]> {
+  await requireAdmin()
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+  const todayMonday = mondayOf(new Date())
+  const startMonday = new Date(todayMonday.getTime() - (weeks - 1) * WEEK_MS)
+
+  const rows = await prisma.enrollment.findMany({
+    where: { completedAt: { gte: startMonday } },
+    select: { completedAt: true },
+  })
+
+  const buckets = new Map<string, number>()
+  for (let i = 0; i < weeks; i++) {
+    const d = new Date(startMonday.getTime() + i * WEEK_MS)
+    buckets.set(weekKey(d), 0)
+  }
+
+  for (const r of rows) {
+    if (!r.completedAt) continue
+    const key = weekKey(mondayOf(r.completedAt))
+    const current = buckets.get(key)
+    if (current !== undefined) buckets.set(key, current + 1)
+  }
+
+  return Array.from(buckets.entries()).map(([key, count]) => {
+    const date = parseWeekKey(key)
+    return {
+      weekStart: date,
+      label: date.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+      }),
+      count,
+    }
+  })
+}
+
+/** Local-time Monday-of-week (00:00:00) for the given date. ISO weeks
+ *  start on Monday; treat Sunday as the tail of the prior week. */
+function mondayOf(date: Date): Date {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  const day = d.getDay() // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const diff = day === 0 ? -6 : 1 - day
+  d.setDate(d.getDate() + diff)
+  return d
+}
+
+/** Local-time YYYY-MM-DD key — safer than `toISOString` which would
+ *  shift the date when the timezone is east of UTC and the date is
+ *  near midnight. */
+function weekKey(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function parseWeekKey(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y!, m! - 1, d!)
+}
+
 // ============================================
 // STEP 3 — MEMBERS LIST + MEMBER DETAIL
 // ============================================
@@ -1510,6 +1590,7 @@ export const adminProgressService = {
   getTopCourses,
   getRecentCompletions,
   getStuckLearners,
+  getCompletionsByWeek,
   listMembersWithProgress,
   exportMembersCsv,
   getMemberProgress,
