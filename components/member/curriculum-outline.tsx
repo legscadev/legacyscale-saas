@@ -1,10 +1,15 @@
+'use client'
+
+import { useCallback, useState } from 'react'
 import Link from 'next/link'
 import {
   CheckCircle2,
+  ChevronDown,
   Circle,
   FileText,
   FolderOpen,
   GraduationCap,
+  Layers,
   Loader2,
   Lock,
   PlayCircle,
@@ -95,8 +100,22 @@ export function CurriculumOutline({
 }
 
 // ============================================
-// PAGE — chapters render as full cards with per-chapter progress
+// PAGE — chapters render inside their parent module, both layers
+// collapsible (default expanded). Numbering is continuous across
+// modules + loose so the prefix stays consistent.
 // ============================================
+
+function moduleProgress(m: Module): { completed: number; total: number } {
+  let completed = 0
+  let total = 0
+  for (const ch of m.chapters) {
+    for (const l of ch.lessons) {
+      total++
+      if (l.progress?.completed) completed++
+    }
+  }
+  return { completed, total }
+}
 
 function PageOutline({
   modules,
@@ -109,10 +128,39 @@ function PageOutline({
   courseId: string
   unlockedIds?: Set<string>
 }) {
-  // Number chapters globally across modules + loose so the prefix
-  // numbering stays continuous as members scan through.
+  // Collapsed-id sets — initialized empty so everything renders expanded
+  // by default. Toggling flips membership.
+  const [collapsedModules, setCollapsedModules] = useState<Set<string>>(
+    () => new Set(),
+  )
+  const [collapsedChapters, setCollapsedChapters] = useState<Set<string>>(
+    () => new Set(),
+  )
+
+  const toggleModule = useCallback((id: string) => {
+    setCollapsedModules((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleChapter = useCallback((id: string) => {
+    setCollapsedChapters((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  // Number chapters globally across modules + loose. The cursor is local
+  // to this render — it resets every time React reconciles and produces
+  // identical numbers on each render because module/loose order is the
+  // same input.
   let chapterCursor = 0
-  const renderChapter = (chapter: Chapter) => {
+  const renderChapter = (chapter: Chapter, nested: boolean) => {
     const index = chapterCursor++
     return (
       <ChapterCard
@@ -121,36 +169,35 @@ function PageOutline({
         index={index}
         courseId={courseId}
         unlockedIds={unlockedIds}
+        collapsed={collapsedChapters.has(chapter.id)}
+        onToggle={() => toggleChapter(chapter.id)}
+        nested={nested}
       />
     )
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {modules.map((m) => (
-        <section key={m.id} className="space-y-3">
-          <ModuleHeader module={m} />
-          {m.chapters.length === 0 ? (
-            <p className="rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground">
-              No chapters in this module yet.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {m.chapters.map(renderChapter)}
-            </div>
-          )}
-        </section>
+        <ModuleCard
+          key={m.id}
+          module={m}
+          collapsed={collapsedModules.has(m.id)}
+          onToggle={() => toggleModule(m.id)}
+        >
+          {m.chapters.map((c) => renderChapter(c, true))}
+        </ModuleCard>
       ))}
 
       {looseChapters.length > 0 ? (
-        <section className="space-y-3">
+        <section className="flex flex-col gap-4">
           {modules.length > 0 ? (
             <h2 className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
               Additional chapters
             </h2>
           ) : null}
           <div className="flex flex-col gap-4">
-            {looseChapters.map(renderChapter)}
+            {looseChapters.map((c) => renderChapter(c, false))}
           </div>
         </section>
       ) : null}
@@ -158,17 +205,62 @@ function PageOutline({
   )
 }
 
-function ModuleHeader({ module: m }: { module: Module }) {
+function ModuleCard({
+  module: m,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  module: Module
+  collapsed: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  const { completed, total } = moduleProgress(m)
   return (
-    <div className="flex items-start gap-3 rounded-xl border bg-muted/30 px-4 py-3">
-      <FolderOpen className="size-5 shrink-0 text-primary" />
-      <div className="min-w-0 flex-1 space-y-1">
-        <h2 className="text-base font-semibold tracking-tight">{m.title}</h2>
-        {m.description ? (
-          <p className="text-sm text-muted-foreground">{m.description}</p>
-        ) : null}
-      </div>
-    </div>
+    <Card className="gap-0 overflow-hidden border-primary/20 bg-primary/[0.03] p-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className={cn(
+          'flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-primary/[0.06]',
+          !collapsed && 'border-b border-primary/15',
+        )}
+      >
+        <ChevronDown
+          className={cn(
+            'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform',
+            collapsed && '-rotate-90',
+          )}
+        />
+        <Layers className="mt-0.5 size-4 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <h2 className="truncate text-sm font-semibold tracking-tight">
+            {m.title}
+          </h2>
+          {m.description ? (
+            <p className="line-clamp-2 text-xs text-muted-foreground">
+              {m.description}
+            </p>
+          ) : null}
+        </div>
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+          {total > 0 ? `${completed} / ${total}` : 'no lessons'}
+        </span>
+      </button>
+      {collapsed ? null : (
+        <div className="space-y-3 bg-background p-4">
+          {m.chapters.length === 0 ? (
+            <p className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+              No chapters in this module yet.
+            </p>
+          ) : (
+            children
+          )}
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -177,40 +269,63 @@ function ChapterCard({
   index,
   courseId,
   unlockedIds,
+  collapsed,
+  onToggle,
+  nested,
 }: {
   chapter: Chapter
   index: number
   courseId: string
   unlockedIds?: Set<string>
+  collapsed: boolean
+  onToggle: () => void
+  /** True when this chapter is rendered inside a ModuleCard — use a
+   *  lighter card style so the visual hierarchy reads as nested. */
+  nested: boolean
 }) {
   const { completed, total, percent } = chapterProgress(chapter)
   const chapterDone = total > 0 && completed === total
   return (
-    <Card className="gap-0 overflow-hidden p-0">
-      <div className="space-y-2.5 border-b bg-muted/30 px-5 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span
-              className={cn(
-                'inline-flex size-7 shrink-0 items-center justify-center rounded-md font-mono text-[11px] font-semibold tabular-nums',
-                chapterDone
-                  ? 'bg-success/15 text-success'
-                  : 'bg-muted text-muted-foreground',
-              )}
-            >
-              {String(index + 1).padStart(2, '0')}
-            </span>
-            <h3 className="min-w-0 truncate text-sm font-semibold">
-              {chapter.title}
-            </h3>
-          </div>
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-            {completed} / {total} {total === 1 ? 'lesson' : 'lessons'}
-          </span>
+    <Card
+      className={cn(
+        'gap-0 overflow-hidden p-0',
+        nested && 'border-border/60 shadow-none',
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className={cn(
+          'flex w-full items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-muted/40',
+          !collapsed && 'border-b bg-muted/30',
+        )}
+      >
+        <ChevronDown
+          className={cn(
+            'mt-1 size-4 shrink-0 text-muted-foreground transition-transform',
+            collapsed && '-rotate-90',
+          )}
+        />
+        <span
+          className={cn(
+            'inline-flex size-7 shrink-0 items-center justify-center rounded-md font-mono text-[11px] font-semibold tabular-nums',
+            chapterDone
+              ? 'bg-success/15 text-success'
+              : 'bg-muted text-muted-foreground',
+          )}
+        >
+          {String(index + 1).padStart(2, '0')}
+        </span>
+        <div className="min-w-0 flex-1 space-y-2">
+          <h3 className="truncate text-sm font-semibold">{chapter.title}</h3>
+          {total > 0 ? <Progress value={percent} className="h-1" /> : null}
         </div>
-        {total > 0 ? <Progress value={percent} className="h-1" /> : null}
-      </div>
-      {total === 0 ? (
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          {completed} / {total} {total === 1 ? 'lesson' : 'lessons'}
+        </span>
+      </button>
+      {collapsed ? null : total === 0 ? (
         <p className="px-5 py-4 text-sm text-muted-foreground">
           No lessons yet.
         </p>

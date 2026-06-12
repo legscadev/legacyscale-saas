@@ -3,13 +3,14 @@
 import {
   ChevronDown,
   ChevronRight,
-  FolderOpen,
+  Layers,
   MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
 } from 'lucide-react'
 import type { LessonType } from '@prisma/client'
+import { useDroppable } from '@dnd-kit/core'
 
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -65,6 +66,15 @@ export function BuilderModule({
   onMoveLesson,
   onEditLesson,
 }: BuilderModuleProps) {
+  // Module body is a drop target so chapters can be dragged INTO this
+  // module — including when it's empty. `id` is the module id; the
+  // builder's onDragEnd reads `data.type === 'module-container'` and
+  // routes the drop to a cross-scope move that updates moduleId.
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: module.id,
+    data: { type: 'module-container' as const },
+  })
+
   return (
     <Card className="gap-0 overflow-hidden border-primary/30 bg-primary/5 p-0">
       {/* Module header */}
@@ -82,7 +92,7 @@ export function BuilderModule({
           )}
         </button>
 
-        <FolderOpen className="size-4 text-primary" />
+        <Layers className="size-4 text-primary" />
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{module.title}</p>
@@ -128,10 +138,21 @@ export function BuilderModule({
 
       {/* Module body */}
       {collapsed ? null : (
-        <div className="space-y-3 p-4">
+        <div
+          ref={setDroppableRef}
+          className={cn(
+            'space-y-3 p-4 transition-colors',
+            isOver && 'bg-primary/10',
+          )}
+        >
           {chapters.length === 0 ? (
-            <p className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-              No chapters in this module yet.
+            <p
+              className={cn(
+                'rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground transition-colors',
+                isOver && 'border-primary/50 bg-primary/5 text-foreground',
+              )}
+            >
+              {isOver ? 'Drop chapter here' : 'No chapters in this module yet.'}
             </p>
           ) : (
             chapters.map((chapter, i) => (
