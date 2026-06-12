@@ -6,6 +6,7 @@ import {
   type LucideIcon,
   Megaphone,
   Settings,
+  TrendingUp,
   User,
   Users,
 } from 'lucide-react'
@@ -38,6 +39,16 @@ export const adminNav: NavSection[] = [
   {
     label: 'People',
     items: [{ label: 'Members', href: '/admin/members', icon: Users }],
+  },
+  {
+    label: 'Insights',
+    items: [
+      {
+        label: 'Progress Tracker',
+        href: '/admin/progress',
+        icon: TrendingUp,
+      },
+    ],
   },
   {
     label: 'System',
