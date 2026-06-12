@@ -2,14 +2,40 @@ import Link from 'next/link'
 import { ChevronRight, Users } from 'lucide-react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { EmptyState, SectionCard, StatusBadge } from '@/components/shared'
-import { getInitials, relativeTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { getInitials, progressTone, relativeTime } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
+import type { MembersSort } from '@/lib/services/admin-progress-service'
 import { MembersListFilters } from '@/components/admin/progress/members-list-filters'
 
+const PAGE_SIZE = 20
+
 interface PageProps {
-  searchParams: Promise<{ search?: string; role?: string }>
+  searchParams: Promise<{
+    search?: string
+    role?: string
+    sort?: string
+    page?: string
+  }>
+}
+
+function parseSort(raw: string | undefined): MembersSort {
+  return raw === 'progress' ||
+    raw === 'enrollments' ||
+    raw === 'name' ||
+    raw === 'recent'
+    ? raw
+    : 'recent'
+}
+
+const SORT_DESCRIPTIONS: Record<MembersSort, string> = {
+  recent: 'sorted by most recent activity',
+  progress: 'sorted by highest avg progress',
+  enrollments: 'sorted by most enrollments',
+  name: 'sorted by name',
 }
 
 export default async function AdminProgressMembersPage({
@@ -20,28 +46,58 @@ export default async function AdminProgressMembersPage({
   const roleParam = params.role
   const role: 'ALL' | 'MEMBER' | 'TEAM' =
     roleParam === 'MEMBER' || roleParam === 'TEAM' ? roleParam : 'ALL'
+  const sort = parseSort(params.sort)
+  const page = Math.max(1, Number.parseInt(params.page ?? '1', 10) || 1)
 
-  const members = await adminProgressService.listMembersWithProgress({
-    search,
-    role,
-  })
+  const result = await adminProgressService.listMembersWithProgress(
+    { search, role },
+    page,
+    PAGE_SIZE,
+    sort,
+  )
+
+  // Build the shared querystring used by Export CSV + pagination links.
+  function buildQs(overrides: Record<string, string | null> = {}): string {
+    const next = new URLSearchParams()
+    if (search) next.set('search', search)
+    if (role !== 'ALL') next.set('role', role)
+    if (sort !== 'recent') next.set('sort', sort)
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v === null) next.delete(k)
+      else next.set(k, v)
+    }
+    return next.toString()
+  }
+
+  const exportQs = buildQs()
+  const exportHref = `/admin/progress/members/export${
+    exportQs ? `?${exportQs}` : ''
+  }`
+
+  function paginationHref(targetPage: number): string {
+    const qs = buildQs(targetPage > 1 ? { page: String(targetPage) } : {})
+    return `/admin/progress/members${qs ? `?${qs}` : ''}`
+  }
 
   return (
     <div className="space-y-4">
-      <MembersListFilters initialSearch={search} initialRole={role} />
+      <MembersListFilters
+        initialSearch={search}
+        initialRole={role}
+        initialSort={sort}
+        exportHref={exportHref}
+      />
 
       <SectionCard
-        title={`${members.length} ${
-          members.length === 1 ? 'member' : 'members'
-        }`}
+        title={`${result.total} ${result.total === 1 ? 'member' : 'members'}`}
         description={
           search
             ? `Matching "${search}"`
-            : 'Members with at least one enrollment, sorted by most recent activity.'
+            : `Members with at least one enrollment, ${SORT_DESCRIPTIONS[sort]}.`
         }
         flush
       >
-        {members.length === 0 ? (
+        {result.rows.length === 0 ? (
           <div className="p-6">
             <EmptyState
               icon={Users}
@@ -54,66 +110,110 @@ export default async function AdminProgressMembersPage({
             />
           </div>
         ) : (
-          <ul className="divide-y">
-            {members.map((m) => (
-              <li key={m.id}>
-                <Link
-                  href={`/admin/progress/members/${m.id}`}
-                  className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-muted/40"
-                >
-                  <Avatar>
-                    {m.avatarUrl ? <AvatarImage src={m.avatarUrl} /> : null}
-                    <AvatarFallback>
-                      {getInitials(m.name, m.email)}
-                    </AvatarFallback>
-                  </Avatar>
+          <>
+            <ul className="divide-y">
+              {result.rows.map((m) => (
+                <li key={m.id}>
+                  <Link
+                    href={`/admin/progress/members/${m.id}`}
+                    className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-muted/40"
+                  >
+                    <Avatar>
+                      {m.avatarUrl ? <AvatarImage src={m.avatarUrl} /> : null}
+                      <AvatarFallback>
+                        {getInitials(m.name, m.email)}
+                      </AvatarFallback>
+                    </Avatar>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium">
-                        {m.name ?? m.email.split('@')[0]}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-medium">
+                          {m.name ?? m.email.split('@')[0]}
+                        </p>
+                        <StatusBadge status={m.role} />
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {m.email}
                       </p>
-                      <StatusBadge status={m.role} />
                     </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {m.email}
-                    </p>
-                  </div>
 
-                  <div className="hidden w-32 shrink-0 md:block">
-                    <div className="flex items-center gap-2">
-                      <Progress
-                        value={m.avgProgressPercent}
-                        className="h-1.5 flex-1"
-                      />
-                      <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">
-                        {m.avgProgressPercent}%
-                      </span>
+                    <div className="hidden w-32 shrink-0 md:block">
+                      <div className="flex items-center gap-2">
+                        <Progress
+                          value={m.avgProgressPercent}
+                          className="h-1.5 flex-1"
+                        />
+                        <span
+                          className={cn(
+                            'w-9 text-right text-xs tabular-nums',
+                            progressTone(m.avgProgressPercent),
+                          )}
+                        >
+                          {m.avgProgressPercent}%
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        avg across {m.totalEnrollments}{' '}
+                        {m.totalEnrollments === 1 ? 'course' : 'courses'}
+                      </p>
                     </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      avg across {m.totalEnrollments}{' '}
-                      {m.totalEnrollments === 1 ? 'course' : 'courses'}
-                    </p>
-                  </div>
 
-                  <div className="hidden w-24 shrink-0 text-right md:block">
-                    <p className="text-sm font-semibold tabular-nums">
-                      {m.completedCourses}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      completed
-                    </p>
-                  </div>
+                    <div className="hidden w-24 shrink-0 text-right md:block">
+                      <p className="text-sm font-semibold tabular-nums">
+                        {m.completedCourses}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        completed
+                      </p>
+                    </div>
 
-                  <div className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground sm:block">
-                    {relativeTime(m.lastActivity)}
-                  </div>
+                    <div className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground sm:block">
+                      {relativeTime(m.lastActivity)}
+                    </div>
 
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex items-center justify-between gap-3 border-t bg-muted/20 px-5 py-3 text-xs text-muted-foreground">
+              <span>
+                Showing {(result.page - 1) * PAGE_SIZE + 1}–
+                {Math.min(result.page * PAGE_SIZE, result.total)} of{' '}
+                {result.total}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={result.page <= 1}
+                  render={
+                    result.page > 1 ? (
+                      <Link href={paginationHref(result.page - 1)} />
+                    ) : undefined
+                  }
+                >
+                  Previous
+                </Button>
+                <span className="px-1 tabular-nums">
+                  Page {result.page} of {result.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={result.page >= result.totalPages}
+                  render={
+                    result.page < result.totalPages ? (
+                      <Link href={paginationHref(result.page + 1)} />
+                    ) : undefined
+                  }
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </SectionCard>
     </div>

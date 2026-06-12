@@ -34,6 +34,7 @@ export async function GET(request: NextRequest, { params }: Context) {
   const search = sp.get('search') ?? ''
   const roleParam = sp.get('role')
   const statusParam = sp.get('status')
+  const sortParam = sp.get('sort')
 
   const role: 'ALL' | 'MEMBER' | 'TEAM' =
     roleParam === 'MEMBER' || roleParam === 'TEAM' ? roleParam : 'ALL'
@@ -43,12 +44,18 @@ export async function GET(request: NextRequest, { params }: Context) {
     statusParam === 'EXPIRED'
       ? statusParam
       : 'ALL'
+  const sort: 'progress' | 'enrolled' | 'lastAccess' | 'name' =
+    sortParam === 'enrolled' ||
+    sortParam === 'lastAccess' ||
+    sortParam === 'name'
+      ? sortParam
+      : 'progress'
 
-  const csv = await adminProgressService.exportCourseCohortCsv(id, {
-    search,
-    role,
-    status,
-  })
+  const csv = await adminProgressService.exportCourseCohortCsv(
+    id,
+    { search, role, status },
+    sort,
+  )
 
   // Filename: slug of course title + date stamp.
   const slug = course.title

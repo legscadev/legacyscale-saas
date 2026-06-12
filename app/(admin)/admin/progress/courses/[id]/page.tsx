@@ -29,9 +29,19 @@ import {
   relativeTime,
 } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
+import type { CohortSort } from '@/lib/services/admin-progress-service'
 import { CohortFilters } from '@/components/admin/progress/cohort-filters'
 
 const PAGE_SIZE = 20
+
+function parseSort(raw: string | undefined): CohortSort {
+  return raw === 'enrolled' ||
+    raw === 'lastAccess' ||
+    raw === 'name' ||
+    raw === 'progress'
+    ? raw
+    : 'progress'
+}
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -39,6 +49,7 @@ interface PageProps {
     search?: string
     role?: string
     status?: string
+    sort?: string
     page?: string
   }>
 }
@@ -59,6 +70,7 @@ export default async function AdminProgressCohortPage({
     sp.status === 'EXPIRED'
       ? sp.status
       : 'ALL'
+  const sort = parseSort(sp.sort)
   const page = Math.max(1, Number.parseInt(sp.page ?? '1', 10) || 1)
 
   const [summary, cohort] = await Promise.all([
@@ -68,30 +80,35 @@ export default async function AdminProgressCohortPage({
       { search, role, status },
       page,
       PAGE_SIZE,
+      sort,
     ),
   ])
 
   if (!summary) notFound()
   const { course, kpis } = summary
 
-  // Carry filters into the export href so the CSV matches what the
-  // operator currently sees.
-  const exportParams = new URLSearchParams()
-  if (search) exportParams.set('search', search)
-  if (role !== 'ALL') exportParams.set('role', role)
-  if (status !== 'ALL') exportParams.set('status', status)
-  const exportHref = `/admin/progress/courses/${id}/export${
-    exportParams.size > 0 ? `?${exportParams.toString()}` : ''
-  }`
-
-  // Pagination links — preserve all current filters except `page`.
-  function paginationHref(targetPage: number): string {
+  // Build the shared querystring used by Export CSV + pagination
+  // links. Same defaults as the page reads → omit when at default.
+  function buildQs(overrides: Record<string, string | null> = {}): string {
     const next = new URLSearchParams()
     if (search) next.set('search', search)
     if (role !== 'ALL') next.set('role', role)
     if (status !== 'ALL') next.set('status', status)
-    if (targetPage > 1) next.set('page', String(targetPage))
-    const qs = next.toString()
+    if (sort !== 'progress') next.set('sort', sort)
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v === null) next.delete(k)
+      else next.set(k, v)
+    }
+    return next.toString()
+  }
+
+  const exportQs = buildQs()
+  const exportHref = `/admin/progress/courses/${id}/export${
+    exportQs ? `?${exportQs}` : ''
+  }`
+
+  function paginationHref(targetPage: number): string {
+    const qs = buildQs(targetPage > 1 ? { page: String(targetPage) } : {})
     return `/admin/progress/courses/${id}${qs ? `?${qs}` : ''}`
   }
 
@@ -209,6 +226,7 @@ export default async function AdminProgressCohortPage({
             initialSearch={search}
             initialRole={role}
             initialStatus={status}
+            initialSort={sort}
           />
         </div>
 

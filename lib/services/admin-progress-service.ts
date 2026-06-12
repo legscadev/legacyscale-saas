@@ -279,6 +279,8 @@ export interface MemberListFilters {
   role?: 'ALL' | 'MEMBER' | 'TEAM'
 }
 
+export type MembersSort = 'recent' | 'progress' | 'enrollments' | 'name'
+
 export interface MemberListRow {
   id: string
   name: string | null
@@ -291,13 +293,42 @@ export interface MemberListRow {
   lastActivity: Date | null
 }
 
-async function listMembersWithProgress(
-  filters: MemberListFilters = {},
+export interface MembersListResult {
+  rows: MemberListRow[]
+  total: number
+  page: number
+  totalPages: number
+}
+
+const MEMBERS_SORTERS: Record<
+  MembersSort,
+  (a: MemberListRow, b: MemberListRow) => number
+> = {
+  recent: (a, b) =>
+    (b.lastActivity?.getTime() ?? 0) - (a.lastActivity?.getTime() ?? 0),
+  progress: (a, b) => b.avgProgressPercent - a.avgProgressPercent,
+  enrollments: (a, b) => b.totalEnrollments - a.totalEnrollments,
+  name: (a, b) => {
+    const an = (a.name ?? a.email).toLowerCase()
+    const bn = (b.name ?? b.email).toLowerCase()
+    return an.localeCompare(bn)
+  },
+}
+
+/**
+ * Fetch + aggregate every matching user, then sort + paginate in JS.
+ * This is fine for the realistic size range (hundreds to a few
+ * thousand members); for tens-of-thousands we'd push the aggregation
+ * into raw SQL. The aggregated columns (avg progress, last activity)
+ * aren't stored on the user row, so a DB-side ORDER BY would either
+ * need a materialized view or a complex subquery.
+ */
+async function fetchMembersWithProgress(
+  filters: MemberListFilters,
+  sort: MembersSort,
 ): Promise<MemberListRow[]> {
-  await requireAdmin()
   const search = filters.search?.trim() ?? ''
   const role = filters.role ?? 'ALL'
-
   const roleFilter: Role[] =
     role === 'ALL' ? ['MEMBER', 'TEAM'] : [role as Role]
 
@@ -332,44 +363,110 @@ async function listMembersWithProgress(
     },
   })
 
-  return users
-    .map((u) => {
-      const total = u.enrollments.length
-      const completed = u.enrollments.filter((e) => e.completedAt).length
-      const avg =
-        total > 0
-          ? Math.round(
-              u.enrollments.reduce((s, e) => s + e.progressPercent, 0) / total,
-            )
-          : 0
-      // lastActivity = most recent of (lastAccessedAt, completedAt) across
-      // all this user's enrollments. completedAt fills in cases where the
-      // member finished a course but never came back to revisit it.
-      const lastActivityMs = u.enrollments.reduce<number>((max, e) => {
-        const ts = Math.max(
-          e.lastAccessedAt?.getTime() ?? 0,
-          e.completedAt?.getTime() ?? 0,
-        )
-        return ts > max ? ts : max
-      }, 0)
-      return {
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        avatarUrl: u.avatarUrl,
-        role: u.role,
-        totalEnrollments: total,
-        completedCourses: completed,
-        avgProgressPercent: avg,
-        lastActivity: lastActivityMs > 0 ? new Date(lastActivityMs) : null,
-      }
-    })
-    .sort((a, b) => {
-      // Most recently active first; nulls go to the bottom.
-      const aMs = a.lastActivity?.getTime() ?? 0
-      const bMs = b.lastActivity?.getTime() ?? 0
-      return bMs - aMs
-    })
+  const rows: MemberListRow[] = users.map((u) => {
+    const total = u.enrollments.length
+    const completed = u.enrollments.filter((e) => e.completedAt).length
+    const avg =
+      total > 0
+        ? Math.round(
+            u.enrollments.reduce((s, e) => s + e.progressPercent, 0) / total,
+          )
+        : 0
+    // lastActivity = most recent of (lastAccessedAt, completedAt)
+    // across all this user's enrollments. completedAt fills in cases
+    // where the member finished but never revisited.
+    const lastActivityMs = u.enrollments.reduce<number>((max, e) => {
+      const ts = Math.max(
+        e.lastAccessedAt?.getTime() ?? 0,
+        e.completedAt?.getTime() ?? 0,
+      )
+      return ts > max ? ts : max
+    }, 0)
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      avatarUrl: u.avatarUrl,
+      role: u.role,
+      totalEnrollments: total,
+      completedCourses: completed,
+      avgProgressPercent: avg,
+      lastActivity: lastActivityMs > 0 ? new Date(lastActivityMs) : null,
+    }
+  })
+
+  return rows.sort(MEMBERS_SORTERS[sort])
+}
+
+async function listMembersWithProgress(
+  filters: MemberListFilters = {},
+  page = 1,
+  limit = 20,
+  sort: MembersSort = 'recent',
+): Promise<MembersListResult> {
+  await requireAdmin()
+  const rows = await fetchMembersWithProgress(filters, sort)
+  const total = rows.length
+  const safePage = Math.max(1, page)
+  const safeLimit = Math.max(1, Math.min(100, limit))
+  const skip = (safePage - 1) * safeLimit
+
+  return {
+    rows: rows.slice(skip, skip + safeLimit),
+    total,
+    page: safePage,
+    totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+  }
+}
+
+/** Same filter + sort shape as listMembersWithProgress, no pagination,
+ *  formatted as CSV. Capped at CSV_EXPORT_MAX_ROWS with a trailing
+ *  truncation marker — same posture as exportCourseCohortCsv. */
+async function exportMembersCsv(
+  filters: MemberListFilters = {},
+  sort: MembersSort = 'recent',
+): Promise<string> {
+  await requireAdmin()
+  const all = await fetchMembersWithProgress(filters, sort)
+  const truncated = all.length > CSV_EXPORT_MAX_ROWS
+  const safeRows = truncated ? all.slice(0, CSV_EXPORT_MAX_ROWS) : all
+
+  const header = [
+    'Name',
+    'Email',
+    'Role',
+    'Total enrollments',
+    'Completed courses',
+    'Avg progress %',
+    'Last activity',
+  ]
+
+  const escape = (value: string | number | null | undefined): string => {
+    if (value === null || value === undefined) return ''
+    const str = String(value)
+    if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`
+    return str
+  }
+
+  const body = safeRows.map((r) =>
+    [
+      escape(r.name),
+      escape(r.email),
+      escape(r.role),
+      escape(r.totalEnrollments),
+      escape(r.completedCourses),
+      escape(r.avgProgressPercent),
+      escape(r.lastActivity ? r.lastActivity.toISOString() : ''),
+    ].join(','),
+  )
+
+  const lines = [header.join(','), ...body]
+  if (truncated) {
+    lines.push(
+      `"[truncated at ${CSV_EXPORT_MAX_ROWS} rows — refine filters to narrow the list]"`,
+    )
+  }
+  return lines.join('\n')
 }
 
 export interface MemberEnrollmentRow {
@@ -835,11 +932,38 @@ const COHORT_SELECT = {
   },
 } satisfies Prisma.EnrollmentSelect
 
+export type CohortSort = 'progress' | 'enrolled' | 'lastAccess' | 'name'
+
+function cohortOrderBy(
+  sort: CohortSort,
+): Prisma.EnrollmentOrderByWithRelationInput[] {
+  switch (sort) {
+    case 'enrolled':
+      return [{ enrolledAt: 'desc' }]
+    case 'lastAccess':
+      // Members who haven't started yet (null lastAccessedAt) belong at
+      // the bottom of a "most-recent-access-first" sort, not the top.
+      return [
+        { lastAccessedAt: { sort: 'desc', nulls: 'last' } },
+        { enrolledAt: 'desc' },
+      ]
+    case 'name':
+      return [
+        { user: { name: { sort: 'asc', nulls: 'last' } } },
+        { user: { email: 'asc' } },
+      ]
+    case 'progress':
+    default:
+      return [{ progressPercent: 'desc' }, { enrolledAt: 'desc' }]
+  }
+}
+
 async function getCourseCohort(
   courseId: string,
   filters: CohortFilters,
   page: number,
   limit: number,
+  sort: CohortSort = 'progress',
 ): Promise<CohortResult> {
   await requireAdmin()
   const where = buildCohortWhere(courseId, filters)
@@ -849,7 +973,7 @@ async function getCourseCohort(
   const [rows, total] = await Promise.all([
     prisma.enrollment.findMany({
       where,
-      orderBy: [{ progressPercent: 'desc' }, { enrolledAt: 'desc' }],
+      orderBy: cohortOrderBy(sort),
       skip: (safePage - 1) * safeLimit,
       take: safeLimit,
       select: COHORT_SELECT,
@@ -887,13 +1011,14 @@ async function getCourseCohort(
 async function exportCourseCohortCsv(
   courseId: string,
   filters: CohortFilters,
+  sort: CohortSort = 'progress',
 ): Promise<string> {
   await requireAdmin()
   const where = buildCohortWhere(courseId, filters)
 
   const rows = await prisma.enrollment.findMany({
     where,
-    orderBy: [{ progressPercent: 'desc' }, { enrolledAt: 'desc' }],
+    orderBy: cohortOrderBy(sort),
     take: CSV_EXPORT_MAX_ROWS + 1,
     select: COHORT_SELECT,
   })
@@ -954,6 +1079,7 @@ export const adminProgressService = {
   getTopCourses,
   getRecentCompletions,
   listMembersWithProgress,
+  exportMembersCsv,
   getMemberProgress,
   getMemberCourseProgress,
   listCoursesWithProgress,

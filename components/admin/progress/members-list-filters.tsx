@@ -2,10 +2,18 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Search, X } from 'lucide-react'
+import { ArrowUpDown, Download, Search, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const ROLE_OPTIONS = [
   { value: 'ALL', label: 'All' },
@@ -13,12 +21,26 @@ const ROLE_OPTIONS = [
   { value: 'TEAM', label: 'Team' },
 ] as const
 
+const SORT_OPTIONS = [
+  { value: 'recent', label: 'Most recent activity' },
+  { value: 'progress', label: 'Highest avg progress' },
+  { value: 'enrollments', label: 'Most enrollments' },
+  { value: 'name', label: 'Name (A-Z)' },
+] as const
+
+type RoleValue = (typeof ROLE_OPTIONS)[number]['value']
+type SortValue = (typeof SORT_OPTIONS)[number]['value']
+
 export function MembersListFilters({
   initialSearch,
   initialRole,
+  initialSort,
+  exportHref,
 }: {
   initialSearch: string
-  initialRole: 'ALL' | 'MEMBER' | 'TEAM'
+  initialRole: RoleValue
+  initialSort: SortValue
+  exportHref: string
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -33,6 +55,8 @@ export function MembersListFilters({
         if (value === null || value === '') next.delete(key)
         else next.set(key, value)
       }
+      // Reset to page 1 whenever a filter or sort changes.
+      next.delete('page')
       const qs = next.toString()
       startTransition(() => {
         router.push(qs ? `${pathname}?${qs}` : pathname)
@@ -41,7 +65,6 @@ export function MembersListFilters({
     [pathname, router, searchParams],
   )
 
-  // Debounce the search update so the server isn't hit every keystroke.
   useEffect(() => {
     if (search === initialSearch) return
     const handle = setTimeout(() => {
@@ -94,6 +117,36 @@ export function MembersListFilters({
             </button>
           )
         })}
+      </div>
+
+      <Select
+        value={initialSort}
+        onValueChange={(value) =>
+          pushParams({ sort: value === 'recent' ? null : value })
+        }
+      >
+        <SelectTrigger className="h-8 w-auto gap-2 text-xs">
+          <ArrowUpDown className="size-3.5 text-muted-foreground" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SORT_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <div className="ml-auto">
+        <Button
+          variant="outline"
+          size="sm"
+          render={<a href={exportHref} download />}
+        >
+          <Download />
+          Export CSV
+        </Button>
       </div>
     </div>
   )

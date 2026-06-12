@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Search, X } from 'lucide-react'
+import { ArrowUpDown, Search, X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const ROLE_OPTIONS = [
   { value: 'ALL', label: 'All' },
@@ -20,17 +27,27 @@ const STATUS_OPTIONS = [
   { value: 'EXPIRED', label: 'Expired' },
 ] as const
 
+const SORT_OPTIONS = [
+  { value: 'progress', label: 'Highest progress' },
+  { value: 'enrolled', label: 'Most recently enrolled' },
+  { value: 'lastAccess', label: 'Most recently active' },
+  { value: 'name', label: 'Name (A-Z)' },
+] as const
+
 type RoleValue = (typeof ROLE_OPTIONS)[number]['value']
 type StatusValue = (typeof STATUS_OPTIONS)[number]['value']
+type SortValue = (typeof SORT_OPTIONS)[number]['value']
 
 export function CohortFilters({
   initialSearch,
   initialRole,
   initialStatus,
+  initialSort,
 }: {
   initialSearch: string
   initialRole: RoleValue
   initialStatus: StatusValue
+  initialSort: SortValue
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -104,6 +121,25 @@ export function CohortFilters({
           pushParams({ status: value === 'ALL' ? null : value })
         }
       />
+
+      <Select
+        value={initialSort}
+        onValueChange={(value) =>
+          pushParams({ sort: value === 'progress' ? null : value })
+        }
+      >
+        <SelectTrigger className="h-8 w-auto gap-2 text-xs">
+          <ArrowUpDown className="size-3.5 text-muted-foreground" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SORT_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }
