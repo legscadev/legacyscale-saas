@@ -1,7 +1,10 @@
 import Link from 'next/link'
 import {
+  AlertTriangle,
   CheckCircle2,
+  ChevronRight,
   GraduationCap,
+  Hourglass,
   Sparkles,
   TrendingUp,
   Users,
@@ -40,11 +43,12 @@ export default async function AdminProgressOverviewPage({
   const range = parseRange(params.range)
   const window = rangeLabel(range)
 
-  const [kpis, engaged, topCourses, recent] = await Promise.all([
+  const [kpis, engaged, topCourses, recent, stuck] = await Promise.all([
     adminProgressService.getOverviewKpis(range),
     adminProgressService.getMostEngagedMembers(5, range),
     adminProgressService.getTopCourses(5, range),
     adminProgressService.getRecentCompletions(10, range),
+    adminProgressService.getStuckLearners(5),
   ])
 
   return (
@@ -57,7 +61,7 @@ export default async function AdminProgressOverviewPage({
         <OverviewRangePicker initialRange={range} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard
           size="sm"
           title="Active members"
@@ -89,6 +93,18 @@ export default async function AdminProgressOverviewPage({
           icon={CheckCircle2}
           tone="success"
           description={`Completed · ${window}`}
+        />
+        <StatCard
+          size="sm"
+          title="Avg time to complete"
+          value={
+            kpis.avgTimeToCompletionDays === null
+              ? '—'
+              : `${kpis.avgTimeToCompletionDays}d`
+          }
+          icon={Hourglass}
+          tone="warning"
+          description={`Enrolled → completed · ${window}`}
         />
         <StatCard
           size="sm"
@@ -202,6 +218,73 @@ export default async function AdminProgressOverviewPage({
           )}
         </SectionCard>
       </div>
+
+      <SectionCard
+        title="Stuck learners"
+        description="Members who started a course, made some progress, then went quiet for 7+ days. Range-independent — these are who to nudge regardless of the window above."
+      >
+        {stuck.length === 0 ? (
+          <EmptyState
+            icon={Sparkles}
+            title="Nobody is stuck right now"
+            description="Every in-progress member has touched a lesson in the last 7 days."
+          />
+        ) : (
+          <ul className="-mx-3 divide-y">
+            {stuck.map((s) => (
+              <li key={s.enrollmentId}>
+                <Link
+                  href={`/admin/progress/members/${s.user.id}`}
+                  className="flex items-center gap-3 rounded-md px-3 py-3 transition-colors hover:bg-muted/40"
+                >
+                  <Avatar>
+                    {s.user.avatarUrl ? (
+                      <AvatarImage src={s.user.avatarUrl} />
+                    ) : null}
+                    <AvatarFallback>
+                      {getInitials(s.user.name, s.user.email)}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium">
+                        {s.user.name ?? s.user.email.split('@')[0]}
+                      </p>
+                      <StatusBadge status={s.user.role} />
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      stuck on{' '}
+                      <span className="font-medium text-foreground">
+                        {s.course.title}
+                      </span>
+                    </p>
+                  </div>
+
+                  <div className="hidden w-32 shrink-0 sm:block">
+                    <div className="flex items-center gap-2">
+                      <Progress
+                        value={s.progressPercent}
+                        className="h-1.5 flex-1"
+                      />
+                      <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">
+                        {s.progressPercent}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="size-3.5" />
+                    {s.daysSinceLastAccess}d
+                  </div>
+
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
 
       <SectionCard
         title="Recent completions"

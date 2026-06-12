@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Download,
   GraduationCap,
+  Hourglass,
   PlayCircle,
   TrendingUp,
   Users as UsersIcon,
@@ -85,7 +86,18 @@ export default async function AdminProgressCohortPage({
   ])
 
   if (!summary) notFound()
-  const { course, kpis } = summary
+  const { course, kpis, platformAvgProgress } = summary
+
+  // Comparison vs platform-wide avg. Shown in the Avg progress card
+  // description with a + / − sign so admins can spot whether this
+  // cohort is over- or under-performing the lifetime baseline.
+  const progressDelta = kpis.avgProgressPercent - platformAvgProgress
+  const progressDeltaLabel =
+    kpis.enrolled === 0
+      ? 'No enrollments yet'
+      : progressDelta === 0
+        ? 'On platform avg'
+        : `${progressDelta > 0 ? '+' : ''}${progressDelta} pts vs platform`
 
   // Build the shared querystring used by Export CSV + pagination
   // links. Same defaults as the page reads → omit when at default.
@@ -158,7 +170,7 @@ export default async function AdminProgressCohortPage({
         </div>
       </SectionCard>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <StatCard
           size="sm"
           title="Enrolled"
@@ -186,6 +198,7 @@ export default async function AdminProgressCohortPage({
           value={`${kpis.avgProgressPercent}%`}
           icon={TrendingUp}
           tone="brand"
+          description={progressDeltaLabel}
         />
         <StatCard
           size="sm"
@@ -193,6 +206,18 @@ export default async function AdminProgressCohortPage({
           value={`${kpis.completionRate}%`}
           icon={GraduationCap}
           tone="success"
+        />
+        <StatCard
+          size="sm"
+          title="Avg time to complete"
+          value={
+            kpis.avgTimeToCompletionDays === null
+              ? '—'
+              : `${kpis.avgTimeToCompletionDays}d`
+          }
+          icon={Hourglass}
+          tone="warning"
+          description="Enrolled → completed"
         />
         <StatCard
           size="sm"

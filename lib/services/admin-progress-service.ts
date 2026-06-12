@@ -100,6 +100,10 @@ export interface OverviewKpis {
   /** Distinct users whose `lastAccessedAt` falls in the selected
    *  range. Renders as "Active learners". */
   activeLearners: number
+  /** Average days between enrolledAt and completedAt across
+   *  enrollments that completed in range. Null when the range has no
+   *  completions. */
+  avgTimeToCompletionDays: number | null
   /** Echoed back so the page can label the strip. */
   range: RangeFilter
 }
@@ -136,6 +140,7 @@ async function getOverviewKpis(
     touchedTotal,
     progressAgg,
     activeLearnerRows,
+    completionDurationRows,
   ] = await Promise.all([
     prisma.user.count({
       where: {
@@ -160,6 +165,10 @@ async function getOverviewKpis(
       select: { userId: true },
       distinct: ['userId'],
     }),
+    prisma.enrollment.findMany({
+      where: completedFilter,
+      select: { enrolledAt: true, completedAt: true },
+    }),
   ])
 
   return {
@@ -171,8 +180,25 @@ async function getOverviewKpis(
         ? Math.round((completedInRange / touchedTotal) * 100)
         : 0,
     activeLearners: activeLearnerRows.length,
+    avgTimeToCompletionDays: averageDaysBetween(completionDurationRows),
     range,
   }
+}
+
+/** Avg whole-days between enrolledAt → completedAt across the given
+ *  rows. Returns null when no rows have a completion to measure. */
+function averageDaysBetween(
+  rows: { enrolledAt: Date; completedAt: Date | null }[],
+): number | null {
+  const completed = rows.filter(
+    (r): r is { enrolledAt: Date; completedAt: Date } => r.completedAt !== null,
+  )
+  if (completed.length === 0) return null
+  const totalMs = completed.reduce(
+    (sum, r) => sum + (r.completedAt.getTime() - r.enrolledAt.getTime()),
+    0,
+  )
+  return Math.round(totalMs / completed.length / (24 * 60 * 60 * 1000))
 }
 
 export interface EngagedMember {
@@ -361,6 +387,88 @@ async function getRecentCompletions(
         ]
       : [],
   )
+}
+
+export interface StuckLearner {
+  enrollmentId: string
+  user: {
+    id: string
+    name: string | null
+    email: string
+    avatarUrl: string | null
+    role: Role
+  }
+  course: { id: string; title: string }
+  progressPercent: number
+  enrolledAt: Date
+  lastAccessedAt: Date | null
+  /** Days since the learner last touched any lesson on this course
+   *  (Infinity when they've never started since enrolling). */
+  daysSinceLastAccess: number
+}
+
+const STUCK_ENROLLMENT_MIN_AGE_MS = 14 * 24 * 60 * 60 * 1000
+const STUCK_INACTIVITY_MS = SEVEN_DAYS_MS
+
+/**
+ * Enrollments that look stalled — members the admin probably wants to
+ * nudge. Definition: enrolled > 14 days ago, status ACTIVE, not yet
+ * completed, has made some progress (>0 < 100), and either hasn't
+ * accessed in > 7 days or hasn't accessed at all. Ranked by stalest
+ * lastAccessedAt first (nulls treated as oldest). Range-independent
+ * by design — staleness is the signal regardless of dashboard window.
+ */
+async function getStuckLearners(limit = 5): Promise<StuckLearner[]> {
+  await requireAdmin()
+  const now = Date.now()
+  const inactivityCutoff = new Date(now - STUCK_INACTIVITY_MS)
+  const ageCutoff = new Date(now - STUCK_ENROLLMENT_MIN_AGE_MS)
+
+  const rows = await prisma.enrollment.findMany({
+    where: {
+      status: 'ACTIVE',
+      completedAt: null,
+      progressPercent: { gt: 0, lt: 100 },
+      enrolledAt: { lt: ageCutoff },
+      OR: [
+        { lastAccessedAt: { lt: inactivityCutoff } },
+        { lastAccessedAt: null },
+      ],
+    },
+    orderBy: [{ lastAccessedAt: { sort: 'asc', nulls: 'first' } }],
+    take: limit,
+    select: {
+      id: true,
+      progressPercent: true,
+      enrolledAt: true,
+      lastAccessedAt: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true,
+          role: true,
+        },
+      },
+      course: { select: { id: true, title: true } },
+    },
+  })
+
+  return rows.map((r) => {
+    const days = r.lastAccessedAt
+      ? Math.floor((now - r.lastAccessedAt.getTime()) / (24 * 60 * 60 * 1000))
+      : Math.floor((now - r.enrolledAt.getTime()) / (24 * 60 * 60 * 1000))
+    return {
+      enrollmentId: r.id,
+      user: r.user,
+      course: r.course,
+      progressPercent: r.progressPercent,
+      enrolledAt: r.enrolledAt,
+      lastAccessedAt: r.lastAccessedAt,
+      daysSinceLastAccess: days,
+    }
+  })
 }
 
 // ============================================
@@ -869,7 +977,15 @@ export interface CourseProgressSummary {
     completionRate: number
     /** Distinct users with lastAccessedAt in the last 7 days. */
     weeklyActive: number
+    /** Avg whole-days from enrolledAt to completedAt for this course.
+     *  Null when nobody has completed it yet. */
+    avgTimeToCompletionDays: number | null
   }
+  /** Platform-wide avg progress (across every non-revoked
+   *  enrollment), used to render the cohort's progress vs the
+   *  platform-average comparison. Range-independent on purpose —
+   *  this is "how does this cohort compare to the lifetime baseline". */
+  platformAvgProgress: number
 }
 
 async function getCourseProgressSummary(
@@ -885,6 +1001,8 @@ async function getCourseProgressSummary(
     completed,
     progressAgg,
     weeklyActiveRows,
+    completionDurationRows,
+    platformAgg,
   ] = await Promise.all([
     prisma.course.findUnique({
       where: { id: courseId, deletedAt: null },
@@ -913,6 +1031,14 @@ async function getCourseProgressSummary(
       select: { userId: true },
       distinct: ['userId'],
     }),
+    prisma.enrollment.findMany({
+      where: { courseId, completedAt: { not: null } },
+      select: { enrolledAt: true, completedAt: true },
+    }),
+    prisma.enrollment.aggregate({
+      where: { status: { not: 'REVOKED' } },
+      _avg: { progressPercent: true },
+    }),
   ])
 
   if (!course) return null
@@ -927,7 +1053,9 @@ async function getCourseProgressSummary(
       completionRate:
         nonRevoked > 0 ? Math.round((completed / nonRevoked) * 100) : 0,
       weeklyActive: weeklyActiveRows.length,
+      avgTimeToCompletionDays: averageDaysBetween(completionDurationRows),
     },
+    platformAvgProgress: Math.round(platformAgg._avg.progressPercent ?? 0),
   }
 }
 
@@ -1172,6 +1300,7 @@ export const adminProgressService = {
   getMostEngagedMembers,
   getTopCourses,
   getRecentCompletions,
+  getStuckLearners,
   listMembersWithProgress,
   exportMembersCsv,
   getMemberProgress,
