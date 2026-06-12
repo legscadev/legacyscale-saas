@@ -18,23 +18,8 @@ import {
   StatusBadge,
 } from '@/components/shared'
 import { MemberEnrollmentsTable } from '@/components/admin/progress/member-enrollments-table'
+import { fmtDate, getInitials } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
-
-function getInitials(name: string | null, email: string): string {
-  const source = name?.trim() || email
-  const parts = source.split(/\s+/)
-  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
-  return source.slice(0, 2).toUpperCase()
-}
-
-function fmtDate(date: Date | null): string {
-  if (!date) return '—'
-  return new Date(date).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
 
 interface PageProps {
   params: Promise<{ id: string }>

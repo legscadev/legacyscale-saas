@@ -23,32 +23,11 @@ import {
   StatCard,
   StatusBadge,
 } from '@/components/shared'
+import { getInitials, relativeTime } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 
 function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many
-}
-
-function relativeTime(date: Date | null): string {
-  if (!date) return 'Not yet active'
-  const diffMs = Date.now() - date.getTime()
-  const diffMin = Math.round(diffMs / 60_000)
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.round(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.round(diffHr / 24)
-  if (diffDay < 30) return `${diffDay}d ago`
-  const diffMonth = Math.round(diffDay / 30)
-  if (diffMonth < 12) return `${diffMonth}mo ago`
-  return `${Math.round(diffMonth / 12)}y ago`
-}
-
-function getInitials(name: string | null, email: string): string {
-  const source = name?.trim() || email
-  const parts = source.split(/\s+/)
-  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
-  return source.slice(0, 2).toUpperCase()
 }
 
 interface AttentionItem {
@@ -132,12 +111,19 @@ export default async function AdminDashboardPage() {
           description={`${published} published`}
           tone="success"
         />
-        <StatCard
-          title="Active enrollments"
-          value={activeEnrollments}
-          icon={Ticket}
-          tone="info"
-        />
+        <Link
+          href="/admin/progress"
+          aria-label="Open Progress Tracker"
+          className="block focus:outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          <StatCard
+            title="Active enrollments"
+            value={activeEnrollments}
+            icon={Ticket}
+            tone="info"
+            description="Open Progress Tracker"
+          />
+        </Link>
         <StatCard
           title="Announcements"
           value={announcements}

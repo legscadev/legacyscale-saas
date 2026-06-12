@@ -8,12 +8,18 @@ import type {
   Role,
 } from '@prisma/client'
 
+import { requireAdmin } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
 
 // Admin-only progress aggregation. Surfaces under /admin/progress/*
 // read from here, not from member-course-service (which is scoped to
-// the signed-in user's own data). Every method assumes the caller has
-// already cleared the admin gate via requireAdmin().
+// the signed-in user's own data). Every public method calls
+// requireAdmin() defensively — this is intentional duplication with
+// the route/layout-level gate (defense in depth) so that any future
+// non-admin route that imports this service still 403s cleanly.
+//
+// The auth check is cheap (cookie read + a cached supabase getUser
+// call), so the redundancy is negligible at runtime.
 //
 // Methods are added per build step:
 //   Step 2 (Overview): getOverviewKpis, getMostEngagedMembers,
@@ -25,6 +31,12 @@ import { prisma } from '@/lib/prisma'
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Hard upper bound on rows returned by exportCourseCohortCsv. Chosen
+ *  to keep the response body and memory footprint safe for the
+ *  Vercel/Edge runtime; the export marker tells the operator if the
+ *  download was clipped. */
+const CSV_EXPORT_MAX_ROWS = 10_000
 
 // ============================================
 // STEP 2 — OVERVIEW
@@ -44,6 +56,7 @@ export interface OverviewKpis {
 }
 
 async function getOverviewKpis(): Promise<OverviewKpis> {
+  await requireAdmin()
   const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS)
 
   const [
@@ -102,6 +115,7 @@ export interface EngagedMember {
 }
 
 async function getMostEngagedMembers(limit = 5): Promise<EngagedMember[]> {
+  await requireAdmin()
   const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_MS)
 
   const grouped = await prisma.lessonProgress.groupBy({
@@ -158,6 +172,7 @@ export interface TopCourseItem {
 }
 
 async function getTopCourses(limit = 5): Promise<TopCourseItem[]> {
+  await requireAdmin()
   // Rank courses by total enrollments (non-revoked). Pulls top N then
   // fetches course meta + completion counts in parallel.
   const grouped = await prisma.enrollment.groupBy({
@@ -225,6 +240,7 @@ export interface RecentCompletion {
 }
 
 async function getRecentCompletions(limit = 10): Promise<RecentCompletion[]> {
+  await requireAdmin()
   const rows = await prisma.enrollment.findMany({
     where: { completedAt: { not: null } },
     orderBy: { completedAt: 'desc' },
@@ -278,6 +294,7 @@ export interface MemberListRow {
 async function listMembersWithProgress(
   filters: MemberListFilters = {},
 ): Promise<MemberListRow[]> {
+  await requireAdmin()
   const search = filters.search?.trim() ?? ''
   const role = filters.role ?? 'ALL'
 
@@ -391,6 +408,7 @@ export interface MemberProgressDetail {
 async function getMemberProgress(
   userId: string,
 ): Promise<MemberProgressDetail | null> {
+  await requireAdmin()
   const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_MS)
 
   const [user, enrollments, completedLast30d] = await Promise.all([
@@ -498,6 +516,7 @@ async function getMemberCourseProgress(
   userId: string,
   courseId: string,
 ): Promise<MemberCourseProgress | null> {
+  await requireAdmin()
   const [course, progressRows] = await Promise.all([
     prisma.course.findUnique({
       where: { id: courseId, deletedAt: null },
@@ -595,6 +614,7 @@ export interface CourseListRow {
 }
 
 async function listCoursesWithProgress(): Promise<CourseListRow[]> {
+  await requireAdmin()
   const courses = await prisma.course.findMany({
     where: { deletedAt: null },
     orderBy: { orderIndex: 'asc' },
@@ -664,6 +684,7 @@ export interface CourseProgressSummary {
 async function getCourseProgressSummary(
   courseId: string,
 ): Promise<CourseProgressSummary | null> {
+  await requireAdmin()
   const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS)
 
   const [
@@ -820,6 +841,7 @@ async function getCourseCohort(
   page: number,
   limit: number,
 ): Promise<CohortResult> {
+  await requireAdmin()
   const where = buildCohortWhere(courseId, filters)
   const safePage = Math.max(1, page)
   const safeLimit = Math.max(1, Math.min(100, limit))
@@ -854,20 +876,29 @@ async function getCourseCohort(
 
 /**
  * Same filter shape as getCourseCohort but no pagination — pulls the
- * full filtered list and formats it as CSV. Caller is expected to set
- * the Content-Disposition header for download.
+ * filtered list and formats it as CSV. Caller is expected to set the
+ * Content-Disposition header for download.
+ *
+ * Hard-capped at CSV_EXPORT_MAX_ROWS rows so a 50k-cohort doesn't
+ * blow the response timeout / memory. The truncated row appears as a
+ * trailing pseudo-row in the CSV so the operator knows the dump was
+ * partial — easier to spot than a silently-clipped file.
  */
 async function exportCourseCohortCsv(
   courseId: string,
   filters: CohortFilters,
 ): Promise<string> {
+  await requireAdmin()
   const where = buildCohortWhere(courseId, filters)
 
   const rows = await prisma.enrollment.findMany({
     where,
     orderBy: [{ progressPercent: 'desc' }, { enrolledAt: 'desc' }],
+    take: CSV_EXPORT_MAX_ROWS + 1,
     select: COHORT_SELECT,
   })
+  const truncated = rows.length > CSV_EXPORT_MAX_ROWS
+  const safeRows = truncated ? rows.slice(0, CSV_EXPORT_MAX_ROWS) : rows
 
   const header = [
     'Name',
@@ -892,7 +923,7 @@ async function exportCourseCohortCsv(
 
   const iso = (date: Date | null) => (date ? date.toISOString() : '')
 
-  const body = rows.map((r) =>
+  const body = safeRows.map((r) =>
     [
       escape(r.user.name),
       escape(r.user.email),
@@ -906,7 +937,15 @@ async function exportCourseCohortCsv(
     ].join(','),
   )
 
-  return [header.join(','), ...body].join('\n')
+  const lines = [header.join(','), ...body]
+  if (truncated) {
+    // Visible marker so the operator can see the dump was clipped at
+    // CSV_EXPORT_MAX_ROWS rather than legitimately ending here.
+    lines.push(
+      `"[truncated at ${CSV_EXPORT_MAX_ROWS} rows — refine filters to narrow the cohort]"`,
+    )
+  }
+  return lines.join('\n')
 }
 
 export const adminProgressService = {

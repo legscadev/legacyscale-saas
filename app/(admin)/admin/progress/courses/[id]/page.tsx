@@ -22,41 +22,16 @@ import {
   StatusBadge,
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
+import {
+  fmtDate,
+  getInitials,
+  progressTone,
+  relativeTime,
+} from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 import { CohortFilters } from '@/components/admin/progress/cohort-filters'
 
 const PAGE_SIZE = 20
-
-function fmtDate(date: Date | null): string {
-  if (!date) return '—'
-  return new Date(date).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-function relativeTime(date: Date | null): string {
-  if (!date) return 'Never'
-  const diffMs = Date.now() - date.getTime()
-  const diffMin = Math.round(diffMs / 60_000)
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.round(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.round(diffHr / 24)
-  if (diffDay < 30) return `${diffDay}d ago`
-  const diffMonth = Math.round(diffDay / 30)
-  if (diffMonth < 12) return `${diffMonth}mo ago`
-  return `${Math.round(diffMonth / 12)}y ago`
-}
-
-function getInitials(name: string | null, email: string): string {
-  const source = name?.trim() || email
-  const parts = source.split(/\s+/)
-  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
-  return source.slice(0, 2).toUpperCase()
-}
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -251,6 +226,26 @@ export default async function AdminProgressCohortPage({
           </div>
         ) : (
           <>
+            {/* Column header — sticky so the meaning of each column
+                stays visible while scrolling through long cohorts. */}
+            <div className="sticky top-0 z-10 flex items-center gap-4 border-b bg-muted/40 px-5 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
+              <div className="size-9 shrink-0" />
+              <div className="min-w-0 flex-1">Member</div>
+              <div className="hidden w-40 shrink-0 md:block">Progress</div>
+              <div className="hidden w-28 shrink-0 text-right sm:block">
+                Status
+              </div>
+              <div className="hidden w-20 shrink-0 text-right sm:block">
+                Source
+              </div>
+              <div className="hidden w-28 shrink-0 text-right lg:block">
+                Last access
+              </div>
+              <div className="hidden w-24 shrink-0 text-right lg:block">
+                Enrolled
+              </div>
+            </div>
+
             <ul className="divide-y">
               {cohort.rows.map((r) => {
                 const completed = r.completedAt !== null
@@ -290,9 +285,7 @@ export default async function AdminProgressCohortPage({
                           <span
                             className={cn(
                               'w-9 text-right text-xs tabular-nums',
-                              completed
-                                ? 'text-success'
-                                : 'text-muted-foreground',
+                              progressTone(r.progressPercent),
                             )}
                           >
                             {r.progressPercent}%
@@ -305,6 +298,10 @@ export default async function AdminProgressCohortPage({
                           status={completed ? 'COMPLETED' : r.status}
                           label={completed ? 'Completed' : undefined}
                         />
+                      </div>
+
+                      <div className="hidden w-20 shrink-0 text-right text-[11px] uppercase tracking-wide text-muted-foreground sm:block">
+                        {r.source.replace(/_/g, ' ').toLowerCase()}
                       </div>
 
                       <div className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground lg:block">

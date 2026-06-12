@@ -10,12 +10,12 @@ import {
   ExternalLink,
   FileText,
   GraduationCap,
-  Loader2,
   PlayCircle,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Progress } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/shared'
 import { getMemberCourseProgressAction } from '@/app/(admin)/admin/progress/members/[id]/actions'
 import type {
@@ -146,10 +146,7 @@ export function MemberEnrollmentsTable({
             {isOpen ? (
               <div className="border-t bg-muted/20 px-5 py-4">
                 {!drill || drill.status === 'loading' ? (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" />
-                    Loading lesson progress…
-                  </div>
+                  <DrilldownSkeleton />
                 ) : drill.status === 'error' ? (
                   <p className="text-xs text-destructive">{drill.message}</p>
                 ) : drill.status === 'empty' ? (
@@ -276,5 +273,38 @@ function LessonRow({
         </p>
       </div>
     </li>
+  )
+}
+
+// Shimmer placeholder that roughly matches the shape of two chapter
+// cards. Chosen to be visually quiet — admins shouldn't be drawn to
+// loading state on every expand. ~300ms feels right; longer fetches
+// reveal the shimmer for as long as they take.
+function DrilldownSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy aria-label="Loading lesson progress">
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div key={i} className="rounded-lg border bg-background">
+          <div className="flex flex-col gap-2 border-b px-4 py-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-10" />
+            </div>
+            <Skeleton className="h-1 w-full" />
+          </div>
+          <ul className="divide-y">
+            {Array.from({ length: 3 }).map((_, j) => (
+              <li key={j} className="flex items-center gap-3 px-4 py-2">
+                <Skeleton className="size-4 rounded-full" />
+                <div className="flex-1 space-y-1">
+                  <Skeleton className="h-3 w-3/4" />
+                  <Skeleton className="h-2.5 w-20" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
   )
 }

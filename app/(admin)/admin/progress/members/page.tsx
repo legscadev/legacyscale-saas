@@ -4,30 +4,9 @@ import { ChevronRight, Users } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
 import { EmptyState, SectionCard, StatusBadge } from '@/components/shared'
+import { getInitials, relativeTime } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 import { MembersListFilters } from '@/components/admin/progress/members-list-filters'
-
-function relativeTime(date: Date | null): string {
-  if (!date) return 'Never'
-  const diffMs = Date.now() - date.getTime()
-  const diffMin = Math.round(diffMs / 60_000)
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.round(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.round(diffHr / 24)
-  if (diffDay < 30) return `${diffDay}d ago`
-  const diffMonth = Math.round(diffDay / 30)
-  if (diffMonth < 12) return `${diffMonth}mo ago`
-  return `${Math.round(diffMonth / 12)}y ago`
-}
-
-function getInitials(name: string | null, email: string): string {
-  const source = name?.trim() || email
-  const parts = source.split(/\s+/)
-  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
-  return source.slice(0, 2).toUpperCase()
-}
 
 interface PageProps {
   searchParams: Promise<{ search?: string; role?: string }>

@@ -17,29 +17,8 @@ import {
   StatusBadge,
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
+import { getInitials, relativeTime } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
-
-function relativeTime(date: Date | null): string {
-  if (!date) return '—'
-  const diffMs = Date.now() - date.getTime()
-  const diffMin = Math.round(diffMs / 60_000)
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.round(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.round(diffHr / 24)
-  if (diffDay < 30) return `${diffDay}d ago`
-  const diffMonth = Math.round(diffDay / 30)
-  if (diffMonth < 12) return `${diffMonth}mo ago`
-  return `${Math.round(diffMonth / 12)}y ago`
-}
-
-function getInitials(name: string | null, email: string): string {
-  const source = name?.trim() || email
-  const parts = source.split(/\s+/)
-  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
-  return source.slice(0, 2).toUpperCase()
-}
 
 export default async function AdminProgressOverviewPage() {
   const [kpis, engaged, topCourses, recent] = await Promise.all([
@@ -104,37 +83,39 @@ export default async function AdminProgressOverviewPage() {
               description="Member lesson completions will surface here."
             />
           ) : (
-            <ul className="divide-y">
+            <ul className="-mx-3 divide-y">
               {engaged.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-                >
-                  <Avatar>
-                    {m.avatarUrl ? <AvatarImage src={m.avatarUrl} /> : null}
-                    <AvatarFallback>
-                      {getInitials(m.name, m.email)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium">
-                        {m.name ?? m.email.split('@')[0]}
+                <li key={m.id}>
+                  <Link
+                    href={`/admin/progress/members/${m.id}`}
+                    className="flex items-center gap-3 rounded-md px-3 py-3 transition-colors hover:bg-muted/40"
+                  >
+                    <Avatar>
+                      {m.avatarUrl ? <AvatarImage src={m.avatarUrl} /> : null}
+                      <AvatarFallback>
+                        {getInitials(m.name, m.email)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-medium">
+                          {m.name ?? m.email.split('@')[0]}
+                        </p>
+                        <StatusBadge status={m.role} />
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        Last activity {relativeTime(m.lastActivity)}
                       </p>
-                      <StatusBadge status={m.role} />
                     </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      Last activity {relativeTime(m.lastActivity)}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold tabular-nums">
-                      {m.completedLessons}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      lessons · 30d
-                    </p>
-                  </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold tabular-nums">
+                        {m.completedLessons}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        lessons · 30d
+                      </p>
+                    </div>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -160,7 +141,7 @@ export default async function AdminProgressOverviewPage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <Link
-                      href={`/admin/courses/${c.id}`}
+                      href={`/admin/progress/courses/${c.id}`}
                       className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
                     >
                       {c.title}
@@ -204,38 +185,35 @@ export default async function AdminProgressOverviewPage() {
             description="When members finish courses, they'll show up here."
           />
         ) : (
-          <ul className="divide-y">
+          <ul className="-mx-3 divide-y">
             {recent.map((r) => (
-              <li
-                key={r.enrollmentId}
-                className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <Avatar>
-                  {r.user.avatarUrl ? (
-                    <AvatarImage src={r.user.avatarUrl} />
-                  ) : null}
-                  <AvatarFallback>
-                    {getInitials(r.user.name, r.user.email)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">
-                    <span className="font-medium">
-                      {r.user.name ?? r.user.email.split('@')[0]}
-                    </span>{' '}
-                    <span className="text-muted-foreground">completed</span>{' '}
-                    <Link
-                      href={`/admin/courses/${r.course.id}`}
-                      className="font-medium hover:underline"
-                    >
-                      {r.course.title}
-                    </Link>
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {relativeTime(r.completedAt)}
-                  </p>
-                </div>
-                <CheckCircle2 className="size-4 shrink-0 text-success" />
+              <li key={r.enrollmentId}>
+                <Link
+                  href={`/admin/progress/members/${r.user.id}`}
+                  className="flex items-center gap-3 rounded-md px-3 py-3 transition-colors hover:bg-muted/40"
+                >
+                  <Avatar>
+                    {r.user.avatarUrl ? (
+                      <AvatarImage src={r.user.avatarUrl} />
+                    ) : null}
+                    <AvatarFallback>
+                      {getInitials(r.user.name, r.user.email)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">
+                      <span className="font-medium">
+                        {r.user.name ?? r.user.email.split('@')[0]}
+                      </span>{' '}
+                      <span className="text-muted-foreground">completed</span>{' '}
+                      <span className="font-medium">{r.course.title}</span>
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {relativeTime(r.completedAt)}
+                    </p>
+                  </div>
+                  <CheckCircle2 className="size-4 shrink-0 text-success" />
+                </Link>
               </li>
             ))}
           </ul>
