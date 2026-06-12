@@ -15,6 +15,7 @@ export {
 } from './badge-status'
 export { ProgressBar, CourseProgress } from './progress-bar'
 export { StatCard } from './stat-card'
+export { StatStrip, type StatStripCell } from './stat-strip'
 export { CourseCard } from './course-card'
 export { LessonItem } from './lesson-item'
 export { AvatarGroup } from './avatar-group'
