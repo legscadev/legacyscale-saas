@@ -1,4 +1,10 @@
-import type { Role } from '@prisma/client'
+import type {
+  EnrollmentSource,
+  EnrollmentStatus,
+  LessonStatus,
+  LessonType,
+  Role,
+} from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
@@ -245,9 +251,337 @@ async function getRecentCompletions(limit = 10): Promise<RecentCompletion[]> {
   )
 }
 
+// ============================================
+// STEP 3 — MEMBERS LIST + MEMBER DETAIL
+// ============================================
+
+export interface MemberListFilters {
+  search?: string
+  /** ALL = both MEMBER and TEAM; admins are excluded from this surface. */
+  role?: 'ALL' | 'MEMBER' | 'TEAM'
+}
+
+export interface MemberListRow {
+  id: string
+  name: string | null
+  email: string
+  avatarUrl: string | null
+  role: Role
+  totalEnrollments: number
+  completedCourses: number
+  avgProgressPercent: number
+  lastActivity: Date | null
+}
+
+async function listMembersWithProgress(
+  filters: MemberListFilters = {},
+): Promise<MemberListRow[]> {
+  const search = filters.search?.trim() ?? ''
+  const role = filters.role ?? 'ALL'
+
+  const roleFilter: Role[] =
+    role === 'ALL' ? ['MEMBER', 'TEAM'] : [role as Role]
+
+  const users = await prisma.user.findMany({
+    where: {
+      role: { in: roleFilter },
+      deletedAt: null,
+      enrollments: { some: {} },
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      avatarUrl: true,
+      role: true,
+      enrollments: {
+        where: { status: { not: 'REVOKED' } },
+        select: {
+          progressPercent: true,
+          completedAt: true,
+          lastAccessedAt: true,
+        },
+      },
+    },
+  })
+
+  return users
+    .map((u) => {
+      const total = u.enrollments.length
+      const completed = u.enrollments.filter((e) => e.completedAt).length
+      const avg =
+        total > 0
+          ? Math.round(
+              u.enrollments.reduce((s, e) => s + e.progressPercent, 0) / total,
+            )
+          : 0
+      // lastActivity = most recent of (lastAccessedAt, completedAt) across
+      // all this user's enrollments. completedAt fills in cases where the
+      // member finished a course but never came back to revisit it.
+      const lastActivityMs = u.enrollments.reduce<number>((max, e) => {
+        const ts = Math.max(
+          e.lastAccessedAt?.getTime() ?? 0,
+          e.completedAt?.getTime() ?? 0,
+        )
+        return ts > max ? ts : max
+      }, 0)
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        avatarUrl: u.avatarUrl,
+        role: u.role,
+        totalEnrollments: total,
+        completedCourses: completed,
+        avgProgressPercent: avg,
+        lastActivity: lastActivityMs > 0 ? new Date(lastActivityMs) : null,
+      }
+    })
+    .sort((a, b) => {
+      // Most recently active first; nulls go to the bottom.
+      const aMs = a.lastActivity?.getTime() ?? 0
+      const bMs = b.lastActivity?.getTime() ?? 0
+      return bMs - aMs
+    })
+}
+
+export interface MemberEnrollmentRow {
+  enrollmentId: string
+  courseId: string
+  courseTitle: string
+  courseThumbnailUrl: string | null
+  status: EnrollmentStatus
+  source: EnrollmentSource
+  progressPercent: number
+  enrolledAt: Date
+  lastAccessedAt: Date | null
+  completedAt: Date | null
+}
+
+export interface MemberProgressDetail {
+  user: {
+    id: string
+    name: string | null
+    email: string
+    avatarUrl: string | null
+    role: Role
+    isActive: boolean
+    createdAt: Date
+    lastLoginAt: Date | null
+  }
+  kpis: {
+    totalEnrollments: number
+    completedCourses: number
+    avgProgressPercent: number
+    completedLessonsLast30d: number
+  }
+  enrollments: MemberEnrollmentRow[]
+}
+
+async function getMemberProgress(
+  userId: string,
+): Promise<MemberProgressDetail | null> {
+  const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_MS)
+
+  const [user, enrollments, completedLast30d] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatarUrl: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        lastLoginAt: true,
+      },
+    }),
+    prisma.enrollment.findMany({
+      where: { userId, status: { not: 'REVOKED' } },
+      orderBy: { enrolledAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        source: true,
+        progressPercent: true,
+        enrolledAt: true,
+        lastAccessedAt: true,
+        completedAt: true,
+        course: {
+          select: { id: true, title: true, thumbnailUrl: true },
+        },
+      },
+    }),
+    prisma.lessonProgress.count({
+      where: {
+        userId,
+        completed: true,
+        completedAt: { gte: thirtyDaysAgo },
+      },
+    }),
+  ])
+
+  if (!user) return null
+
+  const enrollmentRows: MemberEnrollmentRow[] = enrollments.map((e) => ({
+    enrollmentId: e.id,
+    courseId: e.course.id,
+    courseTitle: e.course.title,
+    courseThumbnailUrl: e.course.thumbnailUrl,
+    status: e.status,
+    source: e.source,
+    progressPercent: e.progressPercent,
+    enrolledAt: e.enrolledAt,
+    lastAccessedAt: e.lastAccessedAt,
+    completedAt: e.completedAt,
+  }))
+
+  const total = enrollmentRows.length
+  const completed = enrollmentRows.filter((e) => e.completedAt).length
+  const avg =
+    total > 0
+      ? Math.round(
+          enrollmentRows.reduce((s, e) => s + e.progressPercent, 0) / total,
+        )
+      : 0
+
+  return {
+    user,
+    kpis: {
+      totalEnrollments: total,
+      completedCourses: completed,
+      avgProgressPercent: avg,
+      completedLessonsLast30d: completedLast30d,
+    },
+    enrollments: enrollmentRows,
+  }
+}
+
+export interface MemberCourseLesson {
+  id: string
+  title: string
+  type: LessonType
+  status: LessonStatus
+  completed: boolean
+  watchedPercent: number
+  completedAt: Date | null
+}
+
+export interface MemberCourseChapter {
+  id: string
+  title: string
+  moduleTitle: string | null
+  completedLessons: number
+  totalLessons: number
+  percent: number
+  lessons: MemberCourseLesson[]
+}
+
+export interface MemberCourseProgress {
+  courseId: string
+  courseTitle: string
+  chapters: MemberCourseChapter[]
+}
+
+async function getMemberCourseProgress(
+  userId: string,
+  courseId: string,
+): Promise<MemberCourseProgress | null> {
+  const [course, progressRows] = await Promise.all([
+    prisma.course.findUnique({
+      where: { id: courseId, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        chapters: {
+          where: { deletedAt: null },
+          orderBy: { orderIndex: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            module: { select: { title: true } },
+            lessons: {
+              where: { deletedAt: null },
+              orderBy: { orderIndex: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                type: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.lessonProgress.findMany({
+      where: {
+        userId,
+        lesson: { chapter: { courseId } },
+      },
+      select: {
+        lessonId: true,
+        completed: true,
+        watchedPercent: true,
+        completedAt: true,
+      },
+    }),
+  ])
+
+  if (!course) return null
+
+  const progressMap = new Map(progressRows.map((p) => [p.lessonId, p]))
+
+  const chapters: MemberCourseChapter[] = course.chapters.map((ch) => {
+    const lessons: MemberCourseLesson[] = ch.lessons.map((l) => {
+      const p = progressMap.get(l.id)
+      return {
+        id: l.id,
+        title: l.title,
+        type: l.type,
+        status: l.status,
+        completed: p?.completed ?? false,
+        watchedPercent: p?.watchedPercent ?? 0,
+        completedAt: p?.completedAt ?? null,
+      }
+    })
+    const completedLessons = lessons.filter((l) => l.completed).length
+    const totalLessons = lessons.length
+    const percent =
+      totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
+    return {
+      id: ch.id,
+      title: ch.title,
+      moduleTitle: ch.module?.title ?? null,
+      completedLessons,
+      totalLessons,
+      percent,
+      lessons,
+    }
+  })
+
+  return {
+    courseId: course.id,
+    courseTitle: course.title,
+    chapters,
+  }
+}
+
 export const adminProgressService = {
   getOverviewKpis,
   getMostEngagedMembers,
   getTopCourses,
   getRecentCompletions,
+  listMembersWithProgress,
+  getMemberProgress,
+  getMemberCourseProgress,
 }
