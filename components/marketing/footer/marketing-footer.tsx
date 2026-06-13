@@ -24,7 +24,7 @@ const FOOTER_LINKS = [
 
 export function MarketingFooter() {
   return (
-    <footer className="relative border-t border-white/[0.06] bg-[#08070a]">
+    <footer className="relative bg-[#08070a]">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
@@ -36,15 +36,14 @@ export function MarketingFooter() {
               href="/"
               className="group flex items-center gap-2.5 text-sm font-semibold tracking-tight text-white"
             >
-              <span className="relative inline-flex h-10 w-10 items-center justify-center">
+              <span className="inline-flex h-10 w-10 items-center justify-center">
                 <Image
                   src="/kondense-logo.png"
                   alt="Kondense"
                   width={80}
                   height={80}
-                  className="relative z-10 h-full w-full object-contain"
+                  className="h-full w-full object-contain"
                 />
-                <span className="absolute inset-0 -z-10 rounded-full bg-[#ff4a4a] opacity-20 blur-lg transition-opacity duration-300 group-hover:opacity-50" />
               </span>
               <span>Kondense</span>
             </Link>
@@ -76,7 +75,7 @@ export function MarketingFooter() {
           ))}
         </div>
 
-        <div className="mt-16 flex flex-col items-start justify-between gap-4 border-t border-white/[0.06] pt-8 text-xs text-white/40 sm:flex-row sm:items-center">
+        <div className="mt-16 flex flex-col items-start justify-between gap-4 pt-8 text-xs text-white/40 sm:flex-row sm:items-center">
           <div>© {new Date().getFullYear()} Kondense. All rights reserved.</div>
           <div className="flex items-center gap-6">
             <Link href="#" className="transition-colors hover:text-white/70">

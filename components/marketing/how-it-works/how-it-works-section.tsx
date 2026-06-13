@@ -67,7 +67,7 @@ function StepCard({ step, index }: { step: Step; index: number }) {
   const Icon = step.icon
   return (
     <ScrollReveal delay={Math.min(index * 0.08, 0.24)}>
-      <div className="relative h-full overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7">
+      <div className="relative h-full overflow-hidden rounded-2xl bg-white/[0.02] p-7">
         <div className="flex items-start justify-between">
           <span
             className="font-mono text-xs tracking-[0.25em] text-white/40"
