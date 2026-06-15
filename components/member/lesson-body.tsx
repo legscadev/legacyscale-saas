@@ -136,6 +136,7 @@ export function LessonBody({
       passingScore={lesson.passingScore}
       maxAttempts={lesson.maxAttempts}
       timeLimitMin={lesson.timeLimitMin}
+      nextHref={nextHref}
     />
   )
 }
