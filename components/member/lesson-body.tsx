@@ -116,22 +116,18 @@ export function LessonBody({
     )
   }
 
-  // QUIZ — auto-completes on pass; explicit Mark Complete still
-  // available for instructors / re-marks.
+  // QUIZ — completion is owned by the QuizRunner itself: pass auto-
+  // completes, and Try again / Skip quiz both mark complete regardless
+  // of score (spec 5.5). No external Mark Complete button needed.
   return (
-    <>
-      <QuizRunner
-        lessonId={lesson.id}
-        title={lesson.title}
-        description={lesson.description}
-        questions={lesson.quizQuestions}
-        passingScore={lesson.passingScore}
-        maxAttempts={lesson.maxAttempts}
-        timeLimitMin={lesson.timeLimitMin}
-      />
-      <div className="flex justify-end">
-        <MarkCompleteButton lessonId={lesson.id} completed={completed} />
-      </div>
-    </>
+    <QuizRunner
+      lessonId={lesson.id}
+      title={lesson.title}
+      description={lesson.description}
+      questions={lesson.quizQuestions}
+      passingScore={lesson.passingScore}
+      maxAttempts={lesson.maxAttempts}
+      timeLimitMin={lesson.timeLimitMin}
+    />
   )
 }
