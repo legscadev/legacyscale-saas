@@ -8,8 +8,6 @@ import type {
   Role,
 } from '@prisma/client'
 
-import { unstable_cache } from 'next/cache'
-
 import { requireAdmin } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
 
@@ -22,14 +20,6 @@ import { prisma } from '@/lib/prisma'
 //
 // The auth check is cheap (cookie read + a cached supabase getUser
 // call), so the redundancy is negligible at runtime.
-//
-// Caching: the heavier read methods are wrapped in unstable_cache with
-// a 60s TTL and a single coarse `PROGRESS_TAG`. requireAdmin() stays
-// in the public wrapper (the cached fn has no cookie/header access).
-// Mutation server-actions call revalidateTag(PROGRESS_TAG) on writes
-// so the freshness ceiling is effectively "immediate" after any
-// admin-driven change, with the 60s TTL as a safety net for paths we
-// might miss.
 //
 // Methods are added per build step:
 //   Step 2 (Overview): getOverviewKpis, getMostEngagedMembers,
@@ -48,19 +38,6 @@ const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000
  *  Vercel/Edge runtime; the export marker tells the operator if the
  *  download was clipped. */
 const CSV_EXPORT_MAX_ROWS = 10_000
-
-/** Single coarse tag for cache invalidation. Mutations that touch
- *  users / enrollments / courses / lessons / lesson_progress should
- *  call `revalidateTag(PROGRESS_TAG)` so all cached aggregations
- *  recompute on the next read. Coarse-grained on purpose — managing
- *  per-table tags would invalidate cleanly but adds churn for little
- *  benefit at current scale. */
-export const PROGRESS_TAG = 'admin-progress'
-
-/** TTL for cached aggregations. 60s feels right for an admin
- *  dashboard: short enough that the data is never very stale,
- *  long enough to dedupe back-to-back navigations. */
-const CACHE_TTL_SECONDS = 60
 
 // ============================================
 // SHARED — DATE RANGE FILTER
@@ -131,9 +108,10 @@ export interface OverviewKpis {
   range: RangeFilter
 }
 
-async function _getOverviewKpisImpl(
-  range: RangeFilter,
+async function getOverviewKpis(
+  range: RangeFilter = '30d',
 ): Promise<OverviewKpis> {
+  await requireAdmin()
   const start = rangeStart(range)
 
   // "Touched in range" = enrollment has any relevant timestamp
@@ -207,19 +185,6 @@ async function _getOverviewKpisImpl(
   }
 }
 
-const cachedGetOverviewKpis = unstable_cache(
-  _getOverviewKpisImpl,
-  ['admin-progress:getOverviewKpis'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getOverviewKpis(
-  range: RangeFilter = '30d',
-): Promise<OverviewKpis> {
-  await requireAdmin()
-  return cachedGetOverviewKpis(range)
-}
-
 /** Avg whole-days between enrolledAt → completedAt across the given
  *  rows. Returns null when no rows have a completion to measure. */
 function averageDaysBetween(
@@ -248,10 +213,11 @@ export interface EngagedMember {
   lastActivity: Date | null
 }
 
-async function _getMostEngagedMembersImpl(
-  limit: number,
-  range: RangeFilter,
+async function getMostEngagedMembers(
+  limit = 5,
+  range: RangeFilter = '30d',
 ): Promise<EngagedMember[]> {
+  await requireAdmin()
   const start = rangeStart(range)
 
   const grouped = await prisma.lessonProgress.groupBy({
@@ -297,20 +263,6 @@ async function _getMostEngagedMembersImpl(
   })
 }
 
-const cachedGetMostEngagedMembers = unstable_cache(
-  _getMostEngagedMembersImpl,
-  ['admin-progress:getMostEngagedMembers'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getMostEngagedMembers(
-  limit = 5,
-  range: RangeFilter = '30d',
-): Promise<EngagedMember[]> {
-  await requireAdmin()
-  return cachedGetMostEngagedMembers(limit, range)
-}
-
 export interface TopCourseItem {
   id: string
   title: string
@@ -321,10 +273,11 @@ export interface TopCourseItem {
   avgProgressPercent: number
 }
 
-async function _getTopCoursesImpl(
-  limit: number,
-  range: RangeFilter,
+async function getTopCourses(
+  limit = 5,
+  range: RangeFilter = '30d',
 ): Promise<TopCourseItem[]> {
+  await requireAdmin()
   // Rank courses by enrollments started in the selected window
   // (all-time when range = "all"). Pulls top N then fetches course
   // meta + completion counts in parallel.
@@ -385,20 +338,6 @@ async function _getTopCoursesImpl(
   })
 }
 
-const cachedGetTopCourses = unstable_cache(
-  _getTopCoursesImpl,
-  ['admin-progress:getTopCourses'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getTopCourses(
-  limit = 5,
-  range: RangeFilter = '30d',
-): Promise<TopCourseItem[]> {
-  await requireAdmin()
-  return cachedGetTopCourses(limit, range)
-}
-
 export interface RecentCompletion {
   enrollmentId: string
   completedAt: Date
@@ -415,10 +354,11 @@ export interface RecentCompletion {
   }
 }
 
-async function _getRecentCompletionsImpl(
-  limit: number,
-  range: RangeFilter,
+async function getRecentCompletions(
+  limit = 10,
+  range: RangeFilter = '30d',
 ): Promise<RecentCompletion[]> {
+  await requireAdmin()
   const start = rangeStart(range)
   const rows = await prisma.enrollment.findMany({
     where: {
@@ -456,20 +396,6 @@ async function _getRecentCompletionsImpl(
   )
 }
 
-const cachedGetRecentCompletions = unstable_cache(
-  _getRecentCompletionsImpl,
-  ['admin-progress:getRecentCompletions'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getRecentCompletions(
-  limit = 10,
-  range: RangeFilter = '30d',
-): Promise<RecentCompletion[]> {
-  await requireAdmin()
-  return cachedGetRecentCompletions(limit, range)
-}
-
 export interface StuckLearner {
   enrollmentId: string
   user: {
@@ -499,7 +425,8 @@ const STUCK_INACTIVITY_MS = SEVEN_DAYS_MS
  * lastAccessedAt first (nulls treated as oldest). Range-independent
  * by design — staleness is the signal regardless of dashboard window.
  */
-async function _getStuckLearnersImpl(limit: number): Promise<StuckLearner[]> {
+async function getStuckLearners(limit = 5): Promise<StuckLearner[]> {
+  await requireAdmin()
   const now = Date.now()
   const inactivityCutoff = new Date(now - STUCK_INACTIVITY_MS)
   const ageCutoff = new Date(now - STUCK_ENROLLMENT_MIN_AGE_MS)
@@ -551,17 +478,6 @@ async function _getStuckLearnersImpl(limit: number): Promise<StuckLearner[]> {
   })
 }
 
-const cachedGetStuckLearners = unstable_cache(
-  _getStuckLearnersImpl,
-  ['admin-progress:getStuckLearners'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getStuckLearners(limit = 5): Promise<StuckLearner[]> {
-  await requireAdmin()
-  return cachedGetStuckLearners(limit)
-}
-
 export interface CompletionsByWeekItem {
   /** Midnight on the Monday of this bucket's ISO week, in local time. */
   weekStart: Date
@@ -577,9 +493,10 @@ export interface CompletionsByWeekItem {
  * entries, padded with zeros for weeks that had no completions, so
  * the chart x-axis stays even.
  */
-async function _getCompletionsByWeekImpl(
-  weeks: number,
+async function getCompletionsByWeek(
+  weeks = 12,
 ): Promise<CompletionsByWeekItem[]> {
+  await requireAdmin()
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000
   const todayMonday = mondayOf(new Date())
   const startMonday = new Date(todayMonday.getTime() - (weeks - 1) * WEEK_MS)
@@ -615,19 +532,6 @@ async function _getCompletionsByWeekImpl(
   })
 }
 
-const cachedGetCompletionsByWeek = unstable_cache(
-  _getCompletionsByWeekImpl,
-  ['admin-progress:getCompletionsByWeek'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getCompletionsByWeek(
-  weeks = 12,
-): Promise<CompletionsByWeekItem[]> {
-  await requireAdmin()
-  return cachedGetCompletionsByWeek(weeks)
-}
-
 /** Local-time Monday-of-week (00:00:00) for the given date. ISO weeks
  *  start on Monday; treat Sunday as the tail of the prior week. */
 function mondayOf(date: Date): Date {
@@ -652,120 +556,6 @@ function weekKey(d: Date): string {
 function parseWeekKey(key: string): Date {
   const [y, m, d] = key.split('-').map(Number)
   return new Date(y!, m! - 1, d!)
-}
-
-// ============================================
-// DASHBOARD BUNDLE
-// ============================================
-//
-// One-shot aggregate for /admin/dashboard. Bundles ~10 small queries
-// behind a single cache entry so the page hits Promise.all once and
-// reads from cache for the next 60s on every subsequent navigation.
-
-const STUCK_ENROLLMENT_MIN_AGE_MS_DASHBOARD = 14 * 24 * 60 * 60 * 1000
-const STUCK_INACTIVITY_MS_DASHBOARD = SEVEN_DAYS_MS
-
-export interface AdminDashboardStats {
-  membersTotal: number
-  membersActive: number
-  coursesTotal: number
-  coursesPublished: number
-  coursesDraft: number
-  unpublishedLessons: number
-  pendingEnrollments: number
-  activeEnrollments: number
-  stuckLearnersCount: number
-  recentMembers: Array<{
-    id: string
-    name: string | null
-    email: string
-    avatarUrl: string | null
-    isActive: boolean
-    lastLoginAt: Date | null
-  }>
-}
-
-async function _getAdminDashboardStatsImpl(): Promise<AdminDashboardStats> {
-  const now = Date.now()
-  const stuckEnrolledCutoff = new Date(now - STUCK_ENROLLMENT_MIN_AGE_MS_DASHBOARD)
-  const stuckInactivityCutoff = new Date(now - STUCK_INACTIVITY_MS_DASHBOARD)
-
-  const [
-    membersTotal,
-    membersActive,
-    coursesTotal,
-    coursesPublished,
-    coursesDraft,
-    unpublishedLessons,
-    pendingEnrollments,
-    activeEnrollments,
-    stuckLearnersCount,
-    recentMembers,
-  ] = await Promise.all([
-    prisma.user.count({ where: { role: 'MEMBER', deletedAt: null } }),
-    prisma.user.count({
-      where: { role: 'MEMBER', isActive: true, deletedAt: null },
-    }),
-    prisma.course.count({ where: { deletedAt: null } }),
-    prisma.course.count({
-      where: { status: 'PUBLISHED', deletedAt: null },
-    }),
-    prisma.course.count({ where: { status: 'DRAFT', deletedAt: null } }),
-    prisma.lesson.count({
-      where: { status: { in: ['DRAFT', 'PROCESSING'] }, deletedAt: null },
-    }),
-    prisma.enrollment.count({ where: { status: 'PENDING' } }),
-    prisma.enrollment.count({ where: { status: 'ACTIVE' } }),
-    prisma.enrollment.count({
-      where: {
-        status: 'ACTIVE',
-        completedAt: null,
-        progressPercent: { gt: 0, lt: 100 },
-        enrolledAt: { lt: stuckEnrolledCutoff },
-        OR: [
-          { lastAccessedAt: { lt: stuckInactivityCutoff } },
-          { lastAccessedAt: null },
-        ],
-      },
-    }),
-    prisma.user.findMany({
-      where: { role: 'MEMBER', deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatarUrl: true,
-        isActive: true,
-        lastLoginAt: true,
-      },
-    }),
-  ])
-
-  return {
-    membersTotal,
-    membersActive,
-    coursesTotal,
-    coursesPublished,
-    coursesDraft,
-    unpublishedLessons,
-    pendingEnrollments,
-    activeEnrollments,
-    stuckLearnersCount,
-    recentMembers,
-  }
-}
-
-const cachedGetAdminDashboardStats = unstable_cache(
-  _getAdminDashboardStatsImpl,
-  ['admin-progress:getAdminDashboardStats'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
-  await requireAdmin()
-  return cachedGetAdminDashboardStats()
 }
 
 // ============================================
@@ -835,7 +625,7 @@ const MEMBERS_SORTERS: Record<
  * aren't stored on the user row, so a DB-side ORDER BY would either
  * need a materialized view or a complex subquery.
  */
-async function _fetchMembersWithProgressImpl(
+async function fetchMembersWithProgress(
   filters: MemberListFilters,
   sort: MembersSort,
 ): Promise<MemberListRow[]> {
@@ -910,12 +700,6 @@ async function _fetchMembersWithProgressImpl(
   return rows.sort(MEMBERS_SORTERS[sort])
 }
 
-const cachedFetchMembersWithProgress = unstable_cache(
-  _fetchMembersWithProgressImpl,
-  ['admin-progress:fetchMembersWithProgress'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
 async function listMembersWithProgress(
   filters: MemberListFilters = {},
   page = 1,
@@ -923,7 +707,7 @@ async function listMembersWithProgress(
   sort: MembersSort = 'recent',
 ): Promise<MembersListResult> {
   await requireAdmin()
-  const rows = await cachedFetchMembersWithProgress(filters, sort)
+  const rows = await fetchMembersWithProgress(filters, sort)
   const total = rows.length
   const safePage = Math.max(1, page)
   const safeLimit = Math.max(1, Math.min(100, limit))
@@ -957,7 +741,7 @@ async function exportMembersCsv(
   sort: MembersSort = 'recent',
 ): Promise<string> {
   await requireAdmin()
-  const all = await cachedFetchMembersWithProgress(filters, sort)
+  const all = await fetchMembersWithProgress(filters, sort)
   const truncated = all.length > CSV_EXPORT_MAX_ROWS
   const safeRows = truncated ? all.slice(0, CSV_EXPORT_MAX_ROWS) : all
 
@@ -1032,9 +816,10 @@ export interface MemberProgressDetail {
   enrollments: MemberEnrollmentRow[]
 }
 
-async function _getMemberProgressImpl(
+async function getMemberProgress(
   userId: string,
 ): Promise<MemberProgressDetail | null> {
+  await requireAdmin()
   const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_MS)
 
   const [user, enrollments, completedLast30d] = await Promise.all([
@@ -1112,19 +897,6 @@ async function _getMemberProgressImpl(
   }
 }
 
-const cachedGetMemberProgress = unstable_cache(
-  _getMemberProgressImpl,
-  ['admin-progress:getMemberProgress'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getMemberProgress(
-  userId: string,
-): Promise<MemberProgressDetail | null> {
-  await requireAdmin()
-  return cachedGetMemberProgress(userId)
-}
-
 export interface MemberCourseLesson {
   id: string
   title: string
@@ -1151,10 +923,11 @@ export interface MemberCourseProgress {
   chapters: MemberCourseChapter[]
 }
 
-async function _getMemberCourseProgressImpl(
+async function getMemberCourseProgress(
   userId: string,
   courseId: string,
 ): Promise<MemberCourseProgress | null> {
+  await requireAdmin()
   const [course, progressRows] = await Promise.all([
     prisma.course.findUnique({
       where: { id: courseId, deletedAt: null },
@@ -1235,20 +1008,6 @@ async function _getMemberCourseProgressImpl(
   }
 }
 
-const cachedGetMemberCourseProgress = unstable_cache(
-  _getMemberCourseProgressImpl,
-  ['admin-progress:getMemberCourseProgress'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getMemberCourseProgress(
-  userId: string,
-  courseId: string,
-): Promise<MemberCourseProgress | null> {
-  await requireAdmin()
-  return cachedGetMemberCourseProgress(userId, courseId)
-}
-
 // ============================================
 // STEP 4 — COURSES LIST + COHORT + CSV EXPORT
 // ============================================
@@ -1283,9 +1042,10 @@ export interface CoursesListFilters {
   status?: 'ALL' | CourseStatus
 }
 
-async function _listCoursesWithProgressImpl(
-  filters: CoursesListFilters,
+async function listCoursesWithProgress(
+  filters: CoursesListFilters = {},
 ): Promise<CoursesListResult> {
+  await requireAdmin()
   const statusFilter = filters.status ?? 'ALL'
 
   const courses = await prisma.course.findMany({
@@ -1358,19 +1118,6 @@ async function _listCoursesWithProgressImpl(
   }
 }
 
-const cachedListCoursesWithProgress = unstable_cache(
-  _listCoursesWithProgressImpl,
-  ['admin-progress:listCoursesWithProgress'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function listCoursesWithProgress(
-  filters: CoursesListFilters = {},
-): Promise<CoursesListResult> {
-  await requireAdmin()
-  return cachedListCoursesWithProgress(filters)
-}
-
 export interface CourseProgressSummary {
   course: {
     id: string
@@ -1397,9 +1144,10 @@ export interface CourseProgressSummary {
   platformAvgProgress: number
 }
 
-async function _getCourseProgressSummaryImpl(
+async function getCourseProgressSummary(
   courseId: string,
 ): Promise<CourseProgressSummary | null> {
+  await requireAdmin()
   const sevenDaysAgo = new Date(Date.now() - SEVEN_DAYS_MS)
 
   const [
@@ -1465,19 +1213,6 @@ async function _getCourseProgressSummaryImpl(
     },
     platformAvgProgress: Math.round(platformAgg._avg.progressPercent ?? 0),
   }
-}
-
-const cachedGetCourseProgressSummary = unstable_cache(
-  _getCourseProgressSummaryImpl,
-  ['admin-progress:getCourseProgressSummary'],
-  { revalidate: CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-async function getCourseProgressSummary(
-  courseId: string,
-): Promise<CourseProgressSummary | null> {
-  await requireAdmin()
-  return cachedGetCourseProgressSummary(courseId)
 }
 
 export interface CohortFilters {
@@ -1856,7 +1591,6 @@ export const adminProgressService = {
   getRecentCompletions,
   getStuckLearners,
   getCompletionsByWeek,
-  getAdminDashboardStats,
   listMembersWithProgress,
   exportMembersCsv,
   getMemberProgress,

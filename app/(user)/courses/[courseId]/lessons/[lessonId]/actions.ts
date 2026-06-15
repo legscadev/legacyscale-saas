@@ -1,10 +1,9 @@
 'use server'
 
-import { revalidatePath, updateTag } from 'next/cache'
+import { revalidatePath } from 'next/cache'
 
 import { requireActiveUser } from '@/lib/auth'
 import { memberCourseService } from '@/lib/services/member-course-service'
-import { PROGRESS_TAG } from '@/lib/services/admin-progress-service'
 
 interface SetCompleteResult {
   ok: boolean
@@ -63,7 +62,6 @@ export async function setLessonCompleteAction(
     revalidatePath(`/courses/${result.courseId}/lessons/${lessonId}`)
     revalidatePath(`/courses/${result.courseId}`)
     revalidatePath('/courses')
-    updateTag(PROGRESS_TAG)
 
     return {
       ok: true,
@@ -99,7 +97,6 @@ export async function submitQuizAttemptAction(
       // Only need a path revalidate when completion changed something.
       // The quiz UI itself stays mounted with local result state.
       revalidatePath('/courses')
-      updateTag(PROGRESS_TAG)
     }
 
     return {

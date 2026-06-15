@@ -1,8 +1,6 @@
 'use server'
 
-import { revalidatePath, updateTag } from 'next/cache'
-
-import { PROGRESS_TAG } from '@/lib/services/admin-progress-service'
+import { revalidatePath } from 'next/cache'
 import { Prisma, type LessonStatus, type LessonType } from '@prisma/client'
 import { z } from 'zod'
 
@@ -102,7 +100,6 @@ export async function createChapterAction(
   try {
     const chapter = await chapterService.create(parsed.data)
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true, chapter }
   } catch (err) {
     console.error('Chapter create failed:', err)
@@ -128,7 +125,6 @@ export async function updateChapterAction(
   try {
     const chapter = await chapterService.update(chapterId, parsed.data)
     revalidatePath(`/admin/courses/${chapter.courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true, chapter }
   } catch (err) {
     if (
@@ -154,7 +150,6 @@ export async function deleteChapterAction(
   try {
     await chapterService.delete(chapterId)
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     if (
@@ -186,7 +181,6 @@ export async function reorderChaptersAction(
   try {
     await chapterService.reorder(parsed.data.courseId, parsed.data.orderedIds)
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     console.error('Chapter reorder failed:', err)
@@ -226,7 +220,6 @@ export async function createLessonAction(
       type: parsed.data.type,
     })
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true, lesson }
   } catch (err) {
     console.error('Lesson create failed:', err)
@@ -254,7 +247,6 @@ export async function updateLessonAction(
   try {
     const lesson = await lessonService.update(lessonId, parsed.data)
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true, lesson }
   } catch (err) {
     if (
@@ -276,7 +268,6 @@ export async function deleteLessonAction(
   try {
     await lessonService.delete(lessonId)
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     if (
@@ -312,7 +303,6 @@ export async function reorderLessonsAction(
       parsed.data.orderedIds,
     )
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     console.error('Lesson reorder failed:', err)
@@ -394,7 +384,6 @@ export async function saveCourseStructureAction(
       parsed.data.chapters,
     )
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true, mappings }
   } catch (err) {
     console.error('Course structure save failed:', err)
@@ -545,7 +534,6 @@ export async function commitResourceUploadAction(
       data: { status: 'READY' },
     })
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true, resource }
   } catch (err) {
     if (
@@ -587,7 +575,6 @@ export async function removeLessonResourceAction(
 
     await prisma.lessonResource.delete({ where: { id: resourceId } })
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     console.error('Resource delete failed:', err)
@@ -702,7 +689,6 @@ export async function createModuleAction(
       description: parsed.data.description ?? null,
     })
     revalidatePath(`/admin/courses/${courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true, module: moduleRow }
   } catch (err) {
     console.error('Module create failed:', err)
@@ -724,7 +710,6 @@ export async function updateModuleAction(
   try {
     const moduleRow = await moduleService.update(moduleId, parsed.data)
     revalidatePath(`/admin/courses/${moduleRow.courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true, module: moduleRow }
   } catch (err) {
     if (
@@ -754,7 +739,6 @@ export async function deleteModuleAction(
   try {
     await moduleService.delete(moduleId)
     revalidatePath(`/admin/courses/${existing.courseId}`)
-    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     console.error('Module delete failed:', err)

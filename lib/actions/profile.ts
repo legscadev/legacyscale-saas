@@ -1,10 +1,9 @@
 'use server'
 
-import { revalidatePath, updateTag } from 'next/cache'
+import { revalidatePath } from 'next/cache'
 
 import { requireActiveUser } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
-import { PROGRESS_TAG } from '@/lib/services/admin-progress-service'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { changePasswordSchema } from '@/lib/validations/auth'
@@ -51,7 +50,6 @@ export async function updateProfileName(
   // server component, so we need to revalidate to refresh it.
   revalidatePath('/profile')
   revalidatePath('/', 'layout')
-  updateTag(PROGRESS_TAG)
 
   return { success: true, name: parsed.data }
 }
@@ -96,7 +94,6 @@ export async function updateAvatarUrl(
 
   revalidatePath('/profile')
   revalidatePath('/', 'layout')
-  updateTag(PROGRESS_TAG)
 
   return { success: true, avatarUrl: rawUrl }
 }
