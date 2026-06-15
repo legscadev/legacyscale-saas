@@ -36,15 +36,13 @@ export function GlowButton({
     ghost: cn(
       'text-white/90',
       'bg-white/[0.04] backdrop-blur-xl',
-      'border border-white/[0.08]',
-      'hover:bg-white/[0.08] hover:border-white/[0.16]',
+      'hover:bg-white/[0.08]',
       'hover:scale-[1.02] active:scale-[0.98]',
     ),
     solid: cn(
       'text-white',
       'bg-[#d11a1a]',
-      'border border-[#ff5050]/30',
-      'hover:bg-[#e93d3d] hover:border-[#ff5050]/50',
+      'hover:bg-[#e93d3d]',
     ),
   }
 

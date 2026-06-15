@@ -100,7 +100,7 @@ function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
   const Icon = feature.icon
   return (
     <ScrollReveal delay={Math.min(index * 0.04, 0.24)}>
-      <div className="group relative h-full overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 transition-colors hover:border-white/[0.14] hover:bg-white/[0.035]">
+      <div className="group relative h-full overflow-hidden rounded-2xl bg-white/[0.02] p-6 transition-colors hover:bg-white/[0.035]">
         <div className="flex size-10 items-center justify-center rounded-xl bg-[#ff4a4a]/10 text-[#ff8a8a] ring-1 ring-inset ring-[#ff4a4a]/20">
           <Icon className="size-5" />
         </div>

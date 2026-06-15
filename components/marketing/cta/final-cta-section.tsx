@@ -12,7 +12,7 @@ export function FinalCtaSection() {
   return (
     <section className="relative py-24 sm:py-32">
       <div className="mx-auto max-w-6xl px-6">
-        <div className="relative isolate overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0a0810] px-6 py-20 text-center sm:px-12 sm:py-28">
+        <div className="relative isolate overflow-hidden rounded-3xl bg-[#0a0810] px-6 py-20 text-center sm:px-12 sm:py-28">
           <AnimatedGradientBg intensity="medium" />
           <GridPattern />
           <NoiseOverlay />
@@ -23,7 +23,7 @@ export function FinalCtaSection() {
 
           <div className="relative">
             <ScrollReveal>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-3 py-1 font-mono text-[10px] font-medium tracking-[0.25em] text-white/70 uppercase backdrop-blur-md">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1 font-mono text-[10px] font-medium tracking-[0.25em] text-white/70 uppercase backdrop-blur-md">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#ff4a4a] shadow-[0_0_8px_rgba(255,74,74,0.8)]" />
                 Get started
               </span>

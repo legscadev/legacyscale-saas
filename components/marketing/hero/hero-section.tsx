@@ -27,7 +27,7 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.7, ease: easeOut }}
         >
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-black/40 px-3.5 py-1.5 font-mono text-[10px] font-medium tracking-[0.25em] text-white/80 uppercase backdrop-blur-xl">
+          <span className="inline-flex items-center gap-2 rounded-full bg-black/40 px-3.5 py-1.5 font-mono text-[10px] font-medium tracking-[0.25em] text-white/80 uppercase backdrop-blur-xl">
             <Sparkles className="h-3 w-3 text-[#ff8a8a]" />
             Course Platform
             <span className="ml-1 h-1 w-1 rounded-full bg-white/30" />

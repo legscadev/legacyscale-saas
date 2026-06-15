@@ -55,7 +55,7 @@ export function FaqSection() {
           description="If something isn’t answered here, get in touch."
         />
 
-        <div className="mt-12 divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02]">
+        <div className="mt-12 overflow-hidden rounded-2xl bg-white/[0.02]">
           {FAQS.map((item, i) => (
             <FaqRow key={item.q} item={item} defaultOpen={i === 0} />
           ))}

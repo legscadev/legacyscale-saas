@@ -29,7 +29,7 @@ export function SectionHeading({
     >
       {eyebrow && (
         <ScrollReveal delay={0}>
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-xs font-medium tracking-wider text-white/70 uppercase backdrop-blur-md">
+          <span className="inline-flex items-center gap-2 rounded-full bg-white/[0.03] px-3 py-1 text-xs font-medium tracking-wider text-white/70 uppercase backdrop-blur-md">
             <span className="h-1.5 w-1.5 rounded-full bg-[#ff4a4a] shadow-[0_0_8px_rgba(255,74,74,0.8)]" />
             {eyebrow}
           </span>
