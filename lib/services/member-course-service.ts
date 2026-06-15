@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import type { CourseAudience, Role } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -21,15 +22,18 @@ const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-downloa
 // MEMBERS+BOTH; TEAM and ADMIN also see INTERNAL. Methods that filter
 // by audience accept the role explicitly OR look it up.
 
-async function resolveVisibleAudiences(
-  userId: string,
-): Promise<CourseAudience[]> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  })
-  return visibleAudiencesFor(user?.role ?? ('MEMBER' as Role))
-}
+// Per-request memoization: a single page render that calls both
+// listCatalogForMember and getCourseForMember (e.g. dashboard + course
+// detail composition) now does one `user.findUnique` instead of two.
+const resolveVisibleAudiences = cache(
+  async (userId: string): Promise<CourseAudience[]> => {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    })
+    return visibleAudiencesFor(user?.role ?? ('MEMBER' as Role))
+  },
+)
 
 // ============================================
 // LIST — catalog grid
