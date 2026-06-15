@@ -97,7 +97,10 @@ export function MarketingNav() {
           opacity: open ? 1 : 0,
         }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className={cn('overflow-hidden md:hidden')}
+        // Solid bg so the drawer doesn't show the hero through it.
+        // Header itself only fades opaque on scroll, so at scroll=0
+        // there'd be no backing without this fill.
+        className={cn('overflow-hidden bg-[#08070a] md:hidden')}
       >
         <div className="flex flex-col gap-1 px-5 py-4">
           {NAV_LINKS.map((link) => (
