@@ -26,13 +26,9 @@ import {
   type StatStripCell,
 } from '@/components/shared'
 import { getInitials, relativeTime } from '@/lib/format'
-import { prisma } from '@/lib/prisma'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 import { CompletionsChart } from '@/components/admin/dashboard/completions-chart'
 import { TopCoursesChart } from '@/components/admin/dashboard/top-courses-chart'
-
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
-const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
 
 function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many
@@ -47,69 +43,32 @@ interface AttentionItem {
 }
 
 export default async function AdminDashboardPage() {
-  const now = Date.now()
-  const stuckEnrolledCutoff = new Date(now - FOURTEEN_DAYS_MS)
-  const stuckInactivityCutoff = new Date(now - SEVEN_DAYS_MS)
+  // One Promise.all over four cached helpers. The bundled
+  // getAdminDashboardStats covers the ten count/findMany queries that
+  // used to live inline; the other three are already cached service
+  // methods reused on /admin/progress. Net effect on a warm cache:
+  // four 60s-cached lookups instead of 13 fresh DB roundtrips per
+  // navigation.
+  const [stats, recentCompletions, completionsByWeek, topCourses] =
+    await Promise.all([
+      adminProgressService.getAdminDashboardStats(),
+      adminProgressService.getRecentCompletions(5, 'all'),
+      adminProgressService.getCompletionsByWeek(12),
+      adminProgressService.getTopCourses(5, 'all'),
+    ])
 
-  const [
+  const {
     membersTotal,
     membersActive,
     coursesTotal,
     coursesPublished,
-    draftCourses,
+    coursesDraft: draftCourses,
     unpublishedLessons,
     pendingEnrollments,
     activeEnrollments,
     stuckLearnersCount,
     recentMembers,
-    recentCompletions,
-    completionsByWeek,
-    topCourses,
-  ] = await Promise.all([
-    prisma.user.count({ where: { role: 'MEMBER', deletedAt: null } }),
-    prisma.user.count({
-      where: { role: 'MEMBER', isActive: true, deletedAt: null },
-    }),
-    prisma.course.count({ where: { deletedAt: null } }),
-    prisma.course.count({ where: { status: 'PUBLISHED', deletedAt: null } }),
-    prisma.course.count({ where: { status: 'DRAFT', deletedAt: null } }),
-    prisma.lesson.count({
-      where: { status: { in: ['DRAFT', 'PROCESSING'] }, deletedAt: null },
-    }),
-    prisma.enrollment.count({ where: { status: 'PENDING' } }),
-    prisma.enrollment.count({ where: { status: 'ACTIVE' } }),
-    // Same predicate as adminProgressService.getStuckLearners, kept
-    // inline so the count fits in this same Promise.all without an
-    // extra service hop.
-    prisma.enrollment.count({
-      where: {
-        status: 'ACTIVE',
-        completedAt: null,
-        progressPercent: { gt: 0, lt: 100 },
-        enrolledAt: { lt: stuckEnrolledCutoff },
-        OR: [
-          { lastAccessedAt: { lt: stuckInactivityCutoff } },
-          { lastAccessedAt: null },
-        ],
-      },
-    }),
-    prisma.user.findMany({
-      where: { role: 'MEMBER', deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatarUrl: true,
-        isActive: true,
-        lastLoginAt: true,
-      },
-    }),
-    adminProgressService.getRecentCompletions(5, 'all'),
-    adminProgressService.getCompletionsByWeek(12),
-    adminProgressService.getTopCourses(5, 'all'),
-  ])
+  } = stats
 
   const cells: StatStripCell[] = [
     {

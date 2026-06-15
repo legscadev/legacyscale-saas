@@ -1,9 +1,10 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import type { CourseStatus } from '@prisma/client'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { PROGRESS_TAG } from '@/lib/services/admin-progress-service'
 import {
   courseService,
   type CourseCounts,
@@ -160,6 +161,7 @@ export async function createCourseAction(
   }
 
   revalidatePath('/admin/courses')
+  updateTag(PROGRESS_TAG)
   if (warnings.length > 0) {
     return {
       ok: true,
@@ -296,6 +298,7 @@ export async function updateCourseAction(
 
   revalidatePath('/admin/courses')
   revalidatePath(`/admin/courses/${courseId}`)
+  updateTag(PROGRESS_TAG)
 
   if (warnings.length > 0) {
     return {
@@ -322,6 +325,7 @@ export async function softDeleteCourseAction(
   try {
     await courseService.softDelete(courseId)
     revalidatePath('/admin/courses')
+    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     console.error('Course soft-delete failed:', err)

@@ -1,9 +1,10 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { z } from 'zod'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { PROGRESS_TAG } from '@/lib/services/admin-progress-service'
 import { quizService, type QuizQuestionItem } from '@/lib/services/quiz-service'
 import {
   createQuestionSchema,
@@ -88,6 +89,7 @@ export async function createQuizQuestionAction(
       explanation: parsed.data.explanation ?? null,
     })
     revalidatePath(`/admin/courses/${courseId}`)
+    updateTag(PROGRESS_TAG)
     return { ok: true, question }
   } catch (err) {
     console.error('Quiz question create failed:', err)
@@ -120,6 +122,7 @@ export async function updateQuizQuestionAction(
       explanation: parsed.data.explanation ?? null,
     })
     revalidatePath(`/admin/courses/${courseId}`)
+    updateTag(PROGRESS_TAG)
     return { ok: true, question }
   } catch (err) {
     console.error('Quiz question update failed:', err)
@@ -139,6 +142,7 @@ export async function deleteQuizQuestionAction(
   try {
     await quizService.delete(questionId)
     revalidatePath(`/admin/courses/${courseId}`)
+    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     console.error('Quiz question delete failed:', err)
@@ -165,6 +169,7 @@ export async function reorderQuizQuestionsAction(
   try {
     await quizService.reorder(lessonId, parsed.data.orderedIds)
     revalidatePath(`/admin/courses/${courseId}`)
+    updateTag(PROGRESS_TAG)
     return { ok: true }
   } catch (err) {
     console.error('Quiz question reorder failed:', err)
