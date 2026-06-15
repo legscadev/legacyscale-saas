@@ -60,7 +60,11 @@ export function LessonBody({
         )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <AutoplayToggle />
-          <MarkCompleteButton lessonId={lesson.id} completed={completed} />
+          <MarkCompleteButton
+            lessonId={lesson.id}
+            completed={completed}
+            nextHref={nextHref}
+          />
         </div>
         <Card className="gap-0 p-0">
           <Tabs defaultValue="overview" className="p-4">
@@ -110,7 +114,11 @@ export function LessonBody({
           resources={lesson.resources}
         />
         <div className="flex justify-end">
-          <MarkCompleteButton lessonId={lesson.id} completed={completed} />
+          <MarkCompleteButton
+            lessonId={lesson.id}
+            completed={completed}
+            nextHref={nextHref}
+          />
         </div>
       </>
     )
