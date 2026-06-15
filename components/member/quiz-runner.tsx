@@ -18,7 +18,10 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { submitQuizAttemptAction } from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+import {
+  setLessonCompleteAction,
+  submitQuizAttemptAction,
+} from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
 
 interface QuizQuestion {
   id: string
@@ -73,12 +76,34 @@ export function QuizRunner({
   const [result, setResult] = useState<QuizResult | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  // Per spec 5.5: Try Again + Skip Quiz both mark the lesson complete
+  // regardless of score. Fire-and-forget — the action is idempotent
+  // and the user shouldn't wait on it.
+  const markCompleteBackground = () => {
+    void setLessonCompleteAction(lessonId, true)
+  }
+
   const restart = () => {
+    markCompleteBackground()
     setAnswers({})
     setIndex(0)
     setResult(null)
     setAttempt((a) => a + 1)
     setPhase('active')
+  }
+
+  // Skip Quiz from intro (pre-quiz bail) OR result (post-quiz dismiss).
+  // Marks complete + drops the runner back to the intro card with a
+  // toast. The member can still start the quiz from the intro card
+  // afterwards if they change their mind.
+  const skipQuiz = () => {
+    markCompleteBackground()
+    setAnswers({})
+    setIndex(0)
+    setResult(null)
+    setAttempt((a) => a + 1)
+    setPhase('intro')
+    toast.success('Quiz skipped — lesson marked complete')
   }
 
   const submit = () => {
@@ -140,10 +165,15 @@ export function QuizRunner({
             value={timeLimitMin ? `${timeLimitMin} min` : 'None'}
           />
         </div>
-        <Button className="w-fit" onClick={() => setPhase('active')}>
-          Start quiz
-          <ChevronRight />
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => setPhase('active')}>
+            Start quiz
+            <ChevronRight />
+          </Button>
+          <Button variant="ghost" onClick={skipQuiz}>
+            Skip quiz
+          </Button>
+        </div>
       </Card>
     )
   }
@@ -175,10 +205,15 @@ export function QuizRunner({
                 {attempt}
               </p>
             </div>
-            <Button variant="outline" onClick={restart}>
-              <RotateCcw />
-              Retake
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button variant="outline" onClick={restart}>
+                <RotateCcw />
+                Try again
+              </Button>
+              <Button variant="ghost" onClick={skipQuiz}>
+                Skip quiz
+              </Button>
+            </div>
           </div>
         </Card>
 
