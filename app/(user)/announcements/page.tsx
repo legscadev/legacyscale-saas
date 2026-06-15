@@ -1,9 +1,12 @@
 import { Bell } from 'lucide-react'
 import { PageHeader, EmptyState, AnnouncementCard } from '@/components/shared'
-import { announcementService } from '@/lib/services/announcement-service'
+import { prisma } from '@/lib/prisma'
 
 export default async function UserAnnouncementsPage() {
-  const announcements = await announcementService.listPublished()
+  const announcements = await prisma.announcement.findMany({
+    where: { status: 'PUBLISHED', deletedAt: null },
+    orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+  })
 
   return (
     <div className="space-y-6">

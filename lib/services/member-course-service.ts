@@ -1,19 +1,11 @@
 import type { CourseAudience, Role } from '@prisma/client'
-import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { visibleAudiencesFor } from '@/lib/auth/permissions'
-import { PROGRESS_TAG } from '@/lib/services/admin-progress-service'
 
 const RESOURCE_BUCKET = 'lesson-resources'
 const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-download
-
-/** TTL for cached structural lookups (course catalog, single-course
- *  tree, announcements). Matches the admin-side TTL. Mutations from
- *  admin course CRUD call updateTag(PROGRESS_TAG) and evict these
- *  immediately; the TTL is just a safety net. */
-const MEMBER_CACHE_TTL_SECONDS = 60
 
 // ============================================
 // MEMBER-SIDE COURSE QUERIES
@@ -68,33 +60,17 @@ const catalogSelect = {
   },
 } as const
 
-/** Pure structural fetch: published courses + chapter/lesson tree for
- *  the given audience set. No per-user data, so this is safe to cache
- *  across requests. Keyed by the audience list, which only varies by
- *  role (3 distinct combinations across the whole user base). */
-async function _getMemberCatalogStructureImpl(
-  audiences: CourseAudience[],
-) {
-  return prisma.course.findMany({
+export async function listCatalogForMember(userId: string) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const rows = await prisma.course.findMany({
     where: {
       deletedAt: null,
       status: 'PUBLISHED',
-      audience: { in: audiences },
+      audience: { in: visibleAudiences },
     },
     orderBy: { orderIndex: 'asc' },
     select: catalogSelect,
   })
-}
-
-const cachedGetMemberCatalogStructure = unstable_cache(
-  _getMemberCatalogStructureImpl,
-  ['member-course:getMemberCatalogStructure'],
-  { revalidate: MEMBER_CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-export async function listCatalogForMember(userId: string) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
-  const rows = await cachedGetMemberCatalogStructure(visibleAudiences)
 
   // One round-trip for the member's enrollments + progress aggregates.
   // We could pull this with a relation include, but a flat fetch by
@@ -266,36 +242,17 @@ const detailSelect = {
   },
 } as const
 
-/** Pure structural fetch: single published course with its full
- *  module/chapter/lesson tree, gated by audience. No per-user data —
- *  cached. The (courseId, audiences) pair is the natural cache key. */
-async function _getCourseStructureForMemberImpl(
-  courseId: string,
-  audiences: CourseAudience[],
-) {
-  return prisma.course.findFirst({
+export async function getCourseForMember(userId: string, courseId: string) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const course = await prisma.course.findFirst({
     where: {
       id: courseId,
       deletedAt: null,
       status: 'PUBLISHED',
-      audience: { in: audiences },
+      audience: { in: visibleAudiences },
     },
     select: detailSelect,
   })
-}
-
-const cachedGetCourseStructureForMember = unstable_cache(
-  _getCourseStructureForMemberImpl,
-  ['member-course:getCourseStructureForMember'],
-  { revalidate: MEMBER_CACHE_TTL_SECONDS, tags: [PROGRESS_TAG] },
-)
-
-export async function getCourseForMember(userId: string, courseId: string) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
-  const course = await cachedGetCourseStructureForMember(
-    courseId,
-    visibleAudiences,
-  )
   if (!course) return null
 
   // Per-lesson progress overlay. Collect lesson ids across both
