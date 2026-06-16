@@ -743,12 +743,29 @@ export function CourseBuilder({
           }
           return { ok: false, error: result.error }
         }
-        const next = applyMappings(chapters, result.mappings)
+        const mappings = result.mappings
+        const next = applyMappings(chapters, mappings)
         setChapters(next)
         setSavedSnapshot(next)
+        // Migrate the dialog's editing pointer from tempId → realId in
+        // the SAME render batch as setChapters above. Without this,
+        // router.refresh() below commits a render where chapters carry
+        // the new realIds but editingRef still points at the tempId —
+        // the lesson lookup misses, LessonEditorDialog's null-lesson
+        // guard unmounts, and the in-flight upload's onResourceAdded
+        // callback drops on the floor (editingRef is stale).
+        if (mappings) {
+          setEditingRef((prev) => {
+            if (!prev) return prev
+            const mapping = mappings.lessonMappings.find(
+              (m) => m.tempId === prev.lessonId,
+            )
+            return mapping ? { ...prev, lessonId: mapping.realId } : prev
+          })
+        }
         if (!opts.silent) toast.success('Changes saved')
         router.refresh()
-        return { ok: true, mappings: result.mappings }
+        return { ok: true, mappings }
       } catch (err) {
         console.error(err)
         if (!opts.silent) toast.error('Network error — please try again')
@@ -820,12 +837,8 @@ export function CourseBuilder({
     if (!mapping) {
       return { ok: false, error: 'Lesson id was not mapped after save' }
     }
-    // Re-point the editing ref at the new real id so subsequent
-    // re-opens of the dialog find the row.
-    setEditingRef({
-      chapterId: editingRef.chapterId,
-      lessonId: mapping.realId,
-    })
+    // editingRef was migrated tempId → realId inside performSave, in
+    // the same batch as setChapters — no extra update needed here.
     return { ok: true, lessonId: mapping.realId }
   }, [chapters, editingRef, performSave])
 
