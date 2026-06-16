@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
+  ArrowRight,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -18,7 +20,10 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { submitQuizAttemptAction } from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+import {
+  setLessonCompleteAction,
+  submitQuizAttemptAction,
+} from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
 
 interface QuizQuestion {
   id: string
@@ -35,6 +40,10 @@ interface QuizRunnerProps {
   passingScore: number | null
   maxAttempts: number | null
   timeLimitMin: number | null
+  /** When provided, Skip quiz marks complete + navigates here. Omit
+   *  on the last lesson of a course. Try again intentionally stays
+   *  on this lesson regardless. */
+  nextHref?: string
 }
 
 interface QuizResult {
@@ -65,20 +74,53 @@ export function QuizRunner({
   passingScore,
   maxAttempts,
   timeLimitMin,
+  nextHref,
 }: QuizRunnerProps) {
+  const router = useRouter()
   const [phase, setPhase] = useState<Phase>('intro')
+  const [navigating, setNavigating] = useState(false)
   const [index, setIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, number>>({})
   const [attempt, setAttempt] = useState(1)
   const [result, setResult] = useState<QuizResult | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  // Per spec 5.5: Try Again + Skip Quiz both mark the lesson complete
+  // regardless of score. Fire-and-forget — the action is idempotent
+  // and the user shouldn't wait on it.
+  const markCompleteBackground = () => {
+    void setLessonCompleteAction(lessonId, true)
+  }
+
   const restart = () => {
+    markCompleteBackground()
     setAnswers({})
     setIndex(0)
     setResult(null)
     setAttempt((a) => a + 1)
     setPhase('active')
+  }
+
+  // Skip Quiz from intro (pre-quiz bail) OR result (post-quiz dismiss).
+  // Marks complete and, when a next lesson exists, navigates there
+  // with the same "Moving to next lesson…" cue as MarkCompleteButton.
+  // On the last lesson of a course (no nextHref) we instead drop the
+  // runner back to its intro card so the member is left in a clean
+  // state — they can still restart the quiz from there.
+  const skipQuiz = () => {
+    markCompleteBackground()
+    if (nextHref) {
+      setNavigating(true)
+      toast.success('Quiz skipped — moving to next lesson')
+      router.push(nextHref)
+      return
+    }
+    setAnswers({})
+    setIndex(0)
+    setResult(null)
+    setAttempt((a) => a + 1)
+    setPhase('intro')
+    toast.success('Quiz skipped — lesson marked complete')
   }
 
   const submit = () => {
@@ -140,10 +182,26 @@ export function QuizRunner({
             value={timeLimitMin ? `${timeLimitMin} min` : 'None'}
           />
         </div>
-        <Button className="w-fit" onClick={() => setPhase('active')}>
-          Start quiz
-          <ChevronRight />
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => setPhase('active')}
+            disabled={navigating}
+          >
+            Start quiz
+            <ChevronRight />
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={skipQuiz}
+            disabled={navigating}
+            aria-live="polite"
+          >
+            {navigating ? (
+              <ArrowRight className="animate-pulse" />
+            ) : null}
+            {navigating ? 'Moving to next lesson…' : 'Skip quiz'}
+          </Button>
+        </div>
       </Card>
     )
   }
@@ -175,10 +233,23 @@ export function QuizRunner({
                 {attempt}
               </p>
             </div>
-            <Button variant="outline" onClick={restart}>
-              <RotateCcw />
-              Retake
-            </Button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button variant="outline" onClick={restart} disabled={navigating}>
+                <RotateCcw />
+                Try again
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={skipQuiz}
+                disabled={navigating}
+                aria-live="polite"
+              >
+                {navigating ? (
+                  <ArrowRight className="animate-pulse" />
+                ) : null}
+                {navigating ? 'Moving to next lesson…' : 'Skip quiz'}
+              </Button>
+            </div>
           </div>
         </Card>
 

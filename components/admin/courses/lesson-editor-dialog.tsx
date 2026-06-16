@@ -503,28 +503,30 @@ function ResourceSection({
   onResourceRemoved,
 }: ResourceSectionProps) {
   const [uploading, setUploading] = useState(false)
+  // Tracks position inside a multi-file batch (e.g. "2 of 5"). Null
+  // for single-file uploads so the button label stays the simpler
+  // "Uploading…" cue.
+  const [batchProgress, setBatchProgress] = useState<
+    { current: number; total: number } | null
+  >(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const resources = lesson.resources
 
-  const startUpload = useCallback(
-    async (file: File) => {
-      if (!file) return
+  // The prepare/PUT/commit work for one file once we already know the
+  // real lesson id. Pulled out of startUpload so multi-file uploads
+  // can call ensureSaved ONCE up front and then run this for each
+  // file — calling ensureSaved per file races: the first save mutates
+  // parent state, but the in-flight batch loop keeps a stale closure
+  // and subsequent ensureSaved calls fail to find the lesson.
+  const uploadOne = useCallback(
+    async (file: File, lessonId: string): Promise<boolean> => {
       if (file.size > RESOURCE_MAX_BYTES) {
-        setErrorMessage('File must be 50 MB or smaller')
-        return
+        setErrorMessage(`${file.name}: file must be 50 MB or smaller`)
+        return false
       }
-      setUploading(true)
-      setErrorMessage(null)
-
       try {
-        const saved = await ensureSaved()
-        if (!saved.ok) {
-          throw new Error(saved.error ?? 'Could not save lesson before upload')
-        }
-        const lessonId = saved.lessonId
-
         const prep = await prepareResourceUploadAction({
           lessonId,
           filename: file.name,
@@ -563,14 +565,86 @@ function ResourceSection({
 
         onResourceAdded(commit.resource)
         toast.success(`${file.name} uploaded`)
+        return true
       } catch (err) {
         console.error(err)
-        setErrorMessage(err instanceof Error ? err.message : 'Upload failed')
+        setErrorMessage(
+          err instanceof Error
+            ? `${file.name}: ${err.message}`
+            : `${file.name}: upload failed`,
+        )
+        return false
+      }
+    },
+    [courseId, onResourceAdded],
+  )
+
+  // Single-file entry point: save the lesson if needed, then upload.
+  const startUpload = useCallback(
+    async (file: File): Promise<boolean> => {
+      if (!file) return false
+      setUploading(true)
+      setErrorMessage(null)
+      try {
+        const saved = await ensureSaved()
+        if (!saved.ok) {
+          setErrorMessage(
+            `${file.name}: ${saved.error ?? 'Could not save lesson before upload'}`,
+          )
+          return false
+        }
+        return await uploadOne(file, saved.lessonId)
       } finally {
         setUploading(false)
       }
     },
-    [courseId, ensureSaved, onResourceAdded],
+    [ensureSaved, uploadOne],
+  )
+
+  // Sequential multi-file upload. Sequential (not parallel) because
+  // concurrent commits would race on the lesson-status flip. We call
+  // ensureSaved ONCE up front — the resolved lessonId is reused for
+  // every file, so a parent re-render mid-batch can't invalidate us.
+  const startMultiUpload = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return
+      if (files.length === 1) {
+        await startUpload(files[0]!)
+        return
+      }
+
+      setUploading(true)
+      setErrorMessage(null)
+      try {
+        const saved = await ensureSaved()
+        if (!saved.ok) {
+          setErrorMessage(
+            saved.error ?? 'Could not save lesson before upload',
+          )
+          return
+        }
+        const lessonId = saved.lessonId
+
+        let succeeded = 0
+        for (let i = 0; i < files.length; i++) {
+          setBatchProgress({ current: i + 1, total: files.length })
+          const ok = await uploadOne(files[i]!, lessonId)
+          if (ok) succeeded++
+        }
+        setBatchProgress(null)
+
+        if (succeeded === files.length) {
+          toast.success(`Uploaded ${succeeded} files`)
+        } else if (succeeded > 0) {
+          toast.error(
+            `Uploaded ${succeeded} of ${files.length} files — see error below for the rest`,
+          )
+        }
+      } finally {
+        setUploading(false)
+      }
+    },
+    [ensureSaved, startUpload, uploadOne],
   )
 
   const onDownload = useCallback(async (resourceId: string) => {
@@ -634,10 +708,15 @@ function ResourceSection({
           onClick={() => fileInputRef.current?.click()}
         >
           {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
-          {uploading ? 'Uploading…' : 'Add resource'}
+          {batchProgress
+            ? `Uploading ${batchProgress.current} of ${batchProgress.total}…`
+            : uploading
+              ? 'Uploading…'
+              : 'Add resources'}
         </Button>
         <p className="text-xs text-muted-foreground/70">
-          PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max.
+          PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max each.
+          Multiple files supported.
         </p>
       </div>
 
@@ -651,10 +730,11 @@ function ResourceSection({
         ref={fileInputRef}
         type="file"
         accept={RESOURCE_ACCEPT}
+        multiple
         hidden
         onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) void startUpload(file)
+          const files = e.target.files ? Array.from(e.target.files) : []
+          if (files.length > 0) void startMultiUpload(files)
           e.target.value = ''
         }}
       />

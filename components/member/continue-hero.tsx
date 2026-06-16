@@ -3,6 +3,7 @@ import { ArrowRight, PlayCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { htmlToPlainText } from '@/lib/utils'
 import { resumeCourseAction } from '@/app/(user)/courses/actions'
 import type { MemberCatalogCourse } from '@/lib/services/member-course-service'
 
@@ -50,7 +51,7 @@ export function ContinueHero({ course }: ContinueHeroProps) {
             </h2>
             {course.description ? (
               <p className="line-clamp-2 max-w-xl text-sm text-white/80 sm:text-base">
-                {course.description}
+                {htmlToPlainText(course.description)}
               </p>
             ) : null}
           </div>

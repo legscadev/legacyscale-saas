@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Download,
   FileText,
   GripVertical,
   Loader2,
@@ -13,6 +14,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   SortableContext,
   useSortable,
@@ -32,6 +34,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { StatusBadge } from '@/components/shared'
 import { LessonTypeIcon } from './lesson-type'
+import { getResourceDownloadUrlAction } from '@/app/(admin)/admin/courses/[id]/actions'
 import type {
   ChapterListItem,
   LessonListItem,
@@ -488,10 +491,28 @@ function ResourcePreview({ lesson }: { lesson: LessonListItem }) {
           <span className="shrink-0 text-xs text-muted-foreground">
             {formatFileSize(r.size)}
           </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Download ${r.name}`}
+            onClick={() => void downloadResource(r.id)}
+          >
+            <Download className="size-3.5" />
+          </Button>
         </li>
       ))}
     </ul>
   )
+}
+
+async function downloadResource(resourceId: string): Promise<void> {
+  const result = await getResourceDownloadUrlAction(resourceId)
+  if (!result.ok || !result.url) {
+    toast.error(result.error ?? 'Could not generate download link')
+    return
+  }
+  window.open(result.url, '_blank', 'noopener,noreferrer')
 }
 
 function formatFileSize(bytes: number | null): string {
