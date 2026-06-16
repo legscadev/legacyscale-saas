@@ -514,27 +514,19 @@ function ResourceSection({
 
   const resources = lesson.resources
 
-  // Returns true/false so the multi-file caller knows whether each
-  // upload landed without depending on toast/error-state side effects.
-  // Toast + errorMessage are still set as before for the single-file
-  // path; the multi-file caller surfaces a summary on top of them.
-  const startUpload = useCallback(
-    async (file: File): Promise<boolean> => {
-      if (!file) return false
+  // The prepare/PUT/commit work for one file once we already know the
+  // real lesson id. Pulled out of startUpload so multi-file uploads
+  // can call ensureSaved ONCE up front and then run this for each
+  // file — calling ensureSaved per file races: the first save mutates
+  // parent state, but the in-flight batch loop keeps a stale closure
+  // and subsequent ensureSaved calls fail to find the lesson.
+  const uploadOne = useCallback(
+    async (file: File, lessonId: string): Promise<boolean> => {
       if (file.size > RESOURCE_MAX_BYTES) {
         setErrorMessage(`${file.name}: file must be 50 MB or smaller`)
         return false
       }
-      setUploading(true)
-      setErrorMessage(null)
-
       try {
-        const saved = await ensureSaved()
-        if (!saved.ok) {
-          throw new Error(saved.error ?? 'Could not save lesson before upload')
-        }
-        const lessonId = saved.lessonId
-
         const prep = await prepareResourceUploadAction({
           lessonId,
           filename: file.name,
@@ -582,17 +574,37 @@ function ResourceSection({
             : `${file.name}: upload failed`,
         )
         return false
+      }
+    },
+    [courseId, onResourceAdded],
+  )
+
+  // Single-file entry point: save the lesson if needed, then upload.
+  const startUpload = useCallback(
+    async (file: File): Promise<boolean> => {
+      if (!file) return false
+      setUploading(true)
+      setErrorMessage(null)
+      try {
+        const saved = await ensureSaved()
+        if (!saved.ok) {
+          setErrorMessage(
+            `${file.name}: ${saved.error ?? 'Could not save lesson before upload'}`,
+          )
+          return false
+        }
+        return await uploadOne(file, saved.lessonId)
       } finally {
         setUploading(false)
       }
     },
-    [courseId, ensureSaved, onResourceAdded],
+    [ensureSaved, uploadOne],
   )
 
   // Sequential multi-file upload. Sequential (not parallel) because
-  // each file goes through ensureSaved + prepare + storage PUT +
-  // commit, and concurrent commits would race on the lesson-status
-  // flip. The button stays disabled across the whole batch.
+  // concurrent commits would race on the lesson-status flip. We call
+  // ensureSaved ONCE up front — the resolved lessonId is reused for
+  // every file, so a parent re-render mid-batch can't invalidate us.
   const startMultiUpload = useCallback(
     async (files: File[]) => {
       if (files.length === 0) return
@@ -601,24 +613,38 @@ function ResourceSection({
         return
       }
 
+      setUploading(true)
       setErrorMessage(null)
-      let succeeded = 0
-      for (let i = 0; i < files.length; i++) {
-        setBatchProgress({ current: i + 1, total: files.length })
-        const ok = await startUpload(files[i]!)
-        if (ok) succeeded++
-      }
-      setBatchProgress(null)
+      try {
+        const saved = await ensureSaved()
+        if (!saved.ok) {
+          setErrorMessage(
+            saved.error ?? 'Could not save lesson before upload',
+          )
+          return
+        }
+        const lessonId = saved.lessonId
 
-      if (succeeded === files.length) {
-        toast.success(`Uploaded ${succeeded} files`)
-      } else if (succeeded > 0) {
-        toast.error(
-          `Uploaded ${succeeded} of ${files.length} files — see error below for the rest`,
-        )
+        let succeeded = 0
+        for (let i = 0; i < files.length; i++) {
+          setBatchProgress({ current: i + 1, total: files.length })
+          const ok = await uploadOne(files[i]!, lessonId)
+          if (ok) succeeded++
+        }
+        setBatchProgress(null)
+
+        if (succeeded === files.length) {
+          toast.success(`Uploaded ${succeeded} files`)
+        } else if (succeeded > 0) {
+          toast.error(
+            `Uploaded ${succeeded} of ${files.length} files — see error below for the rest`,
+          )
+        }
+      } finally {
+        setUploading(false)
       }
     },
-    [startUpload],
+    [ensureSaved, startUpload, uploadOne],
   )
 
   const onDownload = useCallback(async (resourceId: string) => {
