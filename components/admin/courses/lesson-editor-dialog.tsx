@@ -503,17 +503,27 @@ function ResourceSection({
   onResourceRemoved,
 }: ResourceSectionProps) {
   const [uploading, setUploading] = useState(false)
+  // Tracks position inside a multi-file batch (e.g. "2 of 5"). Null
+  // for single-file uploads so the button label stays the simpler
+  // "Uploading…" cue.
+  const [batchProgress, setBatchProgress] = useState<
+    { current: number; total: number } | null
+  >(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const resources = lesson.resources
 
+  // Returns true/false so the multi-file caller knows whether each
+  // upload landed without depending on toast/error-state side effects.
+  // Toast + errorMessage are still set as before for the single-file
+  // path; the multi-file caller surfaces a summary on top of them.
   const startUpload = useCallback(
-    async (file: File) => {
-      if (!file) return
+    async (file: File): Promise<boolean> => {
+      if (!file) return false
       if (file.size > RESOURCE_MAX_BYTES) {
-        setErrorMessage('File must be 50 MB or smaller')
-        return
+        setErrorMessage(`${file.name}: file must be 50 MB or smaller`)
+        return false
       }
       setUploading(true)
       setErrorMessage(null)
@@ -563,14 +573,52 @@ function ResourceSection({
 
         onResourceAdded(commit.resource)
         toast.success(`${file.name} uploaded`)
+        return true
       } catch (err) {
         console.error(err)
-        setErrorMessage(err instanceof Error ? err.message : 'Upload failed')
+        setErrorMessage(
+          err instanceof Error
+            ? `${file.name}: ${err.message}`
+            : `${file.name}: upload failed`,
+        )
+        return false
       } finally {
         setUploading(false)
       }
     },
     [courseId, ensureSaved, onResourceAdded],
+  )
+
+  // Sequential multi-file upload. Sequential (not parallel) because
+  // each file goes through ensureSaved + prepare + storage PUT +
+  // commit, and concurrent commits would race on the lesson-status
+  // flip. The button stays disabled across the whole batch.
+  const startMultiUpload = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return
+      if (files.length === 1) {
+        await startUpload(files[0]!)
+        return
+      }
+
+      setErrorMessage(null)
+      let succeeded = 0
+      for (let i = 0; i < files.length; i++) {
+        setBatchProgress({ current: i + 1, total: files.length })
+        const ok = await startUpload(files[i]!)
+        if (ok) succeeded++
+      }
+      setBatchProgress(null)
+
+      if (succeeded === files.length) {
+        toast.success(`Uploaded ${succeeded} files`)
+      } else if (succeeded > 0) {
+        toast.error(
+          `Uploaded ${succeeded} of ${files.length} files — see error below for the rest`,
+        )
+      }
+    },
+    [startUpload],
   )
 
   const onDownload = useCallback(async (resourceId: string) => {
@@ -634,10 +682,15 @@ function ResourceSection({
           onClick={() => fileInputRef.current?.click()}
         >
           {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
-          {uploading ? 'Uploading…' : 'Add resource'}
+          {batchProgress
+            ? `Uploading ${batchProgress.current} of ${batchProgress.total}…`
+            : uploading
+              ? 'Uploading…'
+              : 'Add resources'}
         </Button>
         <p className="text-xs text-muted-foreground/70">
-          PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max.
+          PDF, Word, Excel, PowerPoint, image, zip, or text. 50 MB max each.
+          Multiple files supported.
         </p>
       </div>
 
@@ -651,10 +704,11 @@ function ResourceSection({
         ref={fileInputRef}
         type="file"
         accept={RESOURCE_ACCEPT}
+        multiple
         hidden
         onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) void startUpload(file)
+          const files = e.target.files ? Array.from(e.target.files) : []
+          if (files.length > 0) void startMultiUpload(files)
           e.target.value = ''
         }}
       />
