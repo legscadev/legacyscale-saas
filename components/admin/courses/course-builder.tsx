@@ -1076,42 +1076,45 @@ export function CourseBuilder({
           patchLesson(editingRef.chapterId, editingRef.lessonId, changes)
         }}
         onResourceAdded={(resource) => {
-          if (!editingRef) return
           // Each resource upload persists immediately on the server;
           // append it to local state + saved snapshot so the dialog
-          // sees the new file and isDirty stays accurate.
-          const append = (c: LocalChapter): LocalChapter => ({
-            ...c,
-            lessons: c.lessons.map((l) =>
-              l.id === editingRef.lessonId
-                ? { ...l, status: 'READY', resources: [...l.resources, resource] }
-                : l,
-            ),
-          })
-          patchChapter(editingRef.chapterId, append)
-          setSavedSnapshot((prev) =>
-            prev.map((c) => (c.id === editingRef.chapterId ? append(c) : c)),
-          )
+          // sees the new file and isDirty stays accurate. Resolve the
+          // target lesson by resource.lessonId (the server returns the
+          // real id) instead of reading editingRef — when this fires
+          // from an in-flight upload that was kicked off pre-save, the
+          // captured editingRef may still point at the now-replaced
+          // tempId and the lookup would miss.
+          const append = (chapters: LocalChapter[]): LocalChapter[] =>
+            chapters.map((c) => ({
+              ...c,
+              lessons: c.lessons.map((l) =>
+                l.id === resource.lessonId
+                  ? {
+                      ...l,
+                      status: 'READY',
+                      resources: [...l.resources, resource],
+                    }
+                  : l,
+              ),
+            }))
+          setChapters(append)
+          setSavedSnapshot(append)
         }}
         onResourceRemoved={(resourceId) => {
-          if (!editingRef) return
           // Delete already ran on the server — strip locally and
-          // mirror in the saved snapshot.
-          const strip = (c: LocalChapter): LocalChapter => ({
-            ...c,
-            lessons: c.lessons.map((l) =>
-              l.id === editingRef.lessonId
-                ? {
-                    ...l,
-                    resources: l.resources.filter((r) => r.id !== resourceId),
-                  }
-                : l,
-            ),
-          })
-          patchChapter(editingRef.chapterId, strip)
-          setSavedSnapshot((prev) =>
-            prev.map((c) => (c.id === editingRef.chapterId ? strip(c) : c)),
-          )
+          // mirror in the saved snapshot. Same closure caveat as
+          // onResourceAdded above: don't read editingRef, just find
+          // the resource by id wherever it lives.
+          const strip = (chapters: LocalChapter[]): LocalChapter[] =>
+            chapters.map((c) => ({
+              ...c,
+              lessons: c.lessons.map((l) => ({
+                ...l,
+                resources: l.resources.filter((r) => r.id !== resourceId),
+              })),
+            }))
+          setChapters(strip)
+          setSavedSnapshot(strip)
         }}
         onVideoUploadStarted={(lessonId) => {
           // Optimistic flip: Mux's upchunk finished, the webhook will
