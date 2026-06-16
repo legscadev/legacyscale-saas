@@ -5,7 +5,7 @@ import { ArrowRight, BookOpen, Clock, PlayCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { cn } from '@/lib/utils'
+import { cn, htmlToPlainText } from '@/lib/utils'
 import type { MemberCatalogCourse } from '@/lib/services/member-course-service'
 
 interface MemberCourseCardProps {
@@ -70,7 +70,7 @@ export function MemberCourseCard({ course, index = 0 }: MemberCourseCardProps) {
         </Link>
         {course.description ? (
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-            {course.description}
+            {htmlToPlainText(course.description)}
           </p>
         ) : null}
 

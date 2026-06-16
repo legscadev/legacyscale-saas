@@ -4,7 +4,7 @@ import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpDown, ChevronDown, ChevronUp, ImageIcon } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
+import { cn, htmlToPlainText } from '@/lib/utils'
 import { StatusBadge } from '@/components/shared'
 import { CourseActionsMenu } from './course-actions-menu'
 import type { CourseListItem } from '@/lib/services/course-service'
@@ -95,7 +95,7 @@ export function getCourseColumns(
               </div>
               {c.description ? (
                 <p className="truncate text-xs text-muted-foreground">
-                  {c.description}
+                  {htmlToPlainText(c.description)}
                 </p>
               ) : null}
             </div>

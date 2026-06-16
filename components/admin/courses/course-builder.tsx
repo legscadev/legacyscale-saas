@@ -38,7 +38,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 
-import { cn } from '@/lib/utils'
+import { cn, htmlToPlainText } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -1005,7 +1005,9 @@ export function CourseBuilder({
 
             <DetailRow label="Title">{course.title}</DetailRow>
             <DetailRow label="Description">
-              {course.description ?? (
+              {course.description ? (
+                htmlToPlainText(course.description)
+              ) : (
                 <span className="text-muted-foreground/70 italic">
                   No description yet.
                 </span>
