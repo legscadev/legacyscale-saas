@@ -103,6 +103,12 @@ async function handleMuxEvent(event: MuxEvent): Promise<void> {
   const data = event.data ?? {}
 
   switch (event.type) {
+    // updateMany (rather than update) on the lookup-by-id branches so
+    // a missing lesson — deleted between upload and webhook, or sent
+    // from a different environment — silently matches 0 rows instead
+    // of throwing P2025. Without this, Mux interprets the 500 as a
+    // retryable failure and keeps re-delivering for ~24h, spamming
+    // logs with the same orphaned passthrough.
     case 'video.asset.ready': {
       const lessonId = readString(data, 'passthrough')
       if (!lessonId) return
@@ -114,7 +120,7 @@ async function handleMuxEvent(event: MuxEvent): Promise<void> {
 
       if (assetId) await cleanupReplacedAsset(lessonId, assetId)
 
-      await prisma.lesson.update({
+      await prisma.lesson.updateMany({
         where: { id: lessonId },
         data: {
           muxAssetId: assetId,
@@ -134,7 +140,7 @@ async function handleMuxEvent(event: MuxEvent): Promise<void> {
 
       await cleanupReplacedAsset(lessonId, assetId)
 
-      await prisma.lesson.update({
+      await prisma.lesson.updateMany({
         where: { id: lessonId },
         data: { muxAssetId: assetId, status: 'PROCESSING' },
       })
@@ -145,7 +151,7 @@ async function handleMuxEvent(event: MuxEvent): Promise<void> {
       const lessonId = readString(data, 'passthrough')
       if (!lessonId) return
 
-      await prisma.lesson.update({
+      await prisma.lesson.updateMany({
         where: { id: lessonId },
         data: { status: 'DRAFT' },
       })
