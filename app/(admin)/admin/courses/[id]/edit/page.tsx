@@ -27,6 +27,7 @@ export default async function EditCoursePage({ params }: EditCoursePageProps) {
       <CourseForm
         mode="edit"
         submitLabel="Save changes"
+        courseId={id}
         defaults={{
           title: course.title,
           description: course.description,

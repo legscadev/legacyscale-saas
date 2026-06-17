@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import type { CourseStatus } from '@prisma/client'
+import { z } from 'zod'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import {
@@ -24,6 +25,34 @@ const THUMBNAIL_MIMES: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+type CourseImageKind = 'thumbnail' | 'cover'
+
+function imagePathFor(
+  courseId: string,
+  kind: CourseImageKind,
+  ext: string,
+): string {
+  return `${courseId}/${kind}.${ext}`
+}
+
+// Verifies that a client-supplied path matches a course we minted a
+// signed URL for. Reject anything that doesn't look like one of our
+// own paths so an admin can't set course A's thumbnail to a file
+// living in course B's folder.
+function parseCourseImagePath(
+  path: string,
+  courseId: string,
+): CourseImageKind | null {
+  const prefix = `${courseId}/`
+  if (!path.startsWith(prefix)) return null
+  const leaf = path.slice(prefix.length)
+  const m = /^(thumbnail|cover)\.(png|jpg|webp)$/.exec(leaf)
+  return m ? (m[1] as CourseImageKind) : null
 }
 
 export interface CoursesQueryState {
@@ -73,6 +102,80 @@ export async function fetchCourses(
 }
 
 // ===========================================================
+// PREPARE IMAGE UPLOAD (signed URL)
+// ===========================================================
+
+// Browser uploads thumbnails/covers directly to Supabase Storage via
+// a signed URL. Routing the file through a Server Action would hit
+// Vercel's ~4.5 MB body cap on the function gateway (smaller than
+// our app-level 10 MB cap), and the client would just see a generic
+// "Network error" when the request died at the edge.
+
+const prepareCourseImageUploadSchema = z.object({
+  courseId: z.string().regex(UUID_RE, 'courseId must be a UUID'),
+  kind: z.enum(['thumbnail', 'cover']),
+  filename: z.string().min(1).max(200),
+  size: z.number().int().positive().max(THUMBNAIL_MAX_BYTES),
+  mimeType: z.string().min(1).max(150),
+})
+
+export interface PrepareCourseImageUploadResult {
+  ok: boolean
+  signedUrl?: string
+  token?: string
+  path?: string
+  error?: string
+  fieldErrors?: Record<string, string[]>
+}
+
+export async function prepareCourseImageUploadAction(
+  input: unknown,
+): Promise<PrepareCourseImageUploadResult> {
+  await requireAdmin()
+
+  const parsed = prepareCourseImageUploadSchema.safeParse(input)
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {}
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.join('.')
+      if (!fieldErrors[key]) fieldErrors[key] = []
+      fieldErrors[key]!.push(issue.message)
+    }
+    return { ok: false, fieldErrors }
+  }
+  const ext = THUMBNAIL_MIMES[parsed.data.mimeType]
+  if (!ext) {
+    return {
+      ok: false,
+      error: `${parsed.data.kind === 'thumbnail' ? 'Thumbnail' : 'Cover image'} must be a PNG, JPEG, or WebP image`,
+    }
+  }
+
+  const { courseId, kind } = parsed.data
+  const path = imagePathFor(courseId, kind, ext)
+
+  const supabase = createAdminClient()
+  // upsert: true so an admin replacing the same-extension image
+  // overwrites the existing object cleanly. Different-extension
+  // replacements still need an explicit cleanup pass; the commit
+  // step (create/update action below) handles those orphans.
+  const { data, error } = await supabase.storage
+    .from(THUMBNAIL_BUCKET)
+    .createSignedUploadUrl(path, { upsert: true })
+  if (error || !data) {
+    console.error('Course image signed URL creation failed:', error)
+    return { ok: false, error: 'Could not start upload' }
+  }
+
+  return {
+    ok: true,
+    signedUrl: data.signedUrl,
+    token: data.token,
+    path: data.path,
+  }
+}
+
+// ===========================================================
 // CREATE
 // ===========================================================
 
@@ -84,17 +187,25 @@ export interface CreateCourseResult {
 }
 
 /**
- * Single-roundtrip create flow: validates → creates the course row →
- * (optionally) uploads thumbnail and patches the URL.
+ * Single-roundtrip create flow: validates → creates the course row
+ * with the (already-uploaded) thumbnail/cover paths resolved to
+ * public URLs.
  *
- * If the thumbnail upload fails after the row is created, we keep the
- * course (admin can re-upload from the edit screen) and surface a
- * warning toast via `error`.
+ * Images are uploaded browser → Supabase Storage via signed URL
+ * BEFORE the form is submitted (see prepareCourseImageUploadAction).
+ * The client mints a UUID up front so it can prepare an upload
+ * keyed on the eventual course id; that same UUID becomes the
+ * course row's primary key here.
  */
 export async function createCourseAction(
   formData: FormData,
 ): Promise<CreateCourseResult> {
   const admin = await requireAdmin()
+
+  const courseId = formData.get('courseId')
+  if (typeof courseId !== 'string' || !UUID_RE.test(courseId)) {
+    return { ok: false, error: 'Missing or invalid course id' }
+  }
 
   // Pull primitives off the FormData and re-shape into the schema input.
   const accessDaysRaw = formData.get('accessDays')
@@ -103,6 +214,11 @@ export async function createCourseAction(
       ? null
       : Number(accessDaysRaw)
 
+  // Resolve any uploaded paths into public URLs so the row carries
+  // a stable display URL like before.
+  const imageResolve = resolveImagePaths(formData, courseId)
+  if (!imageResolve.ok) return imageResolve.error
+
   const parsed = createCourseSchema.safeParse({
     title: formData.get('title') ?? '',
     description: (formData.get('description') as string) || undefined,
@@ -110,7 +226,8 @@ export async function createCourseAction(
     accessDays,
     isFree: formData.get('isFree') === '1',
     audience: (formData.get('audience') as string) || 'MEMBERS',
-    // thumbnailUrl is set in step 2 after upload — never trusted off the form.
+    thumbnailUrl: imageResolve.thumbnailUrl,
+    coverImageUrl: imageResolve.coverImageUrl,
   })
 
   if (!parsed.success) {
@@ -123,72 +240,104 @@ export async function createCourseAction(
     return { ok: false, fieldErrors }
   }
 
-  // Validate the optional images before we touch the DB so a bad
-  // file fails the request cleanly with no orphan row.
-  const thumbnailFile = readUploadedFile(formData, 'thumbnail')
-  const coverFile = readUploadedFile(formData, 'coverImage')
+  const course = await courseService.create(parsed.data, admin.id, {
+    id: courseId,
+  })
 
-  const thumbnailErr = validateImageFile(thumbnailFile, 'Thumbnail')
-  if (thumbnailErr) return { ok: false, fieldErrors: { thumbnail: [thumbnailErr] } }
-  const coverErr = validateImageFile(coverFile, 'Cover image')
-  if (coverErr) return { ok: false, fieldErrors: { coverImage: [coverErr] } }
-
-  // 1. Create the row.
-  const course = await courseService.create(parsed.data, admin.id)
-
-  // 2. Upload + patch images (best-effort — row already exists).
-  const imagePatch: { thumbnailUrl?: string; coverImageUrl?: string } = {}
-  const warnings: string[] = []
-  if (thumbnailFile) {
-    try {
-      imagePatch.thumbnailUrl = await uploadThumbnail(course.id, thumbnailFile)
-    } catch (err) {
-      console.error('Thumbnail upload failed:', err)
-      warnings.push('thumbnail upload failed')
-    }
-  }
-  if (coverFile) {
-    try {
-      imagePatch.coverImageUrl = await uploadCoverImage(course.id, coverFile)
-    } catch (err) {
-      console.error('Cover image upload failed:', err)
-      warnings.push('cover image upload failed')
-    }
-  }
-  if (Object.keys(imagePatch).length > 0) {
-    await courseService.update(course.id, imagePatch)
-  }
+  // Best-effort: sweep any stale image objects left over from a
+  // different extension (e.g. the admin replaced jpg with png mid-flow).
+  await cleanupStaleImages(courseId, imageResolve.usedPaths)
 
   revalidatePath('/admin/courses')
-  if (warnings.length > 0) {
-    return {
-      ok: true,
-      id: course.id,
-      error: `Course created, but ${warnings.join(' and ')}. You can retry from the edit screen.`,
-    }
-  }
   return { ok: true, id: course.id }
 }
 
 // Tiny helpers to keep the create/update bodies readable now that
 // there are two image slots.
-function readUploadedFile(formData: FormData, key: string): File | null {
-  const v = formData.get(key)
-  return v instanceof File && v.size > 0 ? v : null
+
+interface ResolveImagePathsOk {
+  ok: true
+  thumbnailUrl: string | undefined
+  coverImageUrl: string | undefined
+  /** Paths the client claimed to have uploaded. Used by the post-write
+   *  sweep to delete stale objects from a different extension. */
+  usedPaths: Partial<Record<CourseImageKind, string>>
 }
 
-function validateImageFile(
-  file: File | null,
-  label: 'Thumbnail' | 'Cover image',
-): string | null {
-  if (!file) return null
-  if (!THUMBNAIL_MIMES[file.type]) {
-    return `${label} must be a PNG, JPEG, or WebP image`
+interface ResolveImagePathsErr {
+  ok: false
+  error: { ok: false; fieldErrors: Record<string, string[]> }
+}
+
+function resolveImagePaths(
+  formData: FormData,
+  courseId: string,
+): ResolveImagePathsOk | ResolveImagePathsErr {
+  const supabase = createAdminClient()
+  const out: ResolveImagePathsOk = {
+    ok: true,
+    thumbnailUrl: undefined,
+    coverImageUrl: undefined,
+    usedPaths: {},
   }
-  if (file.size > THUMBNAIL_MAX_BYTES) {
-    return `${label} must be 10 MB or smaller`
+
+  for (const [fieldKey, kind] of [
+    ['thumbnailPath', 'thumbnail'],
+    ['coverImagePath', 'cover'],
+  ] as const) {
+    const raw = formData.get(fieldKey)
+    if (typeof raw !== 'string' || raw.length === 0) continue
+    const parsedKind = parseCourseImagePath(raw, courseId)
+    if (parsedKind !== kind) {
+      return {
+        ok: false,
+        error: {
+          ok: false,
+          fieldErrors: {
+            [kind === 'thumbnail' ? 'thumbnail' : 'coverImage']: [
+              'Invalid upload reference',
+            ],
+          },
+        },
+      }
+    }
+    const { data } = supabase.storage
+      .from(THUMBNAIL_BUCKET)
+      .getPublicUrl(raw)
+    if (kind === 'thumbnail') out.thumbnailUrl = data.publicUrl
+    else out.coverImageUrl = data.publicUrl
+    out.usedPaths[kind] = raw
   }
-  return null
+
+  return out
+}
+
+// Removes any `${kind}.*` objects in the course folder that aren't
+// the one we just committed. Covers the jpg→png case where the new
+// upload lives at a different leaf than the existing object.
+async function cleanupStaleImages(
+  courseId: string,
+  usedPaths: Partial<Record<CourseImageKind, string>>,
+): Promise<void> {
+  const keepPaths = new Set(Object.values(usedPaths))
+  if (keepPaths.size === 0) return
+  const supabase = createAdminClient()
+  const { data: existing } = await supabase.storage
+    .from(THUMBNAIL_BUCKET)
+    .list(courseId)
+  const toRemove = (existing ?? [])
+    .map((f) => `${courseId}/${f.name}`)
+    .filter((p) => {
+      const m = /\/(thumbnail|cover)\.(?:png|jpg|webp)$/.exec(p)
+      if (!m) return false
+      return usedPaths[m[1] as CourseImageKind] !== undefined && !keepPaths.has(p)
+    })
+  if (toRemove.length === 0) return
+  try {
+    await supabase.storage.from(THUMBNAIL_BUCKET).remove(toRemove)
+  } catch (err) {
+    console.error('Stale course image sweep failed:', err)
+  }
 }
 
 // ===========================================================
@@ -239,56 +388,44 @@ export async function updateCourseAction(
     return { ok: false, fieldErrors }
   }
 
-  const thumbnailFile = readUploadedFile(formData, 'thumbnail')
-  const coverFile = readUploadedFile(formData, 'coverImage')
   const clearThumbnail = formData.get('clearThumbnail') === '1'
   const clearCoverImage = formData.get('clearCoverImage') === '1'
 
-  const thumbnailErr = validateImageFile(thumbnailFile, 'Thumbnail')
-  if (thumbnailErr) return { ok: false, fieldErrors: { thumbnail: [thumbnailErr] } }
-  const coverErr = validateImageFile(coverFile, 'Cover image')
-  if (coverErr) return { ok: false, fieldErrors: { coverImage: [coverErr] } }
+  const imageResolve = resolveImagePaths(formData, courseId)
+  if (!imageResolve.ok) return imageResolve.error
 
-  // Apply primitive updates first.
+  // Fold the resolved image URLs / clears into the primitive update.
+  const update: Record<string, unknown> = { ...parsed.data }
+  if (imageResolve.thumbnailUrl !== undefined) {
+    update.thumbnailUrl = imageResolve.thumbnailUrl
+  } else if (clearThumbnail) {
+    update.thumbnailUrl = ''
+  }
+  if (imageResolve.coverImageUrl !== undefined) {
+    update.coverImageUrl = imageResolve.coverImageUrl
+  } else if (clearCoverImage) {
+    update.coverImageUrl = ''
+  }
+
   try {
-    await courseService.update(courseId, parsed.data)
+    await courseService.update(courseId, update)
   } catch (err) {
     console.error('Course update failed:', err)
     return { ok: false, error: 'Could not update course' }
   }
 
-  // Then handle the image side-effects.
-  const warnings: string[] = []
-
-  if (thumbnailFile) {
-    try {
-      const url = await uploadThumbnail(courseId, thumbnailFile)
-      await courseService.update(courseId, { thumbnailUrl: url })
-    } catch (err) {
-      console.error('Thumbnail upload failed:', err)
-      warnings.push('thumbnail upload failed')
-    }
-  } else if (clearThumbnail) {
+  // Best-effort housekeeping — never blocks the success response.
+  await cleanupStaleImages(courseId, imageResolve.usedPaths)
+  if (clearThumbnail && imageResolve.thumbnailUrl === undefined) {
     try {
       await deleteCourseImage(courseId, 'thumbnail')
-      await courseService.update(courseId, { thumbnailUrl: '' })
     } catch (err) {
       console.error('Thumbnail delete failed:', err)
     }
   }
-
-  if (coverFile) {
-    try {
-      const url = await uploadCoverImage(courseId, coverFile)
-      await courseService.update(courseId, { coverImageUrl: url })
-    } catch (err) {
-      console.error('Cover image upload failed:', err)
-      warnings.push('cover image upload failed')
-    }
-  } else if (clearCoverImage) {
+  if (clearCoverImage && imageResolve.coverImageUrl === undefined) {
     try {
       await deleteCourseImage(courseId, 'cover')
-      await courseService.update(courseId, { coverImageUrl: '' })
     } catch (err) {
       console.error('Cover image delete failed:', err)
     }
@@ -296,13 +433,6 @@ export async function updateCourseAction(
 
   revalidatePath('/admin/courses')
   revalidatePath(`/admin/courses/${courseId}`)
-
-  if (warnings.length > 0) {
-    return {
-      ok: true,
-      error: `Course updated, but ${warnings.join(' and ')}.`,
-    }
-  }
   return { ok: true }
 }
 
@@ -332,58 +462,6 @@ export async function softDeleteCourseAction(
 // ===========================================================
 // STORAGE
 // ===========================================================
-
-type CourseImageKind = 'thumbnail' | 'cover'
-
-async function uploadCourseImage(
-  courseId: string,
-  file: File,
-  kind: CourseImageKind,
-): Promise<string> {
-  const ext = THUMBNAIL_MIMES[file.type]
-  if (!ext) throw new Error('Unsupported mime type')
-
-  const supabase = createAdminClient()
-  const folder = courseId
-  const path = `${folder}/${kind}.${ext}`
-
-  // Remove stale files for THIS kind only (so changing format
-  // jpg → png doesn't leave both lying around, but the other kind's
-  // file stays intact).
-  const { data: existing } = await supabase.storage
-    .from(THUMBNAIL_BUCKET)
-    .list(folder)
-  const stalePaths = (existing ?? [])
-    .filter((f) => f.name.startsWith(`${kind}.`))
-    .map((f) => `${folder}/${f.name}`)
-  if (stalePaths.length > 0) {
-    await supabase.storage.from(THUMBNAIL_BUCKET).remove(stalePaths)
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const { error } = await supabase.storage
-    .from(THUMBNAIL_BUCKET)
-    .upload(path, buffer, {
-      contentType: file.type,
-      upsert: true,
-    })
-  if (error) throw error
-
-  const { data } = supabase.storage.from(THUMBNAIL_BUCKET).getPublicUrl(path)
-  return data.publicUrl
-}
-
-// Kept as a thin alias so existing call sites stay readable.
-async function uploadThumbnail(courseId: string, file: File): Promise<string> {
-  return uploadCourseImage(courseId, file, 'thumbnail')
-}
-
-async function uploadCoverImage(
-  courseId: string,
-  file: File,
-): Promise<string> {
-  return uploadCourseImage(courseId, file, 'cover')
-}
 
 async function deleteCourseImage(
   courseId: string,
