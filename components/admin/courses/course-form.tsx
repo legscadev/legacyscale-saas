@@ -20,6 +20,10 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { FormSection } from '@/components/shared'
+import { createClient as createBrowserSupabase } from '@/lib/supabase/client'
+import { prepareCourseImageUploadAction } from '@/app/(admin)/admin/courses/actions'
+
+const IMAGE_BUCKET = 'course-thumbnails'
 
 const CREATE_STATUSES: { value: CourseStatus; label: string }[] = [
   { value: 'DRAFT', label: 'Draft' },
@@ -53,6 +57,10 @@ interface CourseFormProps {
   mode: 'create' | 'edit'
   defaults?: CourseFormDefaults
   submitLabel: string
+  /** Existing course id for edit. Omitted on create — the form mints
+   *  a UUID up front so the signed-upload flow has a stable folder
+   *  before the row exists. */
+  courseId?: string
   /** Server action that takes FormData. */
   onSubmit: (formData: FormData) => Promise<CourseFormSubmitResult>
   /** Optional destructive action — only used by edit (soft delete). */
@@ -73,10 +81,16 @@ export function CourseForm({
   mode,
   defaults,
   submitLabel,
+  courseId,
   onSubmit,
   destructiveAction,
 }: CourseFormProps) {
   const router = useRouter()
+
+  // Stable course id across re-renders. For edit, the parent passes it
+  // in. For create, mint once on mount so the signed-upload prepare
+  // call can address the correct (eventual) folder.
+  const courseIdRef = useRef<string>(courseId ?? crypto.randomUUID())
 
   const [title, setTitle] = useState(defaults?.title ?? '')
   const [description, setDescription] = useState(defaults?.description ?? '')
@@ -142,36 +156,52 @@ export function CourseForm({
       return
     }
 
-    const formData = new FormData()
-    formData.set('title', trimmedTitle)
-    if (description.trim()) formData.set('description', description.trim())
-    formData.set('status', status)
-    formData.set('isFree', isFree ? '1' : '0')
-    formData.set('audience', audience)
-    if (!forever) formData.set('accessDays', accessDays)
-    thumbnailPicker.appendTo(formData, {
-      fileKey: 'thumbnail',
-      clearKey: 'clearThumbnail',
-    })
-    coverPicker.appendTo(formData, {
-      fileKey: 'coverImage',
-      clearKey: 'clearCoverImage',
-    })
-
     setSubmitting(true)
     try {
+      // Upload images BEFORE the form submit so the action body stays
+      // small. Routing 8 MB images through a Server Action would hit
+      // Vercel's ~4.5 MB function-gateway body cap and the client would
+      // just see a generic "Network error".
+      const id = courseIdRef.current
+      const thumbnailPath = await uploadImageIfPicked(
+        thumbnailPicker,
+        id,
+        'thumbnail',
+      )
+      if (thumbnailPath.error) {
+        setFieldErrors({ thumbnail: [thumbnailPath.error] })
+        return
+      }
+      const coverPath = await uploadImageIfPicked(coverPicker, id, 'cover')
+      if (coverPath.error) {
+        setFieldErrors({ coverImage: [coverPath.error] })
+        return
+      }
+
+      const formData = new FormData()
+      formData.set('courseId', id)
+      formData.set('title', trimmedTitle)
+      if (description.trim()) formData.set('description', description.trim())
+      formData.set('status', status)
+      formData.set('isFree', isFree ? '1' : '0')
+      formData.set('audience', audience)
+      if (!forever) formData.set('accessDays', accessDays)
+      if (thumbnailPath.path) formData.set('thumbnailPath', thumbnailPath.path)
+      if (thumbnailPicker.cleared && !thumbnailPicker.file) {
+        formData.set('clearThumbnail', '1')
+      }
+      if (coverPath.path) formData.set('coverImagePath', coverPath.path)
+      if (coverPicker.cleared && !coverPicker.file) {
+        formData.set('clearCoverImage', '1')
+      }
+
       const result = await onSubmit(formData)
       if (!result.ok) {
         if (result.fieldErrors) setFieldErrors(result.fieldErrors)
         if (result.error) setFormError(result.error)
         return
       }
-      if (result.error) {
-        // Partial success — e.g. row created but thumbnail upload failed.
-        toast.warning(result.error)
-      } else {
-        toast.success(mode === 'create' ? 'Course created' : 'Course updated')
-      }
+      toast.success(mode === 'create' ? 'Course created' : 'Course updated')
       if (mode === 'create') {
         // Phase C will host /admin/courses/[id] (course detail). For now
         // land on the list, which already shows the new row.
@@ -185,6 +215,37 @@ export function CourseForm({
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Upload one of the two image slots via signed URL. Returns the
+  // storage path on success so the caller can post it to the Server
+  // Action. No file → no path → no upload (a no-op).
+  async function uploadImageIfPicked(
+    picker: ImagePickerState,
+    id: string,
+    kind: 'thumbnail' | 'cover',
+  ): Promise<{ path?: string; error?: string }> {
+    const file = picker.file
+    if (!file) return {}
+    const prep = await prepareCourseImageUploadAction({
+      courseId: id,
+      kind,
+      filename: file.name,
+      size: file.size,
+      mimeType: file.type || 'application/octet-stream',
+    })
+    if (!prep.ok || !prep.signedUrl || !prep.token || !prep.path) {
+      return { error: prep.error ?? 'Could not start upload' }
+    }
+    const supabase = createBrowserSupabase()
+    const { error: uploadErr } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .uploadToSignedUrl(prep.path, prep.token, file, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: true,
+      })
+    if (uploadErr) return { error: uploadErr.message ?? 'Upload failed' }
+    return { path: prep.path }
   }
 
   return (

@@ -145,7 +145,11 @@ async function getCourseById(id: string) {
   return row ? withLessonCount(row) : null
 }
 
-async function createCourse(input: CreateCourseInput, createdBy: string) {
+async function createCourse(
+  input: CreateCourseInput,
+  createdBy: string,
+  options?: { id?: string },
+) {
   const last = await prisma.course.findFirst({
     where: { deletedAt: null },
     orderBy: { orderIndex: 'desc' },
@@ -157,6 +161,7 @@ async function createCourse(input: CreateCourseInput, createdBy: string) {
 
   const row = await prisma.course.create({
     data: {
+      ...(options?.id ? { id: options.id } : {}),
       title: input.title,
       description: input.description,
       thumbnailUrl: input.thumbnailUrl || null,
