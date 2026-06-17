@@ -49,24 +49,42 @@ async function syncCourseStructure(
   courseId: string,
   chapters: SyncChapterInput[],
 ): Promise<SyncResult> {
-  // Load current state outside the transaction for the external-asset
-  // pre-pass — we need to know which Mux assets and Storage files to
-  // delete. The actual DB diff happens inside the transaction with a
-  // fresh read.
+  // Load current state outside the transaction for two purposes:
+  //   1. the external-asset pre-pass (Mux + Storage cleanup), and
+  //   2. the in-transaction skip-unchanged check below.
+  // Fetching title/description/orderIndex/moduleId here lets us no-op
+  // updates whose payload matches what's already in the DB — silent
+  // saves on a video upload send the WHOLE course state, so without
+  // this we'd round-trip once per lesson and hit the 30s txn cap on
+  // big courses.
   const existingForCleanup = await prisma.chapter.findMany({
     where: { courseId, deletedAt: null },
     select: {
       id: true,
+      title: true,
+      orderIndex: true,
+      moduleId: true,
       lessons: {
         where: { deletedAt: null },
         select: {
           id: true,
           type: true,
+          title: true,
+          description: true,
+          orderIndex: true,
           muxAssetId: true,
         },
       },
     },
   })
+  const existingChapterById = new Map(
+    existingForCleanup.map((c) => [c.id, c] as const),
+  )
+  const existingLessonById = new Map(
+    existingForCleanup.flatMap((c) =>
+      c.lessons.map((l) => [l.id, l] as const),
+    ),
+  )
 
   const incomingChapterIds = new Set(
     chapters.filter((c) => c.id).map((c) => c.id!),
@@ -137,20 +155,28 @@ async function syncCourseStructure(
       let realChapterId: string
 
       if (chapter.id) {
-        const chapterUpdate: Prisma.ChapterUpdateInput = {
-          title: chapter.title,
-          orderIndex: chapter.orderIndex,
+        const existing = existingChapterById.get(chapter.id)
+        const titleChanged = existing?.title !== chapter.title
+        const orderChanged = existing?.orderIndex !== chapter.orderIndex
+        const moduleChanged =
+          chapter.moduleId !== undefined &&
+          chapter.moduleId !== (existing?.moduleId ?? null)
+        if (titleChanged || orderChanged || moduleChanged) {
+          const chapterUpdate: Prisma.ChapterUpdateInput = {
+            title: chapter.title,
+            orderIndex: chapter.orderIndex,
+          }
+          if (chapter.moduleId !== undefined) {
+            chapterUpdate.module =
+              chapter.moduleId === null
+                ? { disconnect: true }
+                : { connect: { id: chapter.moduleId } }
+          }
+          await tx.chapter.update({
+            where: { id: chapter.id, courseId },
+            data: chapterUpdate,
+          })
         }
-        if (chapter.moduleId !== undefined) {
-          chapterUpdate.module =
-            chapter.moduleId === null
-              ? { disconnect: true }
-              : { connect: { id: chapter.moduleId } }
-        }
-        await tx.chapter.update({
-          where: { id: chapter.id, courseId },
-          data: chapterUpdate,
-        })
         realChapterId = chapter.id
       } else {
         const created = await tx.chapter.create({
@@ -170,14 +196,21 @@ async function syncCourseStructure(
 
       for (const lesson of chapter.lessons) {
         if (lesson.id) {
-          await tx.lesson.update({
-            where: { id: lesson.id, chapterId: realChapterId },
-            data: {
-              title: lesson.title,
-              description: lesson.description ?? null,
-              orderIndex: lesson.orderIndex,
-            },
-          })
+          const existing = existingLessonById.get(lesson.id)
+          const incomingDescription = lesson.description ?? null
+          const titleChanged = existing?.title !== lesson.title
+          const descChanged = existing?.description !== incomingDescription
+          const orderChanged = existing?.orderIndex !== lesson.orderIndex
+          if (titleChanged || descChanged || orderChanged) {
+            await tx.lesson.update({
+              where: { id: lesson.id, chapterId: realChapterId },
+              data: {
+                title: lesson.title,
+                description: incomingDescription,
+                orderIndex: lesson.orderIndex,
+              },
+            })
+          }
         } else {
           const created = await tx.lesson.create({
             data: {
@@ -200,12 +233,14 @@ async function syncCourseStructure(
   }, {
     // Default Prisma interactive-transaction timeouts (5s wait + 5s
     // execute) are too tight on the Supabase transaction-mode pooler
-    // for big course payloads — a real-world save of a course with
-    // ~10+ chapters/lessons routinely takes 5–6s and trips P2028.
-    // 30s gives plenty of headroom while still bounding any runaway
-    // transaction.
+    // for big course payloads. The skip-unchanged optimization above
+    // covers the typical silent-save case (only the just-added lesson
+    // is new, everything else no-ops), but a real-world admin doing
+    // a heavy structural reorder on a course with 50+ lessons still
+    // racks up serialised round-trips. 60s gives headroom for those
+    // while still bounding any runaway.
     maxWait: 10_000,
-    timeout: 30_000,
+    timeout: 60_000,
   })
 }
 
