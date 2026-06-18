@@ -17,6 +17,9 @@ interface AppShellProps {
   user: ShellUser
   /** Server-rendered initial collapsed state from cookie. */
   defaultCollapsed?: boolean
+  /** Count of published announcements the current user hasn't
+   *  opened — surfaces as a numeric pill on the Bell. */
+  unreadAnnouncements?: number
   children: React.ReactNode
 }
 
@@ -24,11 +27,16 @@ export function AppShell({
   role,
   user,
   defaultCollapsed = false,
+  unreadAnnouncements = 0,
   children,
 }: AppShellProps) {
   return (
     <SidebarProvider defaultCollapsed={defaultCollapsed}>
-      <AppShellInner role={role} user={user}>
+      <AppShellInner
+        role={role}
+        user={user}
+        unreadAnnouncements={unreadAnnouncements}
+      >
         {children}
       </AppShellInner>
     </SidebarProvider>
@@ -38,6 +46,7 @@ export function AppShell({
 function AppShellInner({
   role,
   user,
+  unreadAnnouncements = 0,
   children,
 }: Omit<AppShellProps, 'defaultCollapsed'>) {
   const { collapsed } = useSidebar()
@@ -150,6 +159,7 @@ function AppShellInner({
           user={user}
           profileHref={profileHref}
           role={role}
+          unreadAnnouncements={unreadAnnouncements}
         />
         <main className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">{children}</div>

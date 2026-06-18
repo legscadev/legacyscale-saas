@@ -50,6 +50,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { PageHeader, EmptyState, StatusBadge } from '@/components/shared'
 import { htmlToPlainText } from '@/lib/utils'
 import {
@@ -389,11 +394,25 @@ function getColumns(
     {
       id: 'reads',
       header: 'Reads',
-      cell: ({ row }) => (
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {row.original._count.reads.toLocaleString()}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const r = row.original.reads
+        return (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span className="cursor-help text-sm tabular-nums text-muted-foreground decoration-dotted underline-offset-2 hover:underline">
+                  {r.total.toLocaleString()}
+                </span>
+              }
+            />
+            <TooltipContent side="top" align="center">
+              {r.total === 0
+                ? 'No reads yet'
+                : `${r.admin} admin · ${r.team} team · ${r.member} member`}
+            </TooltipContent>
+          </Tooltip>
+        )
+      },
       enableSorting: false,
       size: 80,
     },

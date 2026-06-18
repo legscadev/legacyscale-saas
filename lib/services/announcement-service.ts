@@ -52,8 +52,14 @@ const announcementListSelect = {
   createdAt: true,
   updatedAt: true,
   deletedAt: true,
-  _count: { select: { reads: true } },
 } satisfies Prisma.AnnouncementSelect
+
+export interface ReadsBreakdown {
+  admin: number
+  team: number
+  member: number
+  total: number
+}
 
 async function listAnnouncements(options: ListAnnouncementsOptions) {
   const { page, limit } = options
@@ -76,8 +82,44 @@ async function listAnnouncements(options: ListAnnouncementsOptions) {
     prisma.announcement.count({ where }),
   ])
 
+  // Enrich each item with a reads-by-role breakdown so the admin
+  // list can show "X admin / Y team / Z member" in a tooltip. Single
+  // join keyed on announcementId — N+1-safe.
+  const ids = items.map((i) => i.id)
+  const reads =
+    ids.length === 0
+      ? []
+      : await prisma.announcementRead.findMany({
+          where: { announcementId: { in: ids } },
+          select: {
+            announcementId: true,
+            user: { select: { role: true } },
+          },
+        })
+
+  const breakdownById = new Map<string, ReadsBreakdown>()
+  for (const id of ids) {
+    breakdownById.set(id, { admin: 0, team: 0, member: 0, total: 0 })
+  }
+  for (const r of reads) {
+    const b = breakdownById.get(r.announcementId)
+    if (!b) continue
+    b.total++
+    if (r.user.role === 'ADMIN') b.admin++
+    else if (r.user.role === 'TEAM') b.team++
+    else b.member++
+  }
+
   return {
-    items,
+    items: items.map((item) => ({
+      ...item,
+      reads: breakdownById.get(item.id) ?? {
+        admin: 0,
+        team: 0,
+        member: 0,
+        total: 0,
+      },
+    })),
     total,
     page,
     limit,
@@ -184,6 +226,20 @@ async function markAsRead(userId: string, announcementIds: string[]) {
   })
 }
 
+// Powers the unread-count badge on the top-bar Bell icon. Counts
+// published, non-deleted announcements the user hasn't opened yet.
+// Single round-trip — two parallel counts, subtract.
+async function getUnreadCount(userId: string): Promise<number> {
+  const baseWhere = { status: 'PUBLISHED', deletedAt: null } as const
+  const [total, read] = await Promise.all([
+    prisma.announcement.count({ where: baseWhere }),
+    prisma.announcementRead.count({
+      where: { userId, announcement: baseWhere },
+    }),
+  ])
+  return Math.max(0, total - read)
+}
+
 export const announcementService = {
   list: listAnnouncements,
   counts: getCounts,
@@ -193,6 +249,7 @@ export const announcementService = {
   softDelete: softDeleteAnnouncement,
   restore: restoreAnnouncement,
   markAsRead,
+  getUnreadCount,
   defaultPageSize: DEFAULT_PAGE_SIZE,
 }
 
