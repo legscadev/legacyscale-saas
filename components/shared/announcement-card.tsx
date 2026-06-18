@@ -21,6 +21,16 @@ interface AnnouncementCardProps {
   className?: string
 }
 
+function formatPostedDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
+
 export function AnnouncementCard({
   announcement,
   className,
@@ -30,33 +40,41 @@ export function AnnouncementCard({
   return (
     <Card
       className={cn(
-        'transition-all hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5',
-        className
+        'gap-0 overflow-hidden p-0 transition-all hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5',
+        className,
       )}
     >
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-full bg-primary/10">
-              <Megaphone className="size-4 text-primary" />
-            </div>
-            <CardTitle className="text-base">{announcement.title}</CardTitle>
+      <CardHeader className="flex flex-row items-start justify-between gap-3 border-b bg-muted/30 px-5 py-3.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Megaphone className="size-4 text-primary" />
           </div>
-          {announcement.status === 'PUBLISHED' ? (
-            <BadgePublished />
-          ) : (
-            <BadgeDraft />
-          )}
+          <div className="min-w-0">
+            <CardTitle className="truncate text-base leading-tight">
+              {announcement.title}
+            </CardTitle>
+            <p
+              className="mt-0.5 text-xs text-muted-foreground"
+              suppressHydrationWarning
+            >
+              Posted {formatPostedDate(date)}
+            </p>
+          </div>
         </div>
+        {announcement.status === 'PUBLISHED' ? (
+          <BadgePublished />
+        ) : (
+          <BadgeDraft />
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-5 py-4">
         {/* TipTap output rendered as HTML so the admin's formatting
             (bold, italics, headings, lists, links, line breaks) shows
             up on the member side. The editor's whitelist is the
             sanitizer — same pattern the course detail page uses. */}
         <div
           className={cn(
-            'text-sm text-muted-foreground',
+            'text-sm text-foreground/90',
             '[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
             '[&_strong]:font-semibold [&_strong]:text-foreground',
             '[&_em]:italic',
@@ -70,7 +88,10 @@ export function AnnouncementCard({
           )}
           dangerouslySetInnerHTML={{ __html: announcement.body }}
         />
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p
+          className="mt-4 border-t pt-3 text-xs text-muted-foreground"
+          suppressHydrationWarning
+        >
           {formatDistanceToNow(date, { addSuffix: true })}
         </p>
       </CardContent>

@@ -342,16 +342,21 @@ function getColumns(
         const a = row.original
         const preview = htmlToPlainText(a.body)
         return (
-          <div className="flex flex-col">
-            <Link
-              href={`/admin/announcements/${a.id}/edit`}
-              className="truncate text-sm font-medium transition-colors hover:text-primary hover:underline underline-offset-2"
-            >
-              {a.title}
-            </Link>
-            <p className="line-clamp-1 text-xs text-muted-foreground">
-              {preview || 'No body.'}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <Megaphone className="size-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <Link
+                href={`/admin/announcements/${a.id}/edit`}
+                className="truncate text-sm font-semibold transition-colors hover:text-primary hover:underline underline-offset-2"
+              >
+                {a.title}
+              </Link>
+              <p className="line-clamp-1 text-xs text-muted-foreground/80">
+                {preview || 'No body yet.'}
+              </p>
+            </div>
           </div>
         )
       },

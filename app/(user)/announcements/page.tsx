@@ -34,7 +34,7 @@ export default async function UserAnnouncementsPage() {
           description="Check back later for updates from the team."
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="mx-auto max-w-2xl space-y-4">
           {announcements.map((announcement) => (
             <AnnouncementCard
               key={announcement.id}
