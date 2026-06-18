@@ -34,7 +34,7 @@ import type { CohortSort } from '@/lib/services/admin-progress-service'
 import { ChapterFunnel } from '@/components/admin/progress/chapter-funnel'
 import { CohortFilters } from '@/components/admin/progress/cohort-filters'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 function parseSort(raw: string | undefined): CohortSort {
   return raw === 'enrolled' ||

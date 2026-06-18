@@ -75,7 +75,7 @@ export const DEFAULT_QUERY_STATE: AnnouncementsQueryState = {
   page: 1,
 }
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 interface AnnouncementsShellProps {
   initialData: AnnouncementsData

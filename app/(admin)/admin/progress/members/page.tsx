@@ -23,7 +23,7 @@ import { adminProgressService } from '@/lib/services/admin-progress-service'
 import type { MembersSort } from '@/lib/services/admin-progress-service'
 import { MembersListFilters } from '@/components/admin/progress/members-list-filters'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 interface PageProps {
   searchParams: Promise<{

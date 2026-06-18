@@ -20,7 +20,7 @@ interface ListCoursesOptions {
   limit: number
 }
 
-const DEFAULT_PAGE_SIZE = 20
+const DEFAULT_PAGE_SIZE = 10
 
 function buildWhere(opts: ListCoursesOptions): Prisma.CourseWhereInput {
   const { search, status, view = 'active' } = opts
