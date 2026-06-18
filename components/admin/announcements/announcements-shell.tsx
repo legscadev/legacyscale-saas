@@ -346,14 +346,14 @@ function getColumns(
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
               <Megaphone className="size-4 text-primary" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <Link
                 href={`/admin/announcements/${a.id}/edit`}
-                className="truncate text-sm font-semibold transition-colors hover:text-primary hover:underline underline-offset-2"
+                className="block truncate text-sm font-semibold transition-colors hover:text-primary hover:underline underline-offset-2"
               >
                 {a.title}
               </Link>
-              <p className="line-clamp-1 text-xs text-muted-foreground/80">
+              <p className="truncate text-xs text-muted-foreground/80">
                 {preview || 'No body yet.'}
               </p>
             </div>

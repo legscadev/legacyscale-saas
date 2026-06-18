@@ -34,7 +34,7 @@ export default async function UserAnnouncementsPage() {
           description="Check back later for updates from the team."
         />
       ) : (
-        <div className="mx-auto max-w-2xl space-y-4">
+        <div className="space-y-4">
           {announcements.map((announcement) => (
             <AnnouncementCard
               key={announcement.id}
