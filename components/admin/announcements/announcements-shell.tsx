@@ -346,7 +346,11 @@ function getColumns(
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
               <Megaphone className="size-4 text-primary" />
             </div>
-            <div className="min-w-0 flex-1">
+            {/* Hard max-width here is load-bearing: the DataTable uses
+                table-layout: auto, so without an inner cap the <td>
+                grows to fit a long body preview and pushes the
+                right-side columns off-screen on smaller viewports. */}
+            <div className="min-w-0 max-w-[28rem] flex-1">
               <Link
                 href={`/admin/announcements/${a.id}/edit`}
                 className="block truncate text-sm font-semibold transition-colors hover:text-primary hover:underline underline-offset-2"
