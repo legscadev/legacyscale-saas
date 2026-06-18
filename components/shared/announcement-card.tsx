@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
+import { cn, htmlToPlainText } from '@/lib/utils'
 import { BadgeDraft, BadgePublished } from './badge-status'
 
 interface AnnouncementCardProps {
@@ -51,7 +51,7 @@ export function AnnouncementCard({
       </CardHeader>
       <CardContent>
         <p className="line-clamp-3 text-sm text-muted-foreground">
-          {announcement.body}
+          {htmlToPlainText(announcement.body)}
         </p>
         <p className="mt-3 text-xs text-muted-foreground">
           {formatDistanceToNow(date, { addSuffix: true })}
