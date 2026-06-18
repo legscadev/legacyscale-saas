@@ -40,7 +40,7 @@ export const DEFAULT_QUERY_STATE: CoursesQueryState = {
   page: 1,
 }
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 interface CoursesShellProps {
   initialData: CoursesData

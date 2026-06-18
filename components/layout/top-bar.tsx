@@ -22,9 +22,18 @@ interface TopBarProps {
   user: ShellUser
   profileHref: string
   role: 'admin' | 'member'
+  /** Number of published announcements the current user hasn't
+   *  opened yet. Rendered as a numeric pill on the Bell when > 0. */
+  unreadAnnouncements?: number
 }
 
-export function TopBar({ onMenuClick, user, profileHref, role }: TopBarProps) {
+export function TopBar({
+  onMenuClick,
+  user,
+  profileHref,
+  role,
+  unreadAnnouncements = 0,
+}: TopBarProps) {
   const { collapsed, toggle } = useSidebar()
   const Icon = collapsed ? PanelLeftOpen : PanelLeftClose
   const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar'
@@ -153,7 +162,11 @@ export function TopBar({ onMenuClick, user, profileHref, role }: TopBarProps) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Announcements"
+                  aria-label={
+                    unreadAnnouncements > 0
+                      ? `Announcements (${unreadAnnouncements} unread)`
+                      : 'Announcements'
+                  }
                   className="relative"
                   render={
                     <Link
@@ -162,10 +175,22 @@ export function TopBar({ onMenuClick, user, profileHref, role }: TopBarProps) {
                   }
                 >
                   <Bell />
+                  {unreadAnnouncements > 0 ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground tabular-nums ring-2 ring-background"
+                    >
+                      {unreadAnnouncements > 9 ? '9+' : unreadAnnouncements}
+                    </span>
+                  ) : null}
                 </Button>
               }
             />
-            <TooltipContent side="bottom">Announcements</TooltipContent>
+            <TooltipContent side="bottom">
+              {unreadAnnouncements > 0
+                ? `Announcements · ${unreadAnnouncements} unread`
+                : 'Announcements'}
+            </TooltipContent>
           </Tooltip>
 
           <ThemeToggle />

@@ -1,0 +1,233 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Save } from 'lucide-react'
+import { toast } from 'sonner'
+import type { AnnouncementStatus } from '@prisma/client'
+
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { FormSection } from '@/components/shared'
+import { cn } from '@/lib/utils'
+
+export interface AnnouncementFormSubmitResult {
+  ok: boolean
+  id?: string
+  error?: string
+  fieldErrors?: Record<string, string[]>
+}
+
+export interface AnnouncementFormDefaults {
+  title?: string
+  body?: string | null
+  status?: AnnouncementStatus
+}
+
+interface AnnouncementFormProps {
+  mode: 'create' | 'edit'
+  defaults?: AnnouncementFormDefaults
+  submitLabel: string
+  onSubmit: (formData: FormData) => Promise<AnnouncementFormSubmitResult>
+  destructiveAction?: React.ReactNode
+}
+
+type FieldErrors = Partial<Record<string, string[]>>
+
+function RequiredMark() {
+  return (
+    <span aria-hidden="true" className="ml-0.5 text-destructive">
+      *
+    </span>
+  )
+}
+
+export function AnnouncementForm({
+  mode,
+  defaults,
+  submitLabel,
+  onSubmit,
+  destructiveAction,
+}: AnnouncementFormProps) {
+  const router = useRouter()
+
+  const [title, setTitle] = useState(defaults?.title ?? '')
+  const [body, setBody] = useState(defaults?.body ?? '')
+  const [status, setStatus] = useState<AnnouncementStatus>(
+    defaults?.status ?? 'DRAFT',
+  )
+
+  const [submitting, setSubmitting] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const [formError, setFormError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setFormError(null)
+    setFieldErrors({})
+
+    const trimmedTitle = title.trim()
+    const trimmedBody = body.trim()
+    const localErrors: FieldErrors = {}
+    if (!trimmedTitle) localErrors.title = ['Title is required']
+    else if (trimmedTitle.length > 200) localErrors.title = ['Title is too long']
+    if (!trimmedBody) localErrors.body = ['Body is required']
+
+    if (Object.keys(localErrors).length > 0) {
+      setFieldErrors(localErrors)
+      return
+    }
+
+    const formData = new FormData()
+    formData.set('title', trimmedTitle)
+    formData.set('body', trimmedBody)
+    formData.set('status', status)
+
+    setSubmitting(true)
+    try {
+      const result = await onSubmit(formData)
+      if (!result.ok) {
+        if (result.fieldErrors) setFieldErrors(result.fieldErrors)
+        if (result.error) setFormError(result.error)
+        return
+      }
+      toast.success(
+        mode === 'create' ? 'Announcement created' : 'Announcement updated',
+      )
+      router.push('/admin/announcements')
+    } catch (err) {
+      console.error(err)
+      setFormError('Network error — please try again')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-8" noValidate>
+      <FormSection title="Content" description="What members will see.">
+        <div className="space-y-2">
+          <Label htmlFor="announcement-title">
+            Title
+            <RequiredMark />
+          </Label>
+          <Input
+            id="announcement-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. New course just dropped"
+            disabled={submitting}
+            aria-invalid={!!fieldErrors.title}
+            aria-required="true"
+            autoFocus
+          />
+          {fieldErrors.title?.[0] && (
+            <p className="text-xs text-destructive" role="alert">
+              {fieldErrors.title[0]}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="announcement-body">
+            Body
+            <RequiredMark />
+          </Label>
+          <RichTextEditor
+            id="announcement-body"
+            value={body}
+            onChange={setBody}
+            placeholder="Write the announcement…"
+            disabled={submitting}
+          />
+          {fieldErrors.body?.[0] && (
+            <p className="text-xs text-destructive" role="alert">
+              {fieldErrors.body[0]}
+            </p>
+          )}
+        </div>
+      </FormSection>
+
+      <FormSection
+        title="Visibility"
+        description="Drafts stay admin-only. Publishing surfaces it to all members."
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          <StatusOption
+            active={status === 'DRAFT'}
+            title="Draft"
+            body="Save for now. Won't appear on the member side."
+            onClick={() => setStatus('DRAFT')}
+            disabled={submitting}
+          />
+          <StatusOption
+            active={status === 'PUBLISHED'}
+            title="Publish"
+            body="Goes live on the member dashboard immediately."
+            onClick={() => setStatus('PUBLISHED')}
+            disabled={submitting}
+          />
+        </div>
+      </FormSection>
+
+      {formError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {formError}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>{destructiveAction}</div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => router.push('/admin/announcements')}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            <Save />
+            {submitting ? 'Saving…' : submitLabel}
+          </Button>
+        </div>
+      </div>
+    </form>
+  )
+}
+
+function StatusOption({
+  active,
+  title,
+  body,
+  onClick,
+  disabled,
+}: {
+  active: boolean
+  title: string
+  body: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'flex flex-col gap-1 rounded-md border px-3 py-2.5 text-left transition-colors',
+        active
+          ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/40'
+          : 'border-border bg-muted/30 hover:border-foreground/20 hover:bg-muted/50',
+        disabled && 'cursor-not-allowed opacity-60',
+      )}
+      aria-pressed={active}
+    >
+      <span className="text-sm font-medium">{title}</span>
+      <span className="text-xs text-muted-foreground">{body}</span>
+    </button>
+  )
+}

@@ -1,30 +1,15 @@
-import { Megaphone, Plus } from 'lucide-react'
-import { PageHeader, EmptyState } from '@/components/shared'
-import { Button } from '@/components/ui/button'
+import { requireAdmin } from '@/lib/auth/get-user'
+import { AnnouncementsShell } from '@/components/admin/announcements/announcements-shell'
+import { fetchAnnouncements } from './actions'
 
-export default function AdminAnnouncementsPage() {
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Announcements"
-        description="Broadcast messages to members"
-      >
-        <Button>
-          <Plus className="h-4 w-4" />
-          New Announcement
-        </Button>
-      </PageHeader>
+export default async function AdminAnnouncementsPage() {
+  await requireAdmin()
+  const initialData = await fetchAnnouncements({
+    search: '',
+    status: null,
+    view: 'active',
+    page: 1,
+  })
 
-      <EmptyState
-        icon={Megaphone}
-        title="No announcements yet"
-        description="Create an announcement to communicate with your members."
-      >
-        <Button>
-          <Plus className="h-4 w-4" />
-          New Announcement
-        </Button>
-      </EmptyState>
-    </div>
-  )
+  return <AnnouncementsShell initialData={initialData} />
 }
