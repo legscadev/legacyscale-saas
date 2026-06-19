@@ -1,10 +1,17 @@
 import { Prisma, type AnnouncementStatus } from '@prisma/client'
+import { unstable_cache, updateTag } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
 import type {
   CreateAnnouncementInput,
   UpdateAnnouncementInput,
 } from '@/lib/validations/announcement'
+
+// Single tag that invalidates every cached unread-count read across
+// every user. Cheap blunt instrument: announcements change rarely
+// (admin authoring action), so wiping the whole cache on a create /
+// publish / delete is acceptable.
+export const UNREAD_COUNT_CACHE_TAG = 'announcement-unread-counts'
 
 export type AnnouncementView = 'active' | 'deleted'
 
@@ -52,6 +59,16 @@ const announcementListSelect = {
   createdAt: true,
   updatedAt: true,
   deletedAt: true,
+  createdBy: true,
+  createdByUser: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      avatarUrl: true,
+      role: true,
+    },
+  },
 } satisfies Prisma.AnnouncementSelect
 
 export interface ReadsBreakdown {
@@ -154,13 +171,17 @@ async function getAnnouncementById(id: string) {
   })
 }
 
-async function createAnnouncement(input: CreateAnnouncementInput) {
+async function createAnnouncement(
+  input: CreateAnnouncementInput,
+  createdBy: string | null,
+) {
   return prisma.announcement.create({
     data: {
       title: input.title,
       body: input.body,
       status: input.status,
       publishedAt: input.status === 'PUBLISHED' ? new Date() : null,
+      createdBy: createdBy ?? null,
     },
     select: announcementListSelect,
   })
@@ -217,19 +238,23 @@ async function restoreAnnouncement(id: string) {
 // seen — no extra round-trip to figure out which ones to insert.
 async function markAsRead(userId: string, announcementIds: string[]) {
   if (announcementIds.length === 0) return
-  await prisma.announcementRead.createMany({
+  const result = await prisma.announcementRead.createMany({
     data: announcementIds.map((announcementId) => ({
       userId,
       announcementId,
     })),
     skipDuplicates: true,
   })
+  // If anything actually got written, the user's unread count just
+  // dropped — wipe the cache so the Bell badge reflects it on the
+  // next page render instead of waiting for the 60s TTL.
+  if (result.count > 0) updateTag(UNREAD_COUNT_CACHE_TAG)
 }
 
 // Powers the unread-count badge on the top-bar Bell icon. Counts
 // published, non-deleted announcements the user hasn't opened yet.
 // Single round-trip — two parallel counts, subtract.
-async function getUnreadCount(userId: string): Promise<number> {
+async function fetchUnreadCount(userId: string): Promise<number> {
   const baseWhere = { status: 'PUBLISHED', deletedAt: null } as const
   const [total, read] = await Promise.all([
     prisma.announcement.count({ where: baseWhere }),
@@ -238,6 +263,49 @@ async function getUnreadCount(userId: string): Promise<number> {
     }),
   ])
   return Math.max(0, total - read)
+}
+
+// Cache the per-user unread count for 60s. The Bell badge is fetched
+// in BOTH the (user) and (admin) layouts — every page nav was firing
+// two DB round-trips before, and on the current iad1 ↔ Singapore
+// path each one costs ~250 ms. The cache key is the user id; the
+// shared tag UNREAD_COUNT_CACHE_TAG is wiped on any announcement
+// write so a freshly-published row bumps badges sooner than 60s.
+const getUnreadCount = unstable_cache(
+  (userId: string) => fetchUnreadCount(userId),
+  ['announcement-unread-count'],
+  { tags: [UNREAD_COUNT_CACHE_TAG], revalidate: 60 },
+)
+
+// Powers the admin "who's read this?" drill-down. Reads grouped by
+// role for the breakdown header + each user's display fields for the
+// rendered list. Pre-sorted by readAt desc so the modal shows the
+// most recent at top.
+async function getReaders(announcementId: string) {
+  const rows = await prisma.announcementRead.findMany({
+    where: { announcementId },
+    select: {
+      readAt: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true,
+          role: true,
+        },
+      },
+    },
+    orderBy: { readAt: 'desc' },
+  })
+  return rows.map((r) => ({
+    id: r.user.id,
+    name: r.user.name,
+    email: r.user.email,
+    avatarUrl: r.user.avatarUrl,
+    role: r.user.role,
+    readAt: r.readAt,
+  }))
 }
 
 export const announcementService = {
@@ -250,6 +318,7 @@ export const announcementService = {
   restore: restoreAnnouncement,
   markAsRead,
   getUnreadCount,
+  getReaders,
   defaultPageSize: DEFAULT_PAGE_SIZE,
 }
 
@@ -260,3 +329,4 @@ export type AnnouncementCounts = Awaited<ReturnType<typeof getCounts>>
 export type AnnouncementDetail = NonNullable<
   Awaited<ReturnType<typeof getAnnouncementById>>
 >
+export type AnnouncementReader = Awaited<ReturnType<typeof getReaders>>[number]

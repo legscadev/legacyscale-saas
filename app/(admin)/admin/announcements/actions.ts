@@ -1,19 +1,88 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import type { AnnouncementStatus } from '@prisma/client'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import {
   announcementService,
+  UNREAD_COUNT_CACHE_TAG,
   type AnnouncementCounts,
   type AnnouncementListItem,
+  type AnnouncementReader,
   type AnnouncementView,
 } from '@/lib/services/announcement-service'
 import {
+  BODY_TEXT_MAX,
   createAnnouncementSchema,
   updateAnnouncementSchema,
 } from '@/lib/validations/announcement'
+import { htmlToPlainText } from '@/lib/utils'
+import { prisma } from '@/lib/prisma'
+import { sendAnnouncementEmail } from '@/lib/resend'
+
+// Best-effort email blast to every active member. Called only on
+// FIRST publish (create with status=PUBLISHED, or edit transition
+// DRAFT → PUBLISHED) and only when the admin opted in via the
+// "Send email blast" checkbox.
+//
+// The Resend template is plain-text — we strip the TipTap HTML
+// before sending so the email doesn't show literal markup. Errors
+// are logged but never bubble up so a Resend hiccup can't fail the
+// underlying create / update action.
+async function blastAnnouncementEmail(announcement: {
+  id: string
+  title: string
+  body: string
+}) {
+  try {
+    const members = await prisma.user.findMany({
+      where: { role: 'MEMBER', isActive: true, deletedAt: null },
+      select: { email: true },
+    })
+    const recipients = members.map((m) => m.email)
+    if (recipients.length === 0) return
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    await sendAnnouncementEmail(
+      recipients,
+      announcement.title,
+      htmlToPlainText(announcement.body),
+      `${appUrl}/announcements/${announcement.id}`,
+    )
+  } catch (err) {
+    console.error('Announcement email blast failed:', err)
+  }
+}
+
+// Wipe the per-page caches the announcements feed lives in. Called
+// after any write that could change what shows up there or change
+// the Bell badge.
+function revalidateAnnouncements(announcementId?: string) {
+  revalidatePath('/admin/announcements')
+  revalidatePath('/announcements')
+  if (announcementId) {
+    revalidatePath(`/admin/announcements/${announcementId}/edit`)
+    revalidatePath(`/announcements/${announcementId}`)
+  }
+  updateTag(UNREAD_COUNT_CACHE_TAG)
+}
+
+// Visible-text length cap applied AFTER HTML strip so a bulky
+// formatted message doesn't trip the byte-level cap in zod.
+function validateBodyLength(
+  body: unknown,
+): { ok: true } | { fieldErrors: Record<string, string[]> } {
+  if (typeof body !== 'string') return { ok: true }
+  if (htmlToPlainText(body).length > BODY_TEXT_MAX) {
+    return {
+      fieldErrors: {
+        body: [`Body is too long (${BODY_TEXT_MAX} character limit)`],
+      },
+    }
+  }
+  return { ok: true }
+}
 
 export interface AnnouncementsQueryState {
   search: string
@@ -71,11 +140,15 @@ export interface CreateAnnouncementResult {
 export async function createAnnouncementAction(
   formData: FormData,
 ): Promise<CreateAnnouncementResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
+
+  const rawBody = (formData.get('body') as string) ?? ''
+  const bodyCheck = validateBodyLength(rawBody)
+  if ('fieldErrors' in bodyCheck) return { ok: false, fieldErrors: bodyCheck.fieldErrors }
 
   const parsed = createAnnouncementSchema.safeParse({
     title: formData.get('title') ?? '',
-    body: (formData.get('body') as string) ?? '',
+    body: rawBody,
     status: (formData.get('status') as string) || 'DRAFT',
   })
 
@@ -89,9 +162,17 @@ export async function createAnnouncementAction(
     return { ok: false, fieldErrors }
   }
 
+  const notifyEmail = formData.get('notifyEmail') === '1'
+
   try {
-    const announcement = await announcementService.create(parsed.data)
-    revalidatePath('/admin/announcements')
+    const announcement = await announcementService.create(parsed.data, admin.id)
+    // The author counts as having "read" what they wrote — keeps
+    // their own Bell badge from lighting up on a fresh publish.
+    if (announcement.status === 'PUBLISHED') {
+      await announcementService.markAsRead(admin.id, [announcement.id])
+      if (notifyEmail) await blastAnnouncementEmail(announcement)
+    }
+    revalidateAnnouncements(announcement.id)
     return { ok: true, id: announcement.id }
   } catch (err) {
     console.error('Announcement create failed:', err)
@@ -113,7 +194,7 @@ export async function updateAnnouncementAction(
   announcementId: string,
   formData: FormData,
 ): Promise<UpdateAnnouncementResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   // Only forward fields the form actually sent so partial saves don't
   // get tripped up by validation on untouched fields.
@@ -121,6 +202,11 @@ export async function updateAnnouncementAction(
   if (formData.has('title')) input.title = formData.get('title')
   if (formData.has('body')) input.body = formData.get('body')
   if (formData.has('status')) input.status = formData.get('status')
+
+  if (typeof input.body === 'string') {
+    const bodyCheck = validateBodyLength(input.body)
+    if ('fieldErrors' in bodyCheck) return { ok: false, fieldErrors: bodyCheck.fieldErrors }
+  }
 
   const parsed = updateAnnouncementSchema.safeParse(input)
   if (!parsed.success) {
@@ -133,13 +219,32 @@ export async function updateAnnouncementAction(
     return { ok: false, fieldErrors }
   }
 
+  const notifyEmail = formData.get('notifyEmail') === '1'
+
   try {
+    // Check the prior publish state BEFORE the update so we can
+    // tell if this edit is the FIRST publish — that's the only
+    // transition that should fire an email blast.
+    const before = await announcementService.getById(announcementId)
+    const wasPublishedBefore = !!before?.publishedAt
+
     const updated = await announcementService.update(announcementId, parsed.data)
     if (!updated) {
       return { ok: false, error: 'Announcement not found' }
     }
-    revalidatePath('/admin/announcements')
-    revalidatePath(`/admin/announcements/${announcementId}/edit`)
+    // Author counts as having "read" the row they just published,
+    // including the first DRAFT → PUBLISHED transition on edit.
+    if (updated.status === 'PUBLISHED') {
+      await announcementService.markAsRead(admin.id, [announcementId])
+      if (notifyEmail && !wasPublishedBefore) {
+        await blastAnnouncementEmail({
+          id: updated.id,
+          title: updated.title,
+          body: updated.body,
+        })
+      }
+    }
+    revalidateAnnouncements(announcementId)
     return { ok: true }
   } catch (err) {
     console.error('Announcement update failed:', err)
@@ -162,10 +267,41 @@ export async function softDeleteAnnouncementAction(
   await requireAdmin()
   try {
     await announcementService.softDelete(announcementId)
-    revalidatePath('/admin/announcements')
+    revalidateAnnouncements(announcementId)
     return { ok: true }
   } catch (err) {
     console.error('Announcement soft-delete failed:', err)
     return { ok: false, error: 'Could not delete announcement' }
+  }
+}
+
+// Powers the 5-second "Undo" toast on the admin list. Restores a
+// freshly soft-deleted row by clearing deletedAt.
+export async function restoreAnnouncementAction(
+  announcementId: string,
+): Promise<SimpleResult> {
+  await requireAdmin()
+  try {
+    await announcementService.restore(announcementId)
+    revalidateAnnouncements(announcementId)
+    return { ok: true }
+  } catch (err) {
+    console.error('Announcement restore failed:', err)
+    return { ok: false, error: 'Could not restore announcement' }
+  }
+}
+
+// Loader for the reads drill-down modal. Returns each user who has
+// opened the announcement plus their role + readAt timestamp.
+export async function getAnnouncementReadersAction(
+  announcementId: string,
+): Promise<{ ok: true; readers: AnnouncementReader[] } | { ok: false; error: string }> {
+  await requireAdmin()
+  try {
+    const readers = await announcementService.getReaders(announcementId)
+    return { ok: true, readers }
+  } catch (err) {
+    console.error('getReaders failed:', err)
+    return { ok: false, error: 'Could not load readers' }
   }
 }

@@ -9,6 +9,11 @@ export default async function UserAnnouncementsPage() {
   const announcements = await prisma.announcement.findMany({
     where: { status: 'PUBLISHED', deletedAt: null },
     orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+    include: {
+      createdByUser: {
+        select: { id: true, name: true, email: true, avatarUrl: true },
+      },
+    },
   })
   // Auto-mark every announcement on this page as read — the cards
   // show the full body inline so a page visit IS the read event.
@@ -38,6 +43,7 @@ export default async function UserAnnouncementsPage() {
           {announcements.map((announcement) => (
             <AnnouncementCard
               key={announcement.id}
+              href={`/announcements/${announcement.id}`}
               announcement={{
                 id: announcement.id,
                 title: announcement.title,
@@ -45,6 +51,13 @@ export default async function UserAnnouncementsPage() {
                 status: announcement.status,
                 publishedAt: announcement.publishedAt,
                 createdAt: announcement.createdAt,
+                author: announcement.createdByUser
+                  ? {
+                      name: announcement.createdByUser.name,
+                      email: announcement.createdByUser.email,
+                      avatarUrl: announcement.createdByUser.avatarUrl,
+                    }
+                  : null,
               }}
             />
           ))}

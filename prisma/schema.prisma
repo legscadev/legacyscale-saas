@@ -94,6 +94,7 @@ model User {
   quizAttempts      QuizAttempt[]
   notes             Note[]
   announcementReads AnnouncementRead[]
+  announcementsAuthored Announcement[] @relation("AnnouncementAuthor")
   invites           Invite[]
 
   @@index([role])
@@ -398,12 +399,17 @@ model Announcement {
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
   deletedAt   DateTime?          @map("deleted_at")
+  // Author. Nullable + onDelete: SetNull so deleting an admin
+  // doesn't cascade away every announcement they wrote.
+  createdBy String? @map("created_by")
 
   // Relations
-  reads AnnouncementRead[]
+  reads        AnnouncementRead[]
+  createdByUser User?             @relation("AnnouncementAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([deletedAt])
+  @@index([createdBy])
   @@map("announcements")
 }
 

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 import { Megaphone } from 'lucide-react'
 import {
@@ -17,7 +18,16 @@ interface AnnouncementCardProps {
     status: 'DRAFT' | 'PUBLISHED'
     publishedAt?: Date | null
     createdAt: Date
+    author?: {
+      name: string | null
+      email: string
+      avatarUrl: string | null
+    } | null
   }
+  /** Detail-page link target. When set, the title becomes a link to
+   *  it. Member feed passes /announcements/[id]; the detail page
+   *  itself omits this. */
+  href?: string
   className?: string
 }
 
@@ -31,11 +41,35 @@ function formatPostedDate(date: Date): string {
   }).format(date)
 }
 
+function authorInitials(author: { name: string | null; email: string }): string {
+  const source = (author.name?.trim() || author.email).trim()
+  const parts = source.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+}
+
 export function AnnouncementCard({
   announcement,
+  href,
   className,
 }: AnnouncementCardProps) {
   const date = announcement.publishedAt ?? announcement.createdAt
+  const author = announcement.author ?? null
+  const authorName = author?.name?.trim() || author?.email || null
+
+  const titleNode = href ? (
+    <Link
+      href={href}
+      className="truncate text-base font-semibold leading-tight transition-colors hover:text-primary hover:underline underline-offset-2"
+    >
+      {announcement.title}
+    </Link>
+  ) : (
+    <CardTitle className="truncate text-base leading-tight">
+      {announcement.title}
+    </CardTitle>
+  )
 
   return (
     <Card
@@ -46,17 +80,34 @@ export function AnnouncementCard({
     >
       <CardHeader className="flex flex-row items-start justify-between gap-3 border-b bg-muted/30 px-5 py-3.5">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
-            <Megaphone className="size-4 text-primary" />
-          </div>
+          {author ? (
+            <div
+              className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/10 text-xs font-semibold text-primary"
+              aria-hidden="true"
+            >
+              {author.avatarUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={author.avatarUrl}
+                  alt=""
+                  className="size-full object-cover"
+                />
+              ) : (
+                authorInitials(author)
+              )}
+            </div>
+          ) : (
+            <div className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10">
+              <Megaphone className="size-4 text-primary" />
+            </div>
+          )}
           <div className="min-w-0">
-            <CardTitle className="truncate text-base leading-tight">
-              {announcement.title}
-            </CardTitle>
+            {titleNode}
             <p
               className="mt-0.5 text-xs text-muted-foreground"
               suppressHydrationWarning
             >
+              {authorName ? `${authorName} · ` : ''}
               Posted {formatPostedDate(date)}
             </p>
           </div>

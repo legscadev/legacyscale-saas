@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import type { AnnouncementStatus } from '@prisma/client'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
@@ -58,6 +59,9 @@ export function AnnouncementForm({
   const [status, setStatus] = useState<AnnouncementStatus>(
     defaults?.status ?? 'DRAFT',
   )
+  // Email blast is opt-in per announcement so an admin can't ping
+  // every member by accident. Disabled while the form is in Draft.
+  const [notifyEmail, setNotifyEmail] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -84,6 +88,9 @@ export function AnnouncementForm({
     formData.set('title', trimmedTitle)
     formData.set('body', trimmedBody)
     formData.set('status', status)
+    if (notifyEmail && status === 'PUBLISHED') {
+      formData.set('notifyEmail', '1')
+    }
 
     setSubmitting(true)
     try {
@@ -154,21 +161,46 @@ export function AnnouncementForm({
         title="Visibility"
         description="Drafts stay admin-only. Publishing surfaces it to all members."
       >
-        <div className="grid gap-2 sm:grid-cols-2">
-          <StatusOption
-            active={status === 'DRAFT'}
-            title="Draft"
-            body="Save for now. Won't appear on the member side."
-            onClick={() => setStatus('DRAFT')}
-            disabled={submitting}
-          />
-          <StatusOption
-            active={status === 'PUBLISHED'}
-            title="Publish"
-            body="Goes live on the member dashboard immediately."
-            onClick={() => setStatus('PUBLISHED')}
-            disabled={submitting}
-          />
+        <div className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <StatusOption
+              active={status === 'DRAFT'}
+              title="Draft"
+              body="Save for now. Won't appear on the member side."
+              onClick={() => setStatus('DRAFT')}
+              disabled={submitting}
+            />
+            <StatusOption
+              active={status === 'PUBLISHED'}
+              title="Publish"
+              body="Goes live on the member dashboard immediately."
+              onClick={() => setStatus('PUBLISHED')}
+              disabled={submitting}
+            />
+          </div>
+          <label
+            className={cn(
+              'flex items-start gap-2.5 rounded-md border bg-muted/30 p-3 text-sm',
+              status === 'PUBLISHED'
+                ? 'cursor-pointer'
+                : 'cursor-not-allowed opacity-60',
+            )}
+          >
+            <Checkbox
+              checked={notifyEmail}
+              onCheckedChange={(v) => setNotifyEmail(v === true)}
+              disabled={status !== 'PUBLISHED' || submitting}
+            />
+            <div className="space-y-0.5">
+              <p className="font-medium leading-none">
+                Send email blast to all active members
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Fires once on first publish. Only enabled while
+                "Publish" is selected.
+              </p>
+            </div>
+          </label>
         </div>
       </FormSection>
 
