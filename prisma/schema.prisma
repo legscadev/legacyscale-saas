@@ -53,7 +53,24 @@ enum QuestionType {
 
 enum AnnouncementStatus {
   DRAFT
+  SCHEDULED
   PUBLISHED
+}
+
+enum AnnouncementCategory {
+  GENERAL
+  OFFICE_HOURS
+  COURSE_UPDATE
+  IMPORTANT
+}
+
+enum AnnouncementAuditAction {
+  CREATED
+  UPDATED
+  PUBLISHED
+  UNPUBLISHED
+  DELETED
+  RESTORED
 }
 
 enum EnrollmentStatus {
@@ -84,6 +101,15 @@ model User {
   isActive      Boolean   @default(true) @map("is_active")
   emailVerified Boolean   @default(false) @map("email_verified")
   lastLoginAt   DateTime? @map("last_login_at")
+  /** When the member last opened the announcements feed. Powers the
+   *  "New since your last visit" divider; updated server-side when
+   *  /announcements renders. */
+  announcementsLastSeenAt DateTime? @map("announcements_last_seen_at")
+  /** Per-user notification opt-outs. Both default true so the
+   *  current behaviour is preserved; members can disable from a
+   *  preferences page. */
+  notifyAnnouncementEmail   Boolean @default(true) @map("notify_announcement_email")
+  notifyAnnouncementDiscord Boolean @default(true) @map("notify_announcement_discord")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
@@ -93,8 +119,11 @@ model User {
   lessonProgress    LessonProgress[]
   quizAttempts      QuizAttempt[]
   notes             Note[]
-  announcementReads AnnouncementRead[]
-  announcementsAuthored Announcement[] @relation("AnnouncementAuthor")
+  announcementReads     AnnouncementRead[]
+  announcementsAuthored Announcement[]         @relation("AnnouncementAuthor")
+  announcementComments  AnnouncementComment[]
+  announcementReactions AnnouncementReaction[]
+  announcementAuditLogs AnnouncementAuditLog[]
   invites           Invite[]
 
   @@index([role])
@@ -391,25 +420,41 @@ model Note {
 // ============================================
 
 model Announcement {
-  id          String             @id @default(uuid())
+  id          String               @id @default(uuid())
   title       String
   body        String
-  status      AnnouncementStatus @default(DRAFT)
-  publishedAt DateTime?          @map("published_at")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  deletedAt   DateTime?          @map("deleted_at")
+  status      AnnouncementStatus   @default(DRAFT)
+  category    AnnouncementCategory @default(GENERAL)
+  publishedAt DateTime?            @map("published_at")
+  /** When set, a cron flips status to PUBLISHED at or after this
+   *  time. Cleared when the row is actually published. */
+  scheduledAt DateTime?            @map("scheduled_at")
+  /** Hidden from the member feed once set. Reads-analytics rows
+   *  stay around — the row itself is preserved. */
+  archivedAt  DateTime?            @map("archived_at")
+  /** Sticky pin keeps this row above un-pinned rows in both the
+   *  member feed and the admin list, regardless of publishedAt. */
+  pinned      Boolean              @default(false)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  deletedAt   DateTime?            @map("deleted_at")
   // Author. Nullable + onDelete: SetNull so deleting an admin
   // doesn't cascade away every announcement they wrote.
   createdBy String? @map("created_by")
 
   // Relations
-  reads        AnnouncementRead[]
-  createdByUser User?             @relation("AnnouncementAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  reads         AnnouncementRead[]
+  comments      AnnouncementComment[]
+  reactions     AnnouncementReaction[]
+  auditLogs     AnnouncementAuditLog[]
+  createdByUser User?                  @relation("AnnouncementAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([deletedAt])
   @@index([createdBy])
+  @@index([archivedAt])
+  @@index([scheduledAt])
+  @@index([pinned])
   @@map("announcements")
 }
 
@@ -426,4 +471,67 @@ model AnnouncementRead {
   @@unique([userId, announcementId])
   @@index([userId])
   @@map("announcement_reads")
+}
+
+model AnnouncementComment {
+  id             String    @id @default(uuid())
+  announcementId String    @map("announcement_id")
+  userId         String    @map("user_id")
+  body           String
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  /** Soft delete so admins can audit who deleted what. */
+  deletedAt      DateTime? @map("deleted_at")
+
+  // Relations
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([announcementId, createdAt])
+  @@index([userId])
+  @@index([deletedAt])
+  @@map("announcement_comments")
+}
+
+model AnnouncementReaction {
+  id             String   @id @default(uuid())
+  announcementId String   @map("announcement_id")
+  userId         String   @map("user_id")
+  /** Emoji literal, e.g. "👍". One emoji per row, multiple rows per
+   *  user allowed (you can react with multiple emojis), but each
+   *  (announcement, user, emoji) triple is unique so the same user
+   *  can't double-react with the same emoji. */
+  emoji          String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId, emoji])
+  @@index([announcementId])
+  @@index([userId])
+  @@map("announcement_reactions")
+}
+
+model AnnouncementAuditLog {
+  id             String                  @id @default(uuid())
+  announcementId String                  @map("announcement_id")
+  /** Actor. Nullable + SetNull so deleting an admin doesn't wipe
+   *  the audit trail. */
+  userId         String?                 @map("user_id")
+  action         AnnouncementAuditAction
+  /** Optional payload — e.g. the diff or a snapshot of what changed.
+   *  Stored as JSON so future actions can attach richer context
+   *  without a schema migration. */
+  metadata       Json?
+  createdAt      DateTime                @default(now()) @map("created_at")
+
+  // Relations
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([announcementId, createdAt])
+  @@index([userId])
+  @@map("announcement_audit_logs")
 }

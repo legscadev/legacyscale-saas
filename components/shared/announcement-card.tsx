@@ -8,14 +8,14 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { BadgeDraft, BadgePublished } from './badge-status'
+import { BadgeDraft, BadgePublished, BadgeScheduled } from './badge-status'
 
 interface AnnouncementCardProps {
   announcement: {
     id: string
     title: string
     body: string
-    status: 'DRAFT' | 'PUBLISHED'
+    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED'
     publishedAt?: Date | null
     createdAt: Date
     author?: {
@@ -139,6 +139,8 @@ export function AnnouncementCard({
         </div>
         {announcement.status === 'PUBLISHED' ? (
           <BadgePublished />
+        ) : announcement.status === 'SCHEDULED' ? (
+          <BadgeScheduled />
         ) : (
           <BadgeDraft />
         )}
