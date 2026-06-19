@@ -20,6 +20,30 @@ import {
 import { htmlToPlainText } from '@/lib/utils'
 import { prisma } from '@/lib/prisma'
 import { sendAnnouncementEmail } from '@/lib/resend'
+import { postAnnouncementToDiscord } from '@/lib/discord'
+
+function buildAnnouncementUrl(id: string): string {
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  return `${base}/announcements/${id}`
+}
+
+// Best-effort Discord crosspost. Always swallows errors so a webhook
+// hiccup never breaks the underlying create / update.
+async function discordCrossPost(
+  announcement: { id: string; title: string; body: string },
+  mentionEveryone: boolean,
+) {
+  try {
+    await postAnnouncementToDiscord({
+      title: announcement.title,
+      bodyPreview: htmlToPlainText(announcement.body),
+      viewUrl: buildAnnouncementUrl(announcement.id),
+      mentionEveryone,
+    })
+  } catch (err) {
+    console.error('Discord crosspost failed:', err)
+  }
+}
 
 // Best-effort email blast to every active member. Called only on
 // FIRST publish (create with status=PUBLISHED, or edit transition
@@ -42,13 +66,11 @@ async function blastAnnouncementEmail(announcement: {
     })
     const recipients = members.map((m) => m.email)
     if (recipients.length === 0) return
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
     await sendAnnouncementEmail(
       recipients,
       announcement.title,
       htmlToPlainText(announcement.body),
-      `${appUrl}/announcements/${announcement.id}`,
+      buildAnnouncementUrl(announcement.id),
     )
   } catch (err) {
     console.error('Announcement email blast failed:', err)
@@ -163,6 +185,8 @@ export async function createAnnouncementAction(
   }
 
   const notifyEmail = formData.get('notifyEmail') === '1'
+  const notifyDiscord = formData.get('notifyDiscord') === '1'
+  const mentionEveryone = formData.get('discordMentionEveryone') === '1'
 
   try {
     const announcement = await announcementService.create(parsed.data, admin.id)
@@ -171,6 +195,9 @@ export async function createAnnouncementAction(
     if (announcement.status === 'PUBLISHED') {
       await announcementService.markAsRead(admin.id, [announcement.id])
       if (notifyEmail) await blastAnnouncementEmail(announcement)
+      if (notifyDiscord) {
+        await discordCrossPost(announcement, mentionEveryone)
+      }
     }
     revalidateAnnouncements(announcement.id)
     return { ok: true, id: announcement.id }
@@ -220,11 +247,13 @@ export async function updateAnnouncementAction(
   }
 
   const notifyEmail = formData.get('notifyEmail') === '1'
+  const notifyDiscord = formData.get('notifyDiscord') === '1'
+  const mentionEveryone = formData.get('discordMentionEveryone') === '1'
 
   try {
     // Check the prior publish state BEFORE the update so we can
     // tell if this edit is the FIRST publish — that's the only
-    // transition that should fire an email blast.
+    // transition that should fire broadcast side-effects.
     const before = await announcementService.getById(announcementId)
     const wasPublishedBefore = !!before?.publishedAt
 
@@ -236,12 +265,16 @@ export async function updateAnnouncementAction(
     // including the first DRAFT → PUBLISHED transition on edit.
     if (updated.status === 'PUBLISHED') {
       await announcementService.markAsRead(admin.id, [announcementId])
+      const payload = {
+        id: updated.id,
+        title: updated.title,
+        body: updated.body,
+      }
       if (notifyEmail && !wasPublishedBefore) {
-        await blastAnnouncementEmail({
-          id: updated.id,
-          title: updated.title,
-          body: updated.body,
-        })
+        await blastAnnouncementEmail(payload)
+      }
+      if (notifyDiscord && !wasPublishedBefore) {
+        await discordCrossPost(payload, mentionEveryone)
       }
     }
     revalidateAnnouncements(announcementId)

@@ -52,6 +52,7 @@ export default async function AnnouncementDetailPage({
                 name: announcement.createdByUser.name,
                 email: announcement.createdByUser.email,
                 avatarUrl: announcement.createdByUser.avatarUrl,
+                role: announcement.createdByUser.role,
               }
             : null,
         }}

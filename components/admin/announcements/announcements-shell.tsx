@@ -349,6 +349,8 @@ function getColumns(
         const preview = htmlToPlainText(a.body)
         const author = a.createdByUser
         const authorName = author?.name?.trim() || author?.email || null
+        const role = author?.role
+        const roleLabel = role === 'ADMIN' ? 'Admin' : role === 'TEAM' ? 'Team' : null
         return (
           <div className="flex items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -365,12 +367,19 @@ function getColumns(
               >
                 {a.title}
               </Link>
-              <p className="truncate text-xs text-muted-foreground/80">
+              <p className="flex items-center gap-1 truncate text-xs text-muted-foreground/80">
                 {authorName ? (
-                  <span className="text-muted-foreground">{authorName}</span>
+                  <>
+                    <span className="text-muted-foreground">{authorName}</span>
+                    {roleLabel ? (
+                      <span className="inline-flex h-3.5 items-center rounded-full bg-primary/10 px-1 text-[9px] font-semibold uppercase tracking-wider text-primary">
+                        {roleLabel}
+                      </span>
+                    ) : null}
+                    <span>·</span>
+                  </>
                 ) : null}
-                {authorName ? ' · ' : ''}
-                {preview || 'No body yet.'}
+                <span className="truncate">{preview || 'No body yet.'}</span>
               </p>
             </div>
           </div>

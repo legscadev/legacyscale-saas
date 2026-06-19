@@ -22,6 +22,7 @@ interface AnnouncementCardProps {
       name: string | null
       email: string
       avatarUrl: string | null
+      role?: 'ADMIN' | 'TEAM' | 'MEMBER' | null
     } | null
   }
   /** Detail-page link target. When set, the title becomes a link to
@@ -30,6 +31,19 @@ interface AnnouncementCardProps {
   href?: string
   className?: string
 }
+
+type AuthorRole = NonNullable<
+  NonNullable<AnnouncementCardProps['announcement']['author']>['role']
+>
+
+function roleLabel(role: AuthorRole | null | undefined): string | null {
+  if (role === 'ADMIN') return 'Admin'
+  if (role === 'TEAM') return 'Team'
+  return null
+}
+
+const ROLE_BADGE_CLASS =
+  'inline-flex h-4 items-center rounded-full bg-primary/10 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary'
 
 function formatPostedDate(date: Date): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -104,11 +118,22 @@ export function AnnouncementCard({
           <div className="min-w-0">
             {titleNode}
             <p
-              className="mt-0.5 text-xs text-muted-foreground"
+              className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
               suppressHydrationWarning
             >
-              {authorName ? `${authorName} · ` : ''}
-              Posted {formatPostedDate(date)}
+              {authorName ? (
+                <>
+                  <span>{authorName}</span>
+                  {(() => {
+                    const label = roleLabel(author?.role)
+                    return label ? (
+                      <span className={ROLE_BADGE_CLASS}>{label}</span>
+                    ) : null
+                  })()}
+                  <span>·</span>
+                </>
+              ) : null}
+              <span>Posted {formatPostedDate(date)}</span>
             </p>
           </div>
         </div>

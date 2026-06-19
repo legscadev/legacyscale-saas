@@ -62,6 +62,11 @@ export function AnnouncementForm({
   // Email blast is opt-in per announcement so an admin can't ping
   // every member by accident. Disabled while the form is in Draft.
   const [notifyEmail, setNotifyEmail] = useState(false)
+  // Discord crosspost is opt-in too. mentionEveryone defaults off so
+  // the checkbox isn't a footgun — the admin has to deliberately opt
+  // into @everyone-ing the whole server.
+  const [notifyDiscord, setNotifyDiscord] = useState(false)
+  const [discordMentionEveryone, setDiscordMentionEveryone] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -90,6 +95,12 @@ export function AnnouncementForm({
     formData.set('status', status)
     if (notifyEmail && status === 'PUBLISHED') {
       formData.set('notifyEmail', '1')
+    }
+    if (notifyDiscord && status === 'PUBLISHED') {
+      formData.set('notifyDiscord', '1')
+      if (discordMentionEveryone) {
+        formData.set('discordMentionEveryone', '1')
+      }
     }
 
     setSubmitting(true)
@@ -201,6 +212,57 @@ export function AnnouncementForm({
               </p>
             </div>
           </label>
+
+          <div
+            className={cn(
+              'rounded-md border bg-muted/30',
+              status !== 'PUBLISHED' && 'opacity-60',
+            )}
+          >
+            <label
+              className={cn(
+                'flex items-start gap-2.5 p-3 text-sm',
+                status === 'PUBLISHED'
+                  ? 'cursor-pointer'
+                  : 'cursor-not-allowed',
+              )}
+            >
+              <Checkbox
+                checked={notifyDiscord}
+                onCheckedChange={(v) => setNotifyDiscord(v === true)}
+                disabled={status !== 'PUBLISHED' || submitting}
+              />
+              <div className="space-y-0.5">
+                <p className="font-medium leading-none">
+                  Crosspost to Discord
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Posts an embed with the title, a preview, and a
+                  "Read in Kondense" link. Fires once on first publish.
+                </p>
+              </div>
+            </label>
+            {notifyDiscord && status === 'PUBLISHED' ? (
+              <label className="flex cursor-pointer items-start gap-2.5 border-t px-3 py-2.5 text-sm">
+                <Checkbox
+                  checked={discordMentionEveryone}
+                  onCheckedChange={(v) =>
+                    setDiscordMentionEveryone(v === true)
+                  }
+                  disabled={submitting}
+                />
+                <div className="space-y-0.5">
+                  <p className="font-medium leading-none">
+                    Also @everyone
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Pings the whole Discord server. Requires the
+                    webhook to have "Mention @everyone" permission.
+                  </p>
+                </div>
+              </label>
+            ) : null}
+          </div>
         </div>
       </FormSection>
 

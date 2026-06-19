@@ -11,7 +11,7 @@ export default async function UserAnnouncementsPage() {
     orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
     include: {
       createdByUser: {
-        select: { id: true, name: true, email: true, avatarUrl: true },
+        select: { id: true, name: true, email: true, avatarUrl: true, role: true },
       },
     },
   })
@@ -56,6 +56,7 @@ export default async function UserAnnouncementsPage() {
                       name: announcement.createdByUser.name,
                       email: announcement.createdByUser.email,
                       avatarUrl: announcement.createdByUser.avatarUrl,
+                      role: announcement.createdByUser.role,
                     }
                   : null,
               }}
