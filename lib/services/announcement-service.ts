@@ -1,4 +1,9 @@
-import { Prisma, type AnnouncementStatus } from '@prisma/client'
+import {
+  Prisma,
+  type AnnouncementAuditAction,
+  type AnnouncementCategory,
+  type AnnouncementStatus,
+} from '@prisma/client'
 import { unstable_cache, updateTag } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
@@ -18,9 +23,13 @@ export type AnnouncementView = 'active' | 'deleted'
 interface ListAnnouncementsOptions {
   search?: string
   status?: AnnouncementStatus | null
+  category?: AnnouncementCategory | null
   view?: AnnouncementView
   page: number
   limit: number
+  /** Restrict to non-archived rows. Member-side defaults to true;
+   *  admin list keeps archived rows visible for management. */
+  excludeArchived?: boolean
 }
 
 const DEFAULT_PAGE_SIZE = 10
@@ -28,13 +37,15 @@ const DEFAULT_PAGE_SIZE = 10
 function buildWhere(
   opts: ListAnnouncementsOptions,
 ): Prisma.AnnouncementWhereInput {
-  const { search, status, view = 'active' } = opts
+  const { search, status, category, view = 'active', excludeArchived } = opts
 
   const baseWhere: Prisma.AnnouncementWhereInput =
     view === 'deleted' ? { deletedAt: { not: null } } : { deletedAt: null }
 
   const filters: Prisma.AnnouncementWhereInput = {}
   if (status) filters.status = status
+  if (category) filters.category = category
+  if (excludeArchived) filters.archivedAt = null
 
   const searchWhere: Prisma.AnnouncementWhereInput | undefined = search?.trim()
     ? {
@@ -55,6 +66,10 @@ const announcementListSelect = {
   title: true,
   body: true,
   status: true,
+  category: true,
+  pinned: true,
+  scheduledAt: true,
+  archivedAt: true,
   publishedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -68,6 +83,9 @@ const announcementListSelect = {
       avatarUrl: true,
       role: true,
     },
+  },
+  reactions: {
+    select: { emoji: true, userId: true },
   },
 } satisfies Prisma.AnnouncementSelect
 
@@ -88,9 +106,11 @@ async function listAnnouncements(options: ListAnnouncementsOptions) {
       where,
       skip,
       take: limit,
-      // Drafts (no publishedAt) sink to the bottom; tie-break on
-      // createdAt so the most recently authored draft floats up first.
+      // Pinned rows always sort first regardless of date. Drafts (no
+      // publishedAt) sink to the bottom; tie-break on createdAt so
+      // the most recently authored draft floats up first.
       orderBy: [
+        { pinned: 'desc' },
         { publishedAt: { sort: 'desc', nulls: 'last' } },
         { createdAt: 'desc' },
       ],
@@ -180,6 +200,11 @@ async function createAnnouncement(
       title: input.title,
       body: input.body,
       status: input.status,
+      category: input.category ?? 'GENERAL',
+      pinned: input.pinned ?? false,
+      // SCHEDULED rows carry a scheduledAt; PUBLISHED rows carry a
+      // publishedAt and never a scheduledAt. DRAFT carries neither.
+      scheduledAt: input.status === 'SCHEDULED' ? input.scheduledAt ?? null : null,
       publishedAt: input.status === 'PUBLISHED' ? new Date() : null,
       createdBy: createdBy ?? null,
     },
@@ -202,11 +227,23 @@ async function updateAnnouncement(id: string, input: UpdateAnnouncementInput) {
   const data: Prisma.AnnouncementUpdateInput = {}
   if (input.title !== undefined) data.title = input.title
   if (input.body !== undefined) data.body = input.body
+  if (input.category !== undefined) data.category = input.category
+  if (input.pinned !== undefined) data.pinned = input.pinned
+  if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt
   if (input.status !== undefined) {
     data.status = input.status
     if (input.status === 'PUBLISHED' && existing.publishedAt === null) {
       data.publishedAt = new Date()
     }
+    // Going SCHEDULED clears any prior publishedAt only on a never-
+    // published row (keeps the original stamp through DRAFT round-
+    // trips, matches existing publishedAt-preservation logic).
+    if (input.status === 'SCHEDULED' && existing.publishedAt === null) {
+      data.publishedAt = null
+    }
+    // Going DRAFT / PUBLISHED clears scheduledAt — only SCHEDULED
+    // rows hold one.
+    if (input.status !== 'SCHEDULED') data.scheduledAt = null
   }
 
   return prisma.announcement.update({
@@ -229,6 +266,175 @@ async function restoreAnnouncement(id: string) {
     where: { id, deletedAt: { not: null } },
     data: { deletedAt: null },
     select: { id: true },
+  })
+}
+
+async function archiveAnnouncement(id: string) {
+  return prisma.announcement.update({
+    where: { id, deletedAt: null },
+    data: { archivedAt: new Date() },
+    select: { id: true },
+  })
+}
+
+async function unarchiveAnnouncement(id: string) {
+  return prisma.announcement.update({
+    where: { id, deletedAt: null, archivedAt: { not: null } },
+    data: { archivedAt: null },
+    select: { id: true },
+  })
+}
+
+// Reactions —————————————————————————————————————————————————————
+
+async function toggleReaction(
+  userId: string,
+  announcementId: string,
+  emoji: string,
+): Promise<{ added: boolean }> {
+  const existing = await prisma.announcementReaction.findUnique({
+    where: { announcementId_userId_emoji: { announcementId, userId, emoji } },
+    select: { id: true },
+  })
+  if (existing) {
+    await prisma.announcementReaction.delete({ where: { id: existing.id } })
+    return { added: false }
+  }
+  await prisma.announcementReaction.create({
+    data: { announcementId, userId, emoji },
+  })
+  return { added: true }
+}
+
+// Comments —————————————————————————————————————————————————————
+
+async function listComments(announcementId: string) {
+  return prisma.announcementComment.findMany({
+    where: { announcementId, deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      body: true,
+      createdAt: true,
+      updatedAt: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true,
+          role: true,
+        },
+      },
+    },
+  })
+}
+
+async function createComment(
+  announcementId: string,
+  userId: string,
+  body: string,
+) {
+  return prisma.announcementComment.create({
+    data: { announcementId, userId, body },
+    select: { id: true },
+  })
+}
+
+async function softDeleteComment(commentId: string, requesterId: string) {
+  // Owners can soft-delete their own; admins / team can soft-delete
+  // anyone's. The caller (action layer) enforces the auth check —
+  // here we just respect a non-null deletedAt as idempotent.
+  return prisma.announcementComment.update({
+    where: { id: commentId, deletedAt: null },
+    data: { deletedAt: new Date() },
+    select: { id: true, userId: true },
+  })
+}
+
+// Audit log —————————————————————————————————————————————————————
+
+async function recordAudit(
+  announcementId: string,
+  userId: string | null,
+  action: AnnouncementAuditAction,
+  metadata?: Prisma.InputJsonValue,
+) {
+  return prisma.announcementAuditLog.create({
+    data: {
+      announcementId,
+      userId,
+      action,
+      metadata: metadata ?? Prisma.JsonNull,
+    },
+    select: { id: true },
+  })
+}
+
+async function listAuditLogs(announcementId: string) {
+  return prisma.announcementAuditLog.findMany({
+    where: { announcementId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      action: true,
+      metadata: true,
+      createdAt: true,
+      user: {
+        select: { id: true, name: true, email: true, role: true },
+      },
+    },
+  })
+}
+
+// Scheduled publish — meant to be called from a cron route. Flips
+// every SCHEDULED row whose scheduledAt has come due to PUBLISHED.
+async function publishDueScheduled(): Promise<{ count: number; ids: string[] }> {
+  const due = await prisma.announcement.findMany({
+    where: {
+      status: 'SCHEDULED',
+      scheduledAt: { lte: new Date() },
+      deletedAt: null,
+    },
+    select: { id: true },
+  })
+  if (due.length === 0) return { count: 0, ids: [] }
+  const ids = due.map((d) => d.id)
+  await prisma.announcement.updateMany({
+    where: { id: { in: ids } },
+    data: {
+      status: 'PUBLISHED',
+      publishedAt: new Date(),
+      scheduledAt: null,
+    },
+  })
+  return { count: ids.length, ids }
+}
+
+// Auto-archive — flips every PUBLISHED, non-archived, non-deleted
+// row whose publishedAt is older than `olderThanDays` to archived.
+async function autoArchiveOlderThan(olderThanDays: number): Promise<number> {
+  if (olderThanDays <= 0) return 0
+  const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000)
+  const result = await prisma.announcement.updateMany({
+    where: {
+      status: 'PUBLISHED',
+      archivedAt: null,
+      deletedAt: null,
+      publishedAt: { lt: cutoff },
+    },
+    data: { archivedAt: new Date() },
+  })
+  return result.count
+}
+
+// "New since your last visit" — bumps the user's
+// announcementsLastSeenAt to now. Member-side page calls this AFTER
+// rendering so unread items stay above the divider for THIS render.
+async function touchAnnouncementsLastSeen(userId: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { announcementsLastSeenAt: new Date() },
   })
 }
 
@@ -316,9 +522,25 @@ export const announcementService = {
   update: updateAnnouncement,
   softDelete: softDeleteAnnouncement,
   restore: restoreAnnouncement,
+  archive: archiveAnnouncement,
+  unarchive: unarchiveAnnouncement,
   markAsRead,
   getUnreadCount,
   getReaders,
+  // Reactions
+  toggleReaction,
+  // Comments
+  listComments,
+  createComment,
+  softDeleteComment,
+  // Audit
+  recordAudit,
+  listAuditLogs,
+  // Cron-side helpers
+  publishDueScheduled,
+  autoArchiveOlderThan,
+  // Member-side
+  touchAnnouncementsLastSeen,
   defaultPageSize: DEFAULT_PAGE_SIZE,
 }
 

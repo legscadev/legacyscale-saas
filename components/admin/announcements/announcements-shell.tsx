@@ -11,9 +11,12 @@ import {
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  Archive,
+  ArchiveRestore,
   Edit3,
   Megaphone,
   MoreHorizontal,
+  Pin,
   Plus,
   Search,
   Trash2,
@@ -56,10 +59,12 @@ import {
 import { PageHeader, EmptyState, StatusBadge } from '@/components/shared'
 import { htmlToPlainText } from '@/lib/utils'
 import {
+  archiveAnnouncementAction,
   fetchAnnouncements,
   getAnnouncementReadersAction,
   restoreAnnouncementAction,
   softDeleteAnnouncementAction,
+  unarchiveAnnouncementAction,
   type AnnouncementsData,
   type AnnouncementsQueryState,
 } from '@/app/(admin)/admin/announcements/actions'
@@ -205,6 +210,7 @@ export function AnnouncementsShell({ initialData }: AnnouncementsShellProps) {
 const STATUSES = [
   { value: 'all', label: 'Any status' },
   { value: 'DRAFT', label: 'Draft' },
+  { value: 'SCHEDULED', label: 'Scheduled' },
   { value: 'PUBLISHED', label: 'Published' },
 ]
 const VIEWS = [
@@ -361,12 +367,25 @@ function getColumns(
                 grows to fit a long body preview and pushes the
                 right-side columns off-screen on smaller viewports. */}
             <div className="min-w-0 max-w-[28rem] flex-1">
-              <Link
-                href={`/admin/announcements/${a.id}/edit`}
-                className="block truncate text-sm font-semibold transition-colors hover:text-primary hover:underline underline-offset-2"
-              >
-                {a.title}
-              </Link>
+              <div className="flex min-w-0 items-center gap-1.5">
+                {a.pinned ? (
+                  <Pin
+                    className="size-3.5 shrink-0 fill-primary/20 text-primary"
+                    aria-label="Pinned"
+                  />
+                ) : null}
+                <Link
+                  href={`/admin/announcements/${a.id}/edit`}
+                  className="block truncate text-sm font-semibold transition-colors hover:text-primary hover:underline underline-offset-2"
+                >
+                  {a.title}
+                </Link>
+                {a.archivedAt ? (
+                  <span className="inline-flex h-4 items-center rounded-full bg-warning/10 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-warning">
+                    Archived
+                  </span>
+                ) : null}
+              </div>
               <p className="flex items-center gap-1 truncate text-xs text-muted-foreground/80">
                 {authorName ? (
                   <>
@@ -430,6 +449,7 @@ function getColumns(
             announcementId={row.original.id}
             title={row.original.title}
             isDeleted={!!row.original.deletedAt}
+            isArchived={!!row.original.archivedAt}
             onRefetch={onRefetch}
           />
         </div>
@@ -449,6 +469,7 @@ interface ActionsMenuProps {
   announcementId: string
   title: string
   isDeleted: boolean
+  isArchived: boolean
   onRefetch: () => void
 }
 
@@ -456,6 +477,7 @@ function ActionsMenu({
   announcementId,
   title,
   isDeleted,
+  isArchived,
   onRefetch,
 }: ActionsMenuProps) {
   const router = useRouter()
@@ -502,6 +524,28 @@ function ActionsMenu({
     onRefetch()
   }
 
+  async function archive() {
+    const result = await archiveAnnouncementAction(announcementId)
+    if (!result.ok) {
+      toast.error(result.error ?? 'Could not archive announcement')
+      return
+    }
+    toast.success(`${title} archived`, {
+      description: 'Hidden from the member feed.',
+    })
+    onRefetch()
+  }
+
+  async function unarchive() {
+    const result = await unarchiveAnnouncementAction(announcementId)
+    if (!result.ok) {
+      toast.error(result.error ?? 'Could not unarchive announcement')
+      return
+    }
+    toast.success(`${title} restored to the feed`)
+    onRefetch()
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -530,6 +574,17 @@ function ActionsMenu({
               <Edit3 />
               Edit
             </DropdownMenuItem>
+            {isArchived ? (
+              <DropdownMenuItem onClick={unarchive}>
+                <ArchiveRestore />
+                Unarchive
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={archive}>
+                <Archive />
+                Archive
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={softDelete}

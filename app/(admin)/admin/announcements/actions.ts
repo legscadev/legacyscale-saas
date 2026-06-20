@@ -61,7 +61,12 @@ async function blastAnnouncementEmail(announcement: {
 }) {
   try {
     const members = await prisma.user.findMany({
-      where: { role: 'MEMBER', isActive: true, deletedAt: null },
+      where: {
+        role: 'MEMBER',
+        isActive: true,
+        deletedAt: null,
+        notifyAnnouncementEmail: true,
+      },
       select: { email: true },
     })
     const recipients = members.map((m) => m.email)
@@ -168,10 +173,17 @@ export async function createAnnouncementAction(
   const bodyCheck = validateBodyLength(rawBody)
   if ('fieldErrors' in bodyCheck) return { ok: false, fieldErrors: bodyCheck.fieldErrors }
 
+  const scheduledAtRaw = formData.get('scheduledAt')
   const parsed = createAnnouncementSchema.safeParse({
     title: formData.get('title') ?? '',
     body: rawBody,
     status: (formData.get('status') as string) || 'DRAFT',
+    category: (formData.get('category') as string) || 'GENERAL',
+    pinned: formData.get('pinned') === '1',
+    scheduledAt:
+      typeof scheduledAtRaw === 'string' && scheduledAtRaw
+        ? scheduledAtRaw
+        : null,
   })
 
   if (!parsed.success) {
@@ -190,9 +202,15 @@ export async function createAnnouncementAction(
 
   try {
     const announcement = await announcementService.create(parsed.data, admin.id)
-    // The author counts as having "read" what they wrote — keeps
-    // their own Bell badge from lighting up on a fresh publish.
+    await announcementService.recordAudit(announcement.id, admin.id, 'CREATED', {
+      status: announcement.status,
+      category: announcement.category,
+      pinned: announcement.pinned,
+    })
     if (announcement.status === 'PUBLISHED') {
+      await announcementService.recordAudit(announcement.id, admin.id, 'PUBLISHED')
+      // The author counts as having "read" what they wrote — keeps
+      // their own Bell badge from lighting up on a fresh publish.
       await announcementService.markAsRead(admin.id, [announcement.id])
       if (notifyEmail) await blastAnnouncementEmail(announcement)
       if (notifyDiscord) {
@@ -229,6 +247,12 @@ export async function updateAnnouncementAction(
   if (formData.has('title')) input.title = formData.get('title')
   if (formData.has('body')) input.body = formData.get('body')
   if (formData.has('status')) input.status = formData.get('status')
+  if (formData.has('category')) input.category = formData.get('category')
+  if (formData.has('pinned')) input.pinned = formData.get('pinned') === '1'
+  if (formData.has('scheduledAt')) {
+    const raw = formData.get('scheduledAt')
+    input.scheduledAt = typeof raw === 'string' && raw ? raw : null
+  }
 
   if (typeof input.body === 'string') {
     const bodyCheck = validateBodyLength(input.body)
@@ -261,6 +285,15 @@ export async function updateAnnouncementAction(
     if (!updated) {
       return { ok: false, error: 'Announcement not found' }
     }
+    const newlyPublished = updated.status === 'PUBLISHED' && !wasPublishedBefore
+    const wasPublishedNowDraft =
+      updated.status === 'DRAFT' && !!before?.publishedAt
+    await announcementService.recordAudit(
+      announcementId,
+      admin.id,
+      newlyPublished ? 'PUBLISHED' : wasPublishedNowDraft ? 'UNPUBLISHED' : 'UPDATED',
+      { keys: Object.keys(parsed.data) },
+    )
     // Author counts as having "read" the row they just published,
     // including the first DRAFT → PUBLISHED transition on edit.
     if (updated.status === 'PUBLISHED') {
@@ -297,9 +330,10 @@ export interface SimpleResult {
 export async function softDeleteAnnouncementAction(
   announcementId: string,
 ): Promise<SimpleResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
   try {
     await announcementService.softDelete(announcementId)
+    await announcementService.recordAudit(announcementId, admin.id, 'DELETED')
     revalidateAnnouncements(announcementId)
     return { ok: true }
   } catch (err) {
@@ -313,9 +347,10 @@ export async function softDeleteAnnouncementAction(
 export async function restoreAnnouncementAction(
   announcementId: string,
 ): Promise<SimpleResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
   try {
     await announcementService.restore(announcementId)
+    await announcementService.recordAudit(announcementId, admin.id, 'RESTORED')
     revalidateAnnouncements(announcementId)
     return { ok: true }
   } catch (err) {
@@ -336,5 +371,45 @@ export async function getAnnouncementReadersAction(
   } catch (err) {
     console.error('getReaders failed:', err)
     return { ok: false, error: 'Could not load readers' }
+  }
+}
+
+export async function archiveAnnouncementAction(
+  announcementId: string,
+): Promise<SimpleResult> {
+  await requireAdmin()
+  try {
+    await announcementService.archive(announcementId)
+    revalidateAnnouncements(announcementId)
+    return { ok: true }
+  } catch (err) {
+    console.error('Announcement archive failed:', err)
+    return { ok: false, error: 'Could not archive announcement' }
+  }
+}
+
+export async function unarchiveAnnouncementAction(
+  announcementId: string,
+): Promise<SimpleResult> {
+  await requireAdmin()
+  try {
+    await announcementService.unarchive(announcementId)
+    revalidateAnnouncements(announcementId)
+    return { ok: true }
+  } catch (err) {
+    console.error('Announcement unarchive failed:', err)
+    return { ok: false, error: 'Could not unarchive announcement' }
+  }
+}
+
+// Audit log loader for the admin viewer.
+export async function getAnnouncementAuditLogsAction(announcementId: string) {
+  await requireAdmin()
+  try {
+    const logs = await announcementService.listAuditLogs(announcementId)
+    return { ok: true as const, logs }
+  } catch (err) {
+    console.error('listAuditLogs failed:', err)
+    return { ok: false as const, error: 'Could not load audit log' }
   }
 }

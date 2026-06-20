@@ -32,6 +32,9 @@ export default async function EditAnnouncementPage({
           title: announcement.title,
           body: announcement.body,
           status: announcement.status,
+          category: announcement.category,
+          pinned: announcement.pinned,
+          scheduledAt: announcement.scheduledAt,
         }}
         onSubmit={updateAnnouncementAction.bind(null, id)}
       />

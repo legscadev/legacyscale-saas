@@ -24,6 +24,7 @@ const STATUS_MAP: Record<string, { label: string; tone: Tone }> = {
   // Course / Announcement
   PUBLISHED: { label: 'Published', tone: 'success' },
   DRAFT: { label: 'Draft', tone: 'neutral' },
+  SCHEDULED: { label: 'Scheduled', tone: 'info' },
   ARCHIVED: { label: 'Archived', tone: 'warning' },
   // Lesson
   READY: { label: 'Ready', tone: 'success' },

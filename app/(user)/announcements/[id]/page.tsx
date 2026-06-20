@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { AnnouncementCard } from '@/components/shared'
+import { CommentsSection } from '@/components/member/announcement-comments'
 import { requireActiveUser } from '@/lib/auth'
 import { announcementService } from '@/lib/services/announcement-service'
 
@@ -20,12 +21,14 @@ export default async function AnnouncementDetailPage({
   const announcement = await announcementService.getById(id)
   if (!announcement || announcement.status !== 'PUBLISHED') notFound()
 
-  // Visiting the permalink is the read event for THIS one row.
+  // Visiting the permalink IS the read event for THIS one row.
   try {
     await announcementService.markAsRead(user.id, [announcement.id])
   } catch (err) {
     console.error('markAsRead (detail) failed:', err)
   }
+
+  const comments = await announcementService.listComments(announcement.id)
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -40,13 +43,17 @@ export default async function AnnouncementDetailPage({
       </Button>
 
       <AnnouncementCard
+        viewerUserId={user.id}
         announcement={{
           id: announcement.id,
           title: announcement.title,
           body: announcement.body,
           status: announcement.status,
+          category: announcement.category,
+          pinned: announcement.pinned,
           publishedAt: announcement.publishedAt,
           createdAt: announcement.createdAt,
+          reactions: announcement.reactions,
           author: announcement.createdByUser
             ? {
                 name: announcement.createdByUser.name,
@@ -56,6 +63,13 @@ export default async function AnnouncementDetailPage({
               }
             : null,
         }}
+      />
+
+      <CommentsSection
+        announcementId={announcement.id}
+        comments={comments}
+        viewerUserId={user.id}
+        viewerRole={user.role}
       />
     </div>
   )
