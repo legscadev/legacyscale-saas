@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { announcementService } from '@/lib/services/announcement-service'
+import { isDiscordWebhookConfigured } from '@/lib/services/app-setting-service'
 import { PageHeader } from '@/components/shared'
 import { AnnouncementForm } from '@/components/admin/announcements/announcement-form'
 import { updateAnnouncementAction } from '../../actions'
@@ -18,6 +19,8 @@ export default async function EditAnnouncementPage({
 
   const announcement = await announcementService.getById(id)
   if (!announcement) notFound()
+
+  const discordWebhookConfigured = await isDiscordWebhookConfigured()
 
   return (
     <div className="space-y-6">
@@ -37,6 +40,7 @@ export default async function EditAnnouncementPage({
           scheduledAt: announcement.scheduledAt,
         }}
         onSubmit={updateAnnouncementAction.bind(null, id)}
+        discordWebhookConfigured={discordWebhookConfigured}
       />
     </div>
   )
