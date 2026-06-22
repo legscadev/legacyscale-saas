@@ -155,8 +155,8 @@ export function MembersShell({
   const refetch = useCallback(() => setRefetchKey((k) => k + 1), [])
 
   const columns = useMemo(
-    () => getMemberColumns(currentUserId, refetch),
-    [currentUserId, refetch],
+    () => getMemberColumns(currentUserId, refetch, data.sparklines),
+    [currentUserId, refetch, data.sparklines],
   )
 
   const selectedIds = Object.keys(rowSelection)

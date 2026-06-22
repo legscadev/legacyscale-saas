@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react'
+import { Area, AreaChart, ResponsiveContainer } from 'recharts'
 
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -71,9 +72,33 @@ function SortHeader({
   )
 }
 
+function ActivitySparkline({ data }: { data: number[] }) {
+  if (data.every((v) => v === 0)) {
+    return <span className="text-xs text-muted-foreground">No activity</span>
+  }
+  return (
+    <div className="h-6 w-20">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data.map((v, i) => ({ v, i }))}>
+          <Area
+            type="monotone"
+            dataKey="v"
+            stroke="hsl(var(--primary))"
+            fill="hsl(var(--primary)/0.1)"
+            strokeWidth={1.5}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
 export function getMemberColumns(
   currentUserId: string,
   onRefetch: () => void,
+  sparklines: Record<string, number[]> = {},
 ): ColumnDef<MemberListItem>[] {
   return [
     {
@@ -209,6 +234,16 @@ export function getMemberColumns(
           {formatRelative(row.original.lastLoginAt)}
         </span>
       ),
+    },
+    {
+      id: 'activity',
+      header: 'Activity (30d)',
+      meta: { label: 'Activity (30d)' },
+      cell: ({ row }) => {
+        const data = sparklines[row.original.id] ?? Array(30).fill(0)
+        return <ActivitySparkline data={data} />
+      },
+      enableSorting: false,
     },
     {
       id: 'actions',

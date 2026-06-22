@@ -125,6 +125,7 @@ model User {
   announcementReactions AnnouncementReaction[]
   announcementAuditLogs AnnouncementAuditLog[]
   invites           Invite[]
+  loginEvents       LoginEvent[]
 
   @@index([role])
   @@index([isActive])
@@ -157,6 +158,23 @@ model Invite {
   @@index([userId])
   @@index([token])
   @@map("invites")
+}
+
+// ============================================
+// LOGIN EVENTS
+// ============================================
+
+/// Tracks individual login timestamps per user. Powers the activity
+/// sparkline on the admin members page.
+model LoginEvent {
+  id      String   @id @default(uuid())
+  userId  String   @map("user_id")
+  loginAt DateTime @default(now()) @map("login_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loginAt])
+  @@map("login_events")
 }
 
 // ============================================

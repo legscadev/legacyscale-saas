@@ -53,6 +53,11 @@ export async function syncUserToDatabase(
     },
   })
 
+  // Record login event for the activity sparkline (fire-and-forget).
+  prisma.loginEvent.create({ data: { userId: user.id } }).catch((err) => {
+    console.error('Failed to record login event:', err)
+  })
+
   // Mirror role into Supabase Auth app_metadata so the Edge proxy can
   // make role-aware redirect decisions without a Prisma lookup.
   if (authUser.app_metadata?.role !== user.role) {
