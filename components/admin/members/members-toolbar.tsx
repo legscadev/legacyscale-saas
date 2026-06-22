@@ -151,11 +151,9 @@ export function MembersToolbar({
         </Select>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
-              <Columns3 className="size-3.5" />
-              Columns
-            </Button>
+          <DropdownMenuTrigger className="inline-flex h-9 items-center gap-1.5 rounded-md border bg-background px-3 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground">
+            <Columns3 className="size-3.5" />
+            Columns
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {columns

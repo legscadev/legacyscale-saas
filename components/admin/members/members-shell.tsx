@@ -58,15 +58,19 @@ export function MembersShell({
   const [isLoading, setIsLoading] = useState(false)
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
-    if (typeof window === 'undefined') return {}
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+
+  // Restore saved column visibility from localStorage after mount to avoid
+  // hydration mismatch (server has no access to localStorage).
+  const didRestoreVisibility = useRef(false)
+  useEffect(() => {
+    if (didRestoreVisibility.current) return
+    didRestoreVisibility.current = true
     try {
       const saved = localStorage.getItem('kondense:members:columnVisibility')
-      return saved ? JSON.parse(saved) : {}
-    } catch {
-      return {}
-    }
-  })
+      if (saved) setColumnVisibility(JSON.parse(saved))
+    } catch { /* noop */ }
+  }, [])
   const [createOpen, setCreateOpen] = useState(false)
   // Bumped to trigger an out-of-band refetch (e.g. after creating a
   // member via the dialog) without changing the query state.
