@@ -148,6 +148,24 @@ type ApiHandler<Args extends unknown[]> = (
   ...args: Args
 ) => Promise<NextResponse>
 
+/**
+ * Some Next.js helpers (`redirect`, `notFound`) signal navigation
+ * by *throwing* a special error. Next catches it upstream of the
+ * route handler and emits the right HTTP response. If our wrapper
+ * swallows that throw, the navigation never happens and the caller
+ * gets a 500 instead. This detects both signal types by their
+ * known `digest` prefix so we can re-throw them unchanged.
+ */
+function isNextNavigationError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const digest = (error as { digest?: unknown }).digest
+  if (typeof digest !== 'string') return false
+  return (
+    digest.startsWith('NEXT_REDIRECT;') ||
+    digest.startsWith('NEXT_HTTP_ERROR_FALLBACK;')
+  )
+}
+
 export function withErrorHandling<Args extends unknown[]>(
   handler: ApiHandler<Args>
 ): ApiHandler<Args> {
@@ -155,6 +173,9 @@ export function withErrorHandling<Args extends unknown[]>(
     try {
       return await handler(...args)
     } catch (error) {
+      // Let redirect()/notFound() reach Next's renderer untouched.
+      if (isNextNavigationError(error)) throw error
+
       console.error('API Error:', error)
 
       if (error instanceof ZodError) {
