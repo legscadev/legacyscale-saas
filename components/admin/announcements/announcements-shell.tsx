@@ -11,12 +11,16 @@ import {
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  Archive,
+  ArchiveRestore,
   Edit3,
   Megaphone,
   MoreHorizontal,
+  Pin,
   Plus,
   Search,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -27,15 +31,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DataTable } from '@/components/ui/data-table'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,13 +59,18 @@ import {
 import { PageHeader, EmptyState, StatusBadge } from '@/components/shared'
 import { htmlToPlainText } from '@/lib/utils'
 import {
+  archiveAnnouncementAction,
   fetchAnnouncements,
+  getAnnouncementReadersAction,
+  restoreAnnouncementAction,
   softDeleteAnnouncementAction,
+  unarchiveAnnouncementAction,
   type AnnouncementsData,
   type AnnouncementsQueryState,
 } from '@/app/(admin)/admin/announcements/actions'
 import type {
   AnnouncementListItem,
+  AnnouncementReader,
   AnnouncementView,
 } from '@/lib/services/announcement-service'
 
@@ -204,6 +210,7 @@ export function AnnouncementsShell({ initialData }: AnnouncementsShellProps) {
 const STATUSES = [
   { value: 'all', label: 'Any status' },
   { value: 'DRAFT', label: 'Draft' },
+  { value: 'SCHEDULED', label: 'Scheduled' },
   { value: 'PUBLISHED', label: 'Published' },
 ]
 const VIEWS = [
@@ -346,6 +353,10 @@ function getColumns(
       cell: ({ row }) => {
         const a = row.original
         const preview = htmlToPlainText(a.body)
+        const author = a.createdByUser
+        const authorName = author?.name?.trim() || author?.email || null
+        const role = author?.role
+        const roleLabel = role === 'ADMIN' ? 'Admin' : role === 'TEAM' ? 'Team' : null
         return (
           <div className="flex items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -356,14 +367,38 @@ function getColumns(
                 grows to fit a long body preview and pushes the
                 right-side columns off-screen on smaller viewports. */}
             <div className="min-w-0 max-w-[28rem] flex-1">
-              <Link
-                href={`/admin/announcements/${a.id}/edit`}
-                className="block truncate text-sm font-semibold transition-colors hover:text-primary hover:underline underline-offset-2"
-              >
-                {a.title}
-              </Link>
-              <p className="truncate text-xs text-muted-foreground/80">
-                {preview || 'No body yet.'}
+              <div className="flex min-w-0 items-center gap-1.5">
+                {a.pinned ? (
+                  <Pin
+                    className="size-3.5 shrink-0 fill-primary/20 text-primary"
+                    aria-label="Pinned"
+                  />
+                ) : null}
+                <Link
+                  href={`/admin/announcements/${a.id}/edit`}
+                  className="block truncate text-sm font-semibold transition-colors hover:text-primary hover:underline underline-offset-2"
+                >
+                  {a.title}
+                </Link>
+                {a.archivedAt ? (
+                  <span className="inline-flex h-4 items-center rounded-full bg-warning/10 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-warning">
+                    Archived
+                  </span>
+                ) : null}
+              </div>
+              <p className="flex items-center gap-1 truncate text-xs text-muted-foreground/80">
+                {authorName ? (
+                  <>
+                    <span className="text-muted-foreground">{authorName}</span>
+                    {roleLabel ? (
+                      <span className="inline-flex h-3.5 items-center rounded-full bg-primary/10 px-1 text-[9px] font-semibold uppercase tracking-wider text-primary">
+                        {roleLabel}
+                      </span>
+                    ) : null}
+                    <span>·</span>
+                  </>
+                ) : null}
+                <span className="truncate">{preview || 'No body yet.'}</span>
               </p>
             </div>
           </div>
@@ -394,27 +429,16 @@ function getColumns(
     {
       id: 'reads',
       header: 'Reads',
-      cell: ({ row }) => {
-        const r = row.original.reads
-        return (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span className="cursor-help text-sm tabular-nums text-muted-foreground decoration-dotted underline-offset-2 hover:underline">
-                  {r.total.toLocaleString()}
-                </span>
-              }
-            />
-            <TooltipContent side="top" align="center">
-              {r.total === 0
-                ? 'No reads yet'
-                : `${r.admin} admin · ${r.team} team · ${r.member} member`}
-            </TooltipContent>
-          </Tooltip>
-        )
-      },
+      cell: ({ row }) => (
+        <ReadsCell
+          announcementId={row.original.id}
+          title={row.original.title}
+          reads={row.original.reads}
+        />
+      ),
       enableSorting: false,
       size: 80,
+      meta: { stopRowClick: true },
     },
     {
       id: 'actions',
@@ -425,6 +449,7 @@ function getColumns(
             announcementId={row.original.id}
             title={row.original.title}
             isDeleted={!!row.original.deletedAt}
+            isArchived={!!row.original.archivedAt}
             onRefetch={onRefetch}
           />
         </div>
@@ -444,6 +469,7 @@ interface ActionsMenuProps {
   announcementId: string
   title: string
   isDeleted: boolean
+  isArchived: boolean
   onRefetch: () => void
 }
 
@@ -451,95 +477,258 @@ function ActionsMenu({
   announcementId,
   title,
   isDeleted,
+  isArchived,
   onRefetch,
 }: ActionsMenuProps) {
   const router = useRouter()
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [pending, setPending] = useState(false)
 
+  // One-click delete with a 5s Undo toast. The AlertDialog confirm
+  // previously required two clicks AND left the only recovery path
+  // hidden behind the Deleted view; sonner.action keeps the undo
+  // affordance front-and-center until the toast expires.
+  //
+  // Order matters: fire the toast BEFORE onRefetch() — refetch
+  // remounts the DataTable (it's keyed on refetchKey), which
+  // unmounts THIS ActionsMenu before the toast hits Sonner's queue.
   async function softDelete() {
-    setPending(true)
-    try {
-      const result = await softDeleteAnnouncementAction(announcementId)
-      if (!result.ok) {
-        toast.error(result.error ?? 'Could not delete announcement')
-        return
-      }
-      toast.success(`${title} deleted`, {
-        description: 'You can restore it from the Deleted view.',
-      })
-      onRefetch()
-    } finally {
-      setPending(false)
-      setConfirmingDelete(false)
+    const result = await softDeleteAnnouncementAction(announcementId)
+    if (!result.ok) {
+      toast.error(result.error ?? 'Could not delete announcement')
+      return
     }
+    toast.success(`${title} deleted`, {
+      duration: 5000,
+      action: {
+        label: 'Undo',
+        onClick: async () => {
+          const restored = await restoreAnnouncementAction(announcementId)
+          if (!restored.ok) {
+            toast.error(restored.error ?? 'Could not restore announcement')
+            return
+          }
+          toast.success(`${title} restored`)
+          onRefetch()
+        },
+      },
+    })
+    onRefetch()
+  }
+
+  async function restore() {
+    const result = await restoreAnnouncementAction(announcementId)
+    if (!result.ok) {
+      toast.error(result.error ?? 'Could not restore announcement')
+      return
+    }
+    toast.success(`${title} restored`)
+    onRefetch()
+  }
+
+  async function archive() {
+    const result = await archiveAnnouncementAction(announcementId)
+    if (!result.ok) {
+      toast.error(result.error ?? 'Could not archive announcement')
+      return
+    }
+    toast.success(`${title} archived`, {
+      description: 'Hidden from the member feed.',
+    })
+    onRefetch()
+  }
+
+  async function unarchive() {
+    const result = await unarchiveAnnouncementAction(announcementId)
+    if (!result.ok) {
+      toast.error(result.error ?? 'Could not unarchive announcement')
+      return
+    }
+    toast.success(`${title} restored to the feed`)
+    onRefetch()
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Open actions"
+          />
+        }
+      >
+        <MoreHorizontal className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        {isDeleted ? (
+          <DropdownMenuItem onClick={restore}>
+            <Undo2 />
+            Restore
+          </DropdownMenuItem>
+        ) : (
+          <>
+            <DropdownMenuItem
+              onClick={() =>
+                router.push(`/admin/announcements/${announcementId}/edit`)
+              }
+            >
+              <Edit3 />
+              Edit
+            </DropdownMenuItem>
+            {isArchived ? (
+              <DropdownMenuItem onClick={unarchive}>
+                <ArchiveRestore />
+                Unarchive
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={archive}>
+                <Archive />
+                Archive
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={softDelete}
+              className="text-destructive"
+            >
+              <Trash2 />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+// ===========================================================
+// Reads drill-down
+// ===========================================================
+
+interface ReadsCellProps {
+  announcementId: string
+  title: string
+  reads: AnnouncementListItem['reads']
+}
+
+function ReadsCell({ announcementId, title, reads }: ReadsCellProps) {
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [readers, setReaders] = useState<AnnouncementReader[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function openModal() {
+    setOpen(true)
+    if (readers !== null) return
+    setLoading(true)
+    setError(null)
+    const res = await getAnnouncementReadersAction(announcementId)
+    setLoading(false)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    setReaders(res.readers)
   }
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
+      <Tooltip>
+        <TooltipTrigger
           render={
             <button
-              className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Open actions"
-            />
-          }
-        >
-          <MoreHorizontal className="size-4" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          {isDeleted ? (
-            <DropdownMenuItem disabled>
-              Deleted announcements can be restored from the DB for now.
-            </DropdownMenuItem>
-          ) : (
-            <>
-              <DropdownMenuItem
-                onClick={() =>
-                  router.push(`/admin/announcements/${announcementId}/edit`)
-                }
-              >
-                <Edit3 />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setConfirmingDelete(true)}
-                className="text-destructive"
-              >
-                <Trash2 />
-                Delete
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {title}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The announcement will be hidden everywhere. You can restore it
-              later from the Deleted view.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault()
-                softDelete()
-              }}
-              disabled={pending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              type="button"
+              onClick={openModal}
+              className="cursor-pointer text-sm tabular-nums text-muted-foreground decoration-dotted underline-offset-2 hover:text-foreground hover:underline"
+              aria-label={`Open readers for ${title} (${reads.total} reads)`}
             >
-              {pending ? 'Deleting…' : 'Delete announcement'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              {reads.total.toLocaleString()}
+            </button>
+          }
+        />
+        <TooltipContent side="top" align="center">
+          {reads.total === 0
+            ? 'No reads yet — click to view'
+            : `${reads.admin} admin · ${reads.team} team · ${reads.member} member`}
+        </TooltipContent>
+      </Tooltip>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Readers of "{title}"</DialogTitle>
+            <DialogDescription>
+              {reads.total === 0
+                ? 'Nobody has opened this announcement yet.'
+                : `${reads.admin} admin · ${reads.team} team · ${reads.member} member`}
+            </DialogDescription>
+          </DialogHeader>
+          {loading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Loading…
+            </p>
+          ) : error ? (
+            <p className="py-6 text-center text-sm text-destructive">{error}</p>
+          ) : !readers || readers.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No reads yet.
+            </p>
+          ) : (
+            <ul className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+              {readers.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-center gap-3 rounded-md p-1.5"
+                >
+                  <ReaderAvatar reader={r} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {r.name?.trim() || r.email}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {r.role.toLowerCase()} ·{' '}
+                      <span suppressHydrationWarning>
+                        {new Intl.DateTimeFormat('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        }).format(r.readAt)}
+                      </span>
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
+  )
+}
+
+function ReaderAvatar({ reader }: { reader: AnnouncementReader }) {
+  const initials = (
+    reader.name?.trim().split(/\s+/).filter(Boolean) ?? [reader.email]
+  )
+    .slice(0, 2)
+    .map((s) => s[0]!.toUpperCase())
+    .join('')
+  if (reader.avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={reader.avatarUrl}
+        alt=""
+        className="size-8 shrink-0 rounded-full object-cover"
+      />
+    )
+  }
+  return (
+    <div
+      className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+      aria-hidden="true"
+    >
+      {initials || '?'}
+    </div>
   )
 }

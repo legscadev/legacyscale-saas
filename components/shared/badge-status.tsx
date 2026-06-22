@@ -41,6 +41,14 @@ export function BadgeDraft({ className }: { className?: string }) {
   )
 }
 
+export function BadgeScheduled({ className }: { className?: string }) {
+  return (
+    <BadgeStatus status="info" className={className}>
+      Scheduled
+    </BadgeStatus>
+  )
+}
+
 export function BadgeArchived({ className }: { className?: string }) {
   return (
     <BadgeStatus status="warning" className={className}>

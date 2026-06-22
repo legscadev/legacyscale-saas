@@ -2,16 +2,28 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Save } from 'lucide-react'
+import { Pin, Save } from 'lucide-react'
 import { toast } from 'sonner'
-import type { AnnouncementStatus } from '@prisma/client'
+import type {
+  AnnouncementCategory,
+  AnnouncementStatus,
+} from '@prisma/client'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { FormSection } from '@/components/shared'
 import { cn } from '@/lib/utils'
+import { ANNOUNCEMENT_CATEGORY_LABELS } from '@/lib/validations/announcement'
 
 export interface AnnouncementFormSubmitResult {
   ok: boolean
@@ -24,6 +36,9 @@ export interface AnnouncementFormDefaults {
   title?: string
   body?: string | null
   status?: AnnouncementStatus
+  category?: AnnouncementCategory
+  pinned?: boolean
+  scheduledAt?: Date | null
 }
 
 interface AnnouncementFormProps {
@@ -58,6 +73,25 @@ export function AnnouncementForm({
   const [status, setStatus] = useState<AnnouncementStatus>(
     defaults?.status ?? 'DRAFT',
   )
+  const [category, setCategory] = useState<AnnouncementCategory>(
+    defaults?.category ?? 'GENERAL',
+  )
+  const [pinned, setPinned] = useState<boolean>(defaults?.pinned ?? false)
+  // datetime-local format: YYYY-MM-DDTHH:mm — needed when status=SCHEDULED.
+  const [scheduledAt, setScheduledAt] = useState<string>(() => {
+    if (!defaults?.scheduledAt) return ''
+    const d = new Date(defaults.scheduledAt)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  })
+  // Email blast is opt-in per announcement so an admin can't ping
+  // every member by accident. Disabled while the form is in Draft.
+  const [notifyEmail, setNotifyEmail] = useState(false)
+  // Discord crosspost is opt-in too. mentionEveryone defaults off so
+  // the checkbox isn't a footgun — the admin has to deliberately opt
+  // into @everyone-ing the whole server.
+  const [notifyDiscord, setNotifyDiscord] = useState(false)
+  const [discordMentionEveryone, setDiscordMentionEveryone] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -74,6 +108,13 @@ export function AnnouncementForm({
     if (!trimmedTitle) localErrors.title = ['Title is required']
     else if (trimmedTitle.length > 200) localErrors.title = ['Title is too long']
     if (!trimmedBody) localErrors.body = ['Body is required']
+    if (status === 'SCHEDULED') {
+      if (!scheduledAt) {
+        localErrors.scheduledAt = ['Pick a publish time']
+      } else if (new Date(scheduledAt).getTime() <= Date.now()) {
+        localErrors.scheduledAt = ['Scheduled time must be in the future']
+      }
+    }
 
     if (Object.keys(localErrors).length > 0) {
       setFieldErrors(localErrors)
@@ -84,6 +125,20 @@ export function AnnouncementForm({
     formData.set('title', trimmedTitle)
     formData.set('body', trimmedBody)
     formData.set('status', status)
+    formData.set('category', category)
+    formData.set('pinned', pinned ? '1' : '0')
+    if (status === 'SCHEDULED' && scheduledAt) {
+      formData.set('scheduledAt', new Date(scheduledAt).toISOString())
+    }
+    if (notifyEmail && status === 'PUBLISHED') {
+      formData.set('notifyEmail', '1')
+    }
+    if (notifyDiscord && status === 'PUBLISHED') {
+      formData.set('notifyDiscord', '1')
+      if (discordMentionEveryone) {
+        formData.set('discordMentionEveryone', '1')
+      }
+    }
 
     setSubmitting(true)
     try {
@@ -152,23 +207,179 @@ export function AnnouncementForm({
 
       <FormSection
         title="Visibility"
-        description="Drafts stay admin-only. Publishing surfaces it to all members."
+        description="Drafts stay admin-only. Scheduled rows auto-publish at the time you pick. Publishing now surfaces it to all members immediately."
       >
-        <div className="grid gap-2 sm:grid-cols-2">
-          <StatusOption
-            active={status === 'DRAFT'}
-            title="Draft"
-            body="Save for now. Won't appear on the member side."
-            onClick={() => setStatus('DRAFT')}
-            disabled={submitting}
-          />
-          <StatusOption
-            active={status === 'PUBLISHED'}
-            title="Publish"
-            body="Goes live on the member dashboard immediately."
-            onClick={() => setStatus('PUBLISHED')}
-            disabled={submitting}
-          />
+        <div className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <StatusOption
+              active={status === 'DRAFT'}
+              title="Draft"
+              body="Save for now. Won't appear on the member side."
+              onClick={() => setStatus('DRAFT')}
+              disabled={submitting}
+            />
+            <StatusOption
+              active={status === 'SCHEDULED'}
+              title="Schedule"
+              body="Auto-publishes at the chosen time."
+              onClick={() => setStatus('SCHEDULED')}
+              disabled={submitting}
+            />
+            <StatusOption
+              active={status === 'PUBLISHED'}
+              title="Publish"
+              body="Goes live immediately."
+              onClick={() => setStatus('PUBLISHED')}
+              disabled={submitting}
+            />
+          </div>
+
+          {status === 'SCHEDULED' ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="scheduledAt">
+                Publish time
+                <RequiredMark />
+              </Label>
+              <Input
+                id="scheduledAt"
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                disabled={submitting}
+                aria-invalid={!!fieldErrors.scheduledAt}
+              />
+              {fieldErrors.scheduledAt?.[0] && (
+                <p className="text-xs text-destructive" role="alert">
+                  {fieldErrors.scheduledAt[0]}
+                </p>
+              )}
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="category">Category</Label>
+              <Select
+                value={category}
+                onValueChange={(v) => setCategory(v as AnnouncementCategory)}
+              >
+                <SelectTrigger id="category" className="h-9" disabled={submitting}>
+                  <SelectValue>
+                    {(v: string) =>
+                      ANNOUNCEMENT_CATEGORY_LABELS[
+                        v as AnnouncementCategory
+                      ] ?? 'General'
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(ANNOUNCEMENT_CATEGORY_LABELS) as AnnouncementCategory[]).map(
+                    (key) => (
+                      <SelectItem key={key} value={key}>
+                        {ANNOUNCEMENT_CATEGORY_LABELS[key]}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <label
+              className={cn(
+                'flex cursor-pointer items-start gap-2.5 rounded-md border bg-muted/30 p-3 text-sm',
+                submitting && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              <Checkbox
+                checked={pinned}
+                onCheckedChange={(v) => setPinned(v === true)}
+                disabled={submitting}
+              />
+              <div className="space-y-0.5">
+                <p className="flex items-center gap-1.5 font-medium leading-none">
+                  <Pin className="size-3.5" /> Pin to top
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Pinned rows sort above everything else in the
+                  member feed and the admin list.
+                </p>
+              </div>
+            </label>
+          </div>
+          <label
+            className={cn(
+              'flex items-start gap-2.5 rounded-md border bg-muted/30 p-3 text-sm',
+              status === 'PUBLISHED'
+                ? 'cursor-pointer'
+                : 'cursor-not-allowed opacity-60',
+            )}
+          >
+            <Checkbox
+              checked={notifyEmail}
+              onCheckedChange={(v) => setNotifyEmail(v === true)}
+              disabled={status !== 'PUBLISHED' || submitting}
+            />
+            <div className="space-y-0.5">
+              <p className="font-medium leading-none">
+                Send email blast to all active members
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Fires once on first publish. Only enabled while
+                "Publish" is selected.
+              </p>
+            </div>
+          </label>
+
+          <div
+            className={cn(
+              'rounded-md border bg-muted/30',
+              status !== 'PUBLISHED' && 'opacity-60',
+            )}
+          >
+            <label
+              className={cn(
+                'flex items-start gap-2.5 p-3 text-sm',
+                status === 'PUBLISHED'
+                  ? 'cursor-pointer'
+                  : 'cursor-not-allowed',
+              )}
+            >
+              <Checkbox
+                checked={notifyDiscord}
+                onCheckedChange={(v) => setNotifyDiscord(v === true)}
+                disabled={status !== 'PUBLISHED' || submitting}
+              />
+              <div className="space-y-0.5">
+                <p className="font-medium leading-none">
+                  Crosspost to Discord
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Posts an embed with the title, a preview, and a
+                  "Read in Kondense" link. Fires once on first publish.
+                </p>
+              </div>
+            </label>
+            {notifyDiscord && status === 'PUBLISHED' ? (
+              <label className="flex cursor-pointer items-start gap-2.5 border-t px-3 py-2.5 text-sm">
+                <Checkbox
+                  checked={discordMentionEveryone}
+                  onCheckedChange={(v) =>
+                    setDiscordMentionEveryone(v === true)
+                  }
+                  disabled={submitting}
+                />
+                <div className="space-y-0.5">
+                  <p className="font-medium leading-none">
+                    Also @everyone
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Pings the whole Discord server. Requires the
+                    webhook to have "Mention @everyone" permission.
+                  </p>
+                </div>
+              </label>
+            ) : null}
+          </div>
         </div>
       </FormSection>
 
