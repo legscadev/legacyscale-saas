@@ -1,9 +1,12 @@
+import Link from 'next/link'
 import { BookOpen, FileText, GraduationCap } from 'lucide-react'
 import {
   PageHeader,
   StatCard,
   CourseCard,
+  EmptyState,
 } from '@/components/shared'
+import { buttonVariants } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -64,9 +67,16 @@ export default async function UserDashboardPage() {
         </CardHeader>
         <CardContent>
           {enrollments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              You&apos;re not enrolled in any courses yet.
-            </p>
+            <EmptyState
+              icon={GraduationCap}
+              tone="brand"
+              title="No courses yet"
+              description="When you're enrolled in a course, it'll show up here so you can pick up where you left off."
+            >
+              <Link href="/courses" className={buttonVariants()}>
+                Browse courses
+              </Link>
+            </EmptyState>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {enrollments.map(({ course }) => (
