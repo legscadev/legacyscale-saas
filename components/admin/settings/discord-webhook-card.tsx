@@ -16,6 +16,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   type DiscordWebhookSetting,
   revealDiscordWebhookAction,
   testDiscordWebhookAction,
@@ -40,6 +50,7 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
   const [isTesting, startTesting] = useTransition()
   const [isClearing, startClearing] = useTransition()
   const [isRevealing, startRevealing] = useTransition()
+  const [clearOpen, setClearOpen] = useState(false)
 
   function enterEdit() {
     setCandidate('')
@@ -91,14 +102,7 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
     })
   }
 
-  function handleClear() {
-    if (
-      !window.confirm(
-        'Clear the saved webhook URL? Announcement crossposts will fall back to the environment variable (if set) or stop posting entirely.',
-      )
-    ) {
-      return
-    }
+  function handleClearConfirmed() {
     startClearing(async () => {
       const fd = new FormData()
       fd.set('webhookUrl', '')
@@ -110,6 +114,7 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
       toast.success('Webhook cleared')
       setSetting({ configured: false, masked: null })
       setRevealed('')
+      setClearOpen(false)
     })
   }
 
@@ -168,14 +173,10 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
               {setting.configured ? (
                 <Button
                   variant="outline"
-                  onClick={handleClear}
+                  onClick={() => setClearOpen(true)}
                   disabled={busy}
                 >
-                  {isClearing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="mr-2 h-4 w-4" />
-                  )}
+                  <Trash2 className="mr-2 h-4 w-4" />
                   Clear
                 </Button>
               ) : null}
@@ -230,6 +231,39 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
           </p>
         </div>
       </CardContent>
+
+      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Discord webhook?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Announcement crossposts to Discord will stop working
+              until a new webhook URL is set. Existing posts in the
+              channel are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isClearing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleClearConfirmed()
+              }}
+              disabled={isClearing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isClearing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Clearing…
+                </>
+              ) : (
+                'Clear webhook'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }
