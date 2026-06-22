@@ -12,7 +12,7 @@ interface BrandMarkProps {
 export function BrandMark({ context, compact = false, className }: BrandMarkProps) {
   return (
     <div className={cn('flex items-center gap-2.5', className)}>
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-neutral-950 ring-1 ring-inset ring-white/10">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg">
         <Image
           src="/kondense-logo.png"
           alt="Kondense"

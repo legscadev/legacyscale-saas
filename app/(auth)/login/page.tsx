@@ -32,7 +32,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <Card variant="raised" className="p-6 sm:p-7">
+      <Card variant="flat" className="p-6 sm:p-7">
         <form action={formAction} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
