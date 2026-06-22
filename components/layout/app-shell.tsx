@@ -67,7 +67,7 @@ function AppShellInner({
       <aside
         data-sidebar="dark"
         className={cn(
-          'fixed inset-y-0 left-0 z-40 hidden flex-col bg-background text-neutral-300 transition-[width] duration-200 ease-in-out lg:flex',
+          'fixed inset-y-0 left-0 z-40 hidden flex-col bg-neutral-950 text-neutral-300 transition-[width] duration-200 ease-in-out lg:flex',
           collapsed ? 'w-14' : 'w-64',
         )}
       >
@@ -114,7 +114,7 @@ function AppShellInner({
           />
           <div
             data-sidebar="dark"
-            className="absolute inset-y-0 left-0 flex w-72 flex-col bg-background text-neutral-300 animate-in slide-in-from-left"
+            className="absolute inset-y-0 left-0 flex w-72 flex-col bg-neutral-950 text-neutral-300 animate-in slide-in-from-left"
           >
             <div className="flex h-14 items-center justify-between px-4">
               <span className="text-white">
