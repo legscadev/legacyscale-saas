@@ -5,6 +5,7 @@ import {
   type OnChangeFn,
   type RowSelectionState,
   type SortingState,
+  type VisibilityState,
   flexRender,
   getCoreRowModel,
   useReactTable,
@@ -44,6 +45,9 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData) => void
   /** Used by TanStack to stably identify rows for selection. */
   getRowId?: (row: TData) => string
+  /** Optional column visibility state — caller owns the source of truth. */
+  columnVisibility?: VisibilityState
+  onColumnVisibilityChange?: OnChangeFn<VisibilityState>
   /** Render-prop for the bulk-action bar that appears when rows are
    *  selected. Receives the selected row IDs + a `clear` helper. */
   bulkActions?: (state: {
@@ -68,6 +72,8 @@ export function DataTable<TData, TValue>({
   onRowClick,
   getRowId,
   bulkActions,
+  columnVisibility,
+  onColumnVisibilityChange,
 }: DataTableProps<TData, TValue>) {
   const table = useReactTable({
     data,
@@ -75,10 +81,12 @@ export function DataTable<TData, TValue>({
     state: {
       sorting,
       ...(rowSelection ? { rowSelection } : {}),
+      ...(columnVisibility ? { columnVisibility } : {}),
       pagination: { pageIndex: page - 1, pageSize },
     },
     onSortingChange,
     ...(onRowSelectionChange ? { onRowSelectionChange } : {}),
+    ...(onColumnVisibilityChange ? { onColumnVisibilityChange } : {}),
     enableRowSelection: !!onRowSelectionChange,
     manualSorting: true,
     manualPagination: true,

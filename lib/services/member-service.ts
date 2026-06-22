@@ -78,6 +78,22 @@ async function listMembers(options: ListMembersOptions) {
         createdAt: true,
         lastLoginAt: true,
         deletedAt: true,
+        _count: {
+          select: {
+            enrollments: {
+              where: { status: { in: ['ACTIVE', 'PENDING'] } },
+            },
+          },
+        },
+        invites: {
+          select: {
+            usedAt: true,
+            passwordSetAt: true,
+            expiresAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     }),
     prisma.user.count({ where }),

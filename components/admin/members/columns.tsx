@@ -94,11 +94,13 @@ export function getMemberColumns(
         />
       ),
       enableSorting: false,
+      enableHiding: false,
       size: 40,
       meta: { className: 'pl-4 w-10', stopRowClick: true },
     },
     {
       accessorKey: 'name',
+      enableHiding: false,
       header: ({ column }) => <SortHeader column={column}>Member</SortHeader>,
       cell: ({ row }) => {
         const m = row.original
@@ -123,6 +125,25 @@ export function getMemberColumns(
               <p className="truncate text-xs text-muted-foreground">
                 {m.email}
               </p>
+              {(() => {
+                const invite = m.invites?.[0]
+                if (!invite || invite.usedAt) return null
+                const label = invite.passwordSetAt
+                  ? 'Onboarding'
+                  : new Date(invite.expiresAt) < new Date()
+                    ? 'Invite expired'
+                    : 'Invited'
+                return (
+                  <span className={cn(
+                    'mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
+                    label === 'Invite expired'
+                      ? 'bg-destructive/10 text-destructive'
+                      : 'bg-primary/10 text-primary',
+                  )}>
+                    {label}
+                  </span>
+                )
+              })()}
             </div>
           </div>
         )
@@ -133,10 +154,12 @@ export function getMemberColumns(
       header: 'Role',
       cell: ({ row }) => <StatusBadge status={row.original.role} />,
       enableSorting: false,
+      meta: { label: 'Role' },
     },
     {
       accessorKey: 'isActive',
       header: 'Status',
+      meta: { label: 'Status' },
       cell: ({ row }) => {
         const m = row.original
         return (
@@ -148,7 +171,20 @@ export function getMemberColumns(
       enableSorting: false,
     },
     {
+      id: 'enrollments',
+      accessorFn: (row) => row._count.enrollments,
+      header: 'Enrollments',
+      meta: { label: 'Enrollments' },
+      cell: ({ getValue }) => (
+        <span className="text-sm tabular-nums text-muted-foreground">
+          {getValue<number>()}
+        </span>
+      ),
+      enableSorting: false,
+    },
+    {
       accessorKey: 'createdAt',
+      meta: { label: 'Joined' },
       header: ({ column }) => <SortHeader column={column}>Joined</SortHeader>,
       cell: ({ row }) => (
         <span
@@ -161,6 +197,7 @@ export function getMemberColumns(
     },
     {
       accessorKey: 'lastLoginAt',
+      meta: { label: 'Last active' },
       header: ({ column }) => (
         <SortHeader column={column}>Last active</SortHeader>
       ),
@@ -175,6 +212,7 @@ export function getMemberColumns(
     },
     {
       id: 'actions',
+      enableHiding: false,
       header: () => null,
       cell: ({ row }) => (
         <div className="flex justify-end">
