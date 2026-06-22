@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Pin, Save } from 'lucide-react'
+import { AlertTriangle, Pin, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import type {
   AnnouncementCategory,
@@ -47,6 +48,9 @@ interface AnnouncementFormProps {
   submitLabel: string
   onSubmit: (formData: FormData) => Promise<AnnouncementFormSubmitResult>
   destructiveAction?: React.ReactNode
+  /** When false, the "Crosspost to Discord" option is hard-disabled
+   *  and a warning links to settings. */
+  discordWebhookConfigured: boolean
 }
 
 type FieldErrors = Partial<Record<string, string[]>>
@@ -65,6 +69,7 @@ export function AnnouncementForm({
   submitLabel,
   onSubmit,
   destructiveAction,
+  discordWebhookConfigured,
 }: AnnouncementFormProps) {
   const router = useRouter()
 
@@ -333,21 +338,26 @@ export function AnnouncementForm({
           <div
             className={cn(
               'rounded-md border bg-muted/30',
-              status !== 'PUBLISHED' && 'opacity-60',
+              (status !== 'PUBLISHED' || !discordWebhookConfigured) &&
+                'opacity-60',
             )}
           >
             <label
               className={cn(
                 'flex items-start gap-2.5 p-3 text-sm',
-                status === 'PUBLISHED'
+                status === 'PUBLISHED' && discordWebhookConfigured
                   ? 'cursor-pointer'
                   : 'cursor-not-allowed',
               )}
             >
               <Checkbox
-                checked={notifyDiscord}
+                checked={notifyDiscord && discordWebhookConfigured}
                 onCheckedChange={(v) => setNotifyDiscord(v === true)}
-                disabled={status !== 'PUBLISHED' || submitting}
+                disabled={
+                  status !== 'PUBLISHED' ||
+                  !discordWebhookConfigured ||
+                  submitting
+                }
               />
               <div className="space-y-0.5">
                 <p className="font-medium leading-none">
@@ -359,7 +369,28 @@ export function AnnouncementForm({
                 </p>
               </div>
             </label>
-            {notifyDiscord && status === 'PUBLISHED' ? (
+            {!discordWebhookConfigured ? (
+              <p
+                role="alert"
+                className="flex items-start gap-2 border-t border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive"
+              >
+                <AlertTriangle
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                  aria-hidden="true"
+                />
+                <span>
+                  No Discord webhook configured.{' '}
+                  <Link
+                    href="/admin/settings"
+                    className="underline underline-offset-2 hover:text-destructive/80"
+                  >
+                    Set it up in Settings → Integrations
+                  </Link>{' '}
+                  to enable this option.
+                </span>
+              </p>
+            ) : null}
+            {notifyDiscord && status === 'PUBLISHED' && discordWebhookConfigured ? (
               <label className="flex cursor-pointer items-start gap-2.5 border-t px-3 py-2.5 text-sm">
                 <Checkbox
                   checked={discordMentionEveryone}

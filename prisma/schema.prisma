@@ -125,11 +125,31 @@ model User {
   announcementReactions AnnouncementReaction[]
   announcementAuditLogs AnnouncementAuditLog[]
   invites           Invite[]
+  loginEvents       LoginEvent[]
+  appSettingsUpdated AppSetting[] @relation("AppSettingUpdater")
 
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
   @@map("users")
+}
+
+// ============================================
+// APP SETTINGS
+// ============================================
+
+/// Generic key-value store for admin-configurable platform settings
+/// (e.g. Discord webhook URL, future integration tokens, branding).
+/// One row per key. Reads are server-only — secret values must never
+/// be returned to the client unmasked.
+model AppSetting {
+  key         String   @id
+  value       String
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedById String?  @map("updated_by_id")
+  updatedBy   User?    @relation("AppSettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("app_settings")
 }
 
 // ============================================
@@ -157,6 +177,23 @@ model Invite {
   @@index([userId])
   @@index([token])
   @@map("invites")
+}
+
+// ============================================
+// LOGIN EVENTS
+// ============================================
+
+/// Tracks individual login timestamps per user. Powers the activity
+/// sparkline on the admin members page.
+model LoginEvent {
+  id      String   @id @default(uuid())
+  userId  String   @map("user_id")
+  loginAt DateTime @default(now()) @map("login_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loginAt])
+  @@map("login_events")
 }
 
 // ============================================

@@ -92,7 +92,7 @@ export function LessonBody({
               )}
             </TabsContent>
             <TabsContent value="notes" className="pt-4">
-              <NotesPanel />
+              <NotesPanel lessonId={lesson.id} />
             </TabsContent>
             {hasResources ? (
               <TabsContent value="resources" className="pt-4">

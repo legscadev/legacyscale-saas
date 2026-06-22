@@ -28,6 +28,7 @@ export interface MembersData {
   page: number
   limit: number
   totalPages: number
+  sparklines: Record<string, number[]>
 }
 
 export async function fetchMembers(
@@ -48,6 +49,10 @@ export async function fetchMembers(
     }),
   ])
 
+  const sparklines = await memberService.sparklines(
+    result.items.map((m) => m.id),
+  )
+
   return {
     counts,
     items: result.items,
@@ -55,5 +60,6 @@ export async function fetchMembers(
     page: result.page,
     limit: result.limit,
     totalPages: result.totalPages,
+    sparklines,
   }
 }

@@ -78,6 +78,22 @@ async function listMembers(options: ListMembersOptions) {
         createdAt: true,
         lastLoginAt: true,
         deletedAt: true,
+        _count: {
+          select: {
+            enrollments: {
+              where: { status: { in: ['ACTIVE', 'PENDING'] } },
+            },
+          },
+        },
+        invites: {
+          select: {
+            usedAt: true,
+            passwordSetAt: true,
+            expiresAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     }),
     prisma.user.count({ where }),
@@ -122,9 +138,54 @@ async function getCounts() {
   return totals
 }
 
+/**
+ * Returns a 30-element array per user representing daily login counts
+ * for the last 30 days. Used to render activity sparklines.
+ */
+async function getLoginSparklines(
+  userIds: string[],
+): Promise<Record<string, number[]>> {
+  if (userIds.length === 0) return {}
+
+  const rows = await prisma.$queryRaw<
+    { user_id: string; day: Date; logins: bigint }[]
+  >`
+    SELECT user_id, DATE(login_at) as day, COUNT(*) as logins
+    FROM login_events
+    WHERE user_id = ANY(${userIds})
+      AND login_at >= NOW() - INTERVAL '30 days'
+    GROUP BY user_id, DATE(login_at)
+    ORDER BY user_id, day
+  `
+
+  // Build a map of userId → 30-element array (index 0 = 30 days ago)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const result: Record<string, number[]> = {}
+
+  for (const id of userIds) {
+    result[id] = Array(30).fill(0)
+  }
+
+  for (const row of rows) {
+    const arr = result[row.user_id]
+    if (!arr) continue
+    const dayDate = new Date(row.day)
+    dayDate.setHours(0, 0, 0, 0)
+    const diffDays = Math.round((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24))
+    const index = 29 - diffDays
+    if (index >= 0 && index < 30) {
+      arr[index] = Number(row.logins)
+    }
+  }
+
+  return result
+}
+
 export const memberService = {
   list: listMembers,
   counts: getCounts,
+  sparklines: getLoginSparklines,
   defaultPageSize: DEFAULT_PAGE_SIZE,
 }
 

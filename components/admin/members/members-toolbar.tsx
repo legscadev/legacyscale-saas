@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Search, X } from 'lucide-react'
+import type { ColumnDef, VisibilityState } from '@tanstack/react-table'
+import { Columns3, Search, X } from 'lucide-react'
 import type { Role } from '@prisma/client'
 
-import type { MemberStatusFilter } from '@/lib/services/member-service'
+import type { MemberStatusFilter, MemberListItem } from '@/lib/services/member-service'
 
 import { Input } from '@/components/ui/input'
 import {
@@ -15,6 +16,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const ROLES = [
   { value: 'all', label: 'Any role' },
@@ -39,6 +46,9 @@ interface MembersToolbarProps {
   onStatusChange: (status: MemberStatusFilter | null) => void
   onClearAll: () => void
   isPending: boolean
+  columnVisibility: VisibilityState
+  columns: ColumnDef<MemberListItem, unknown>[]
+  onColumnVisibilityChange: (state: VisibilityState) => void
 }
 
 export function MembersToolbar({
@@ -50,6 +60,9 @@ export function MembersToolbar({
   onStatusChange,
   onClearAll,
   isPending,
+  columnVisibility,
+  columns,
+  onColumnVisibilityChange,
 }: MembersToolbarProps) {
   // Local search state with debounce so we don't refetch on every keystroke.
   const [draft, setDraft] = useState(search)
@@ -136,6 +149,37 @@ export function MembersToolbar({
             ))}
           </SelectContent>
         </Select>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger className="inline-flex h-9 items-center gap-1.5 rounded-md border bg-background px-3 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground">
+            <Columns3 className="size-3.5" />
+            Columns
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {columns
+              .filter((col) => col.enableHiding !== false && (col.id || ('accessorKey' in col && col.accessorKey)))
+              .map((col) => {
+                const id = col.id || ('accessorKey' in col ? (col.accessorKey as string) : '')
+                // @ts-expect-error — meta is open-ended
+                const label = col.meta?.label || id
+                const visible = columnVisibility[id] !== false
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={id}
+                    checked={visible}
+                    onCheckedChange={(checked) =>
+                      onColumnVisibilityChange({
+                        ...columnVisibility,
+                        [id]: checked,
+                      })
+                    }
+                  >
+                    {label}
+                  </DropdownMenuCheckboxItem>
+                )
+              })}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {hasActiveFilters && (
           <Button

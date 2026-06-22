@@ -12,6 +12,9 @@
 // If that's off, the literal text "@everyone" still posts but won't
 // notify anyone.
 
+import { getRawSetting } from '@/lib/services/app-setting-service'
+import { SETTING_KEYS } from '@/lib/settings/keys'
+
 interface DiscordEmbed {
   title?: string
   description?: string
@@ -34,19 +37,31 @@ interface ExecuteWebhookPayload {
 const DISCORD_WEBHOOK_TIMEOUT_MS = 10_000
 const KONDENSE_BRAND_RED = 0xd11a1a
 
-function getWebhookUrl(): string | null {
-  const url = process.env.DISCORD_WEBHOOK_URL?.trim()
-  if (!url) return null
-  // Bare-bones safety: must be a Discord webhook URL.
-  if (!/^https:\/\/discord(app)?\.com\/api\/webhooks\//.test(url)) {
-    console.error('DISCORD_WEBHOOK_URL is set but does not look like a Discord webhook URL')
+// Webhook URL lives in the `app_settings` table; admins set it via
+// /admin/settings → Integrations. No env-var fallback — if the row is
+// missing, callers no-op silently. Returning null is the "no webhook
+// configured" signal.
+async function resolveWebhookUrl(): Promise<string | null> {
+  const raw = await getRawSetting(SETTING_KEYS.DISCORD_WEBHOOK_URL).catch(
+    (err) => {
+      console.error('Failed to read Discord webhook setting from DB:', err)
+      return null
+    },
+  )
+  const trimmed = raw?.trim()
+  if (!trimmed) return null
+  if (!/^https:\/\/discord(app)?\.com\/api\/webhooks\//.test(trimmed)) {
+    console.error('Stored Discord webhook URL does not look like a webhook URL')
     return null
   }
-  return url
+  return trimmed
 }
 
-async function executeWebhook(payload: ExecuteWebhookPayload): Promise<void> {
-  const url = getWebhookUrl()
+async function executeWebhook(
+  payload: ExecuteWebhookPayload,
+  overrideUrl?: string,
+): Promise<void> {
+  const url = overrideUrl ?? (await resolveWebhookUrl())
   if (!url) {
     // No webhook configured — silently no-op so the caller doesn't
     // have to gate every call site.
@@ -109,4 +124,61 @@ export async function postAnnouncementToDiscord(
       ? { parse: ['everyone'] }
       : { parse: [] },
   })
+}
+
+/**
+ * Post a dry-run embed to verify a webhook URL works. Unlike
+ * `postAnnouncementToDiscord` (which swallows errors so a broken
+ * webhook can't block publishing), this surfaces failures so the
+ * admin UI can show a clear error toast.
+ *
+ * `overrideUrl` lets admins test a *candidate* URL before saving it.
+ * When omitted, falls back to the currently resolved URL (DB → env).
+ */
+export async function testDiscordWebhook(
+  overrideUrl?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const url = overrideUrl?.trim() || (await resolveWebhookUrl())
+  if (!url) {
+    return { ok: false, error: 'No Discord webhook URL configured' }
+  }
+  if (!/^https:\/\/discord(app)?\.com\/api\/webhooks\//.test(url)) {
+    return { ok: false, error: 'Not a valid Discord webhook URL' }
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), DISCORD_WEBHOOK_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        embeds: [
+          {
+            title: 'Kondense webhook test',
+            description:
+              'This is a test message from the admin settings page. If you see this, the webhook is wired up correctly.',
+            color: KONDENSE_BRAND_RED,
+            timestamp: new Date().toISOString(),
+            footer: { text: 'Kondense · test' },
+          },
+        ],
+        allowed_mentions: { parse: [] },
+      } satisfies ExecuteWebhookPayload),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '<no body>')
+      return {
+        ok: false,
+        error: `Discord returned ${res.status} ${res.statusText}: ${body.slice(0, 200)}`,
+      }
+    }
+    return { ok: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { ok: false, error: message }
+  } finally {
+    clearTimeout(timer)
+  }
 }

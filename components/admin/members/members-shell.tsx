@@ -11,6 +11,7 @@ import type {
   OnChangeFn,
   RowSelectionState,
   SortingState,
+  VisibilityState,
 } from '@tanstack/react-table'
 import { Plus, Users } from 'lucide-react'
 
@@ -57,10 +58,30 @@ export function MembersShell({
   const [isLoading, setIsLoading] = useState(false)
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+
+  // Restore saved column visibility from localStorage after mount to avoid
+  // hydration mismatch (server has no access to localStorage).
+  const didRestoreVisibility = useRef(false)
+  useEffect(() => {
+    if (didRestoreVisibility.current) return
+    didRestoreVisibility.current = true
+    try {
+      const saved = localStorage.getItem('kondense:members:columnVisibility')
+      if (saved) setColumnVisibility(JSON.parse(saved))
+    } catch { /* noop */ }
+  }, [])
   const [createOpen, setCreateOpen] = useState(false)
   // Bumped to trigger an out-of-band refetch (e.g. after creating a
   // member via the dialog) without changing the query state.
   const [refetchKey, setRefetchKey] = useState(0)
+
+  // Persist column visibility to localStorage.
+  useEffect(() => {
+    try {
+      localStorage.setItem('kondense:members:columnVisibility', JSON.stringify(columnVisibility))
+    } catch { /* noop */ }
+  }, [columnVisibility])
 
   // Skip the very first effect run — the server-fetched initialData
   // already matches DEFAULT_QUERY_STATE, no need to refetch. After that,
@@ -138,8 +159,8 @@ export function MembersShell({
   const refetch = useCallback(() => setRefetchKey((k) => k + 1), [])
 
   const columns = useMemo(
-    () => getMemberColumns(currentUserId, refetch),
-    [currentUserId, refetch],
+    () => getMemberColumns(currentUserId, refetch, data.sparklines),
+    [currentUserId, refetch, data.sparklines],
   )
 
   const selectedIds = Object.keys(rowSelection)
@@ -175,6 +196,9 @@ export function MembersShell({
           onStatusChange={(status) => patch({ status })}
           onClearAll={clearFilters}
           isPending={isLoading}
+          columnVisibility={columnVisibility}
+          columns={columns}
+          onColumnVisibilityChange={setColumnVisibility}
         />
 
         {showEmpty ? (
@@ -209,6 +233,8 @@ export function MembersShell({
             onSortingChange={onSortingChange}
             rowSelection={rowSelection}
             onRowSelectionChange={setRowSelection}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
             getRowId={(row) => row.id}
           />
         )}

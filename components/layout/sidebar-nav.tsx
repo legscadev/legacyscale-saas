@@ -33,7 +33,7 @@ export function SidebarNav({
       )}
     >
       {sections.map((section, i) => (
-        <div key={section.label ?? i} className="flex w-full flex-col gap-1">
+        <div key={section.label ?? i} className={cn('flex w-full flex-col gap-1', collapsed && 'items-center')}>
           {section.label && !collapsed && (
             <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-neutral-500">
               {section.label}
