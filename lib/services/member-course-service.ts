@@ -163,6 +163,105 @@ export type MemberCatalogCourse = Awaited<
 >[number]
 
 // ============================================
+// NEXT COURSE — recommendation for completion screen
+// ============================================
+
+/**
+ * Pick a "what's next" suggestion to surface after the user finishes
+ * `justFinishedCourseId`. Strategy:
+ *   1. Same-category sibling — any PUBLISHED course in a category
+ *      the just-finished course belongs to, that the user can see
+ *      and hasn't already completed.
+ *   2. Fallback: another enrolled, member-visible course that is
+ *      not yet completed.
+ *
+ * Returns null when the catalog has nothing left to surface. Cheap:
+ * two indexed lookups, no aggregation.
+ */
+export async function suggestNextCourseForMember(
+  userId: string,
+  justFinishedCourseId: string,
+) {
+  const visibleAudiences = await resolveVisibleAudiences(userId)
+
+  // Course just finished — need its category memberships for the
+  // sibling lookup. Use findUnique with select for a single round-trip.
+  const finished = await prisma.course.findUnique({
+    where: { id: justFinishedCourseId },
+    select: {
+      categories: { select: { categoryId: true } },
+    },
+  })
+  const categoryIds = finished?.categories.map((c) => c.categoryId) ?? []
+
+  // Courses the user has already completed — never suggest these.
+  const completed = await prisma.enrollment.findMany({
+    where: { userId, completedAt: { not: null } },
+    select: { courseId: true },
+  })
+  const completedIds = completed.map((e) => e.courseId)
+
+  const baseWhere = {
+    deletedAt: null,
+    status: 'PUBLISHED' as const,
+    audience: { in: visibleAudiences },
+    id: { notIn: [...completedIds, justFinishedCourseId] },
+  }
+
+  // 1. Same-category sibling.
+  if (categoryIds.length > 0) {
+    const sibling = await prisma.course.findFirst({
+      where: {
+        ...baseWhere,
+        categories: { some: { categoryId: { in: categoryIds } } },
+      },
+      orderBy: { orderIndex: 'asc' },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        description: true,
+        thumbnailUrl: true,
+      },
+    })
+    if (sibling) return { ...sibling, reason: 'sameCategory' as const }
+  }
+
+  // 2. Fallback: any other enrolled, visible, uncompleted course.
+  const enrollment = await prisma.enrollment.findFirst({
+    where: {
+      userId,
+      completedAt: null,
+      courseId: { not: justFinishedCourseId },
+      course: {
+        deletedAt: null,
+        status: 'PUBLISHED',
+        audience: { in: visibleAudiences },
+      },
+    },
+    orderBy: { lastAccessedAt: 'desc' },
+    select: {
+      course: {
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          description: true,
+          thumbnailUrl: true,
+        },
+      },
+    },
+  })
+  if (enrollment) return { ...enrollment.course, reason: 'enrolled' as const }
+
+  return null
+}
+
+export type SuggestedNextCourse = NonNullable<
+  Awaited<ReturnType<typeof suggestNextCourseForMember>>
+>
+
+// ============================================
 // DETAIL — single course with curriculum + per-lesson progress overlay
 // ============================================
 
@@ -294,6 +393,7 @@ async function composeMemberCourse(userId: string, course: RawCourse) {
         enrolledAt: true,
         lastAccessedAt: true,
         expiresAt: true,
+        completedAt: true,
       },
     }),
     lessonIds.length > 0
@@ -433,6 +533,7 @@ export async function markLessonProgress(
           course: {
             select: {
               id: true,
+              slug: true,
               status: true,
               audience: true,
               deletedAt: true,
@@ -496,7 +597,31 @@ export async function markLessonProgress(
     data: { progressPercent },
   })
 
-  return { courseId: course.id, progressPercent, completedCount, lessonsTotal }
+  // Course just reached 100%: stamp completedAt exactly once. The
+  // `WHERE completedAt IS NULL` predicate makes the write idempotent
+  // even if two clients race the final lesson — only one update
+  // touches a row, so only one caller gets `justCompleted: true`.
+  let justCompleted = false
+  if (progressPercent === 100) {
+    const claim = await prisma.enrollment.updateMany({
+      where: {
+        userId,
+        courseId: course.id,
+        completedAt: null,
+      },
+      data: { completedAt: new Date() },
+    })
+    justCompleted = claim.count > 0
+  }
+
+  return {
+    courseId: course.id,
+    courseSlug: course.slug,
+    progressPercent,
+    completedCount,
+    lessonsTotal,
+    justCompleted,
+  }
 }
 
 // ============================================
@@ -560,6 +685,10 @@ interface QuizSubmissionResult {
   total: number
   passingScore: number
   breakdown: QuizBreakdownItem[]
+  /** Set when passing the quiz flipped the course to 100% on this
+   *  call. Mirrors `markLessonProgress`'s justCompleted signal. */
+  justCompleted: boolean
+  courseSlug: string
 }
 
 /**
@@ -583,6 +712,7 @@ export async function submitQuizAttempt(
           courseId: true,
           course: {
             select: {
+              slug: true,
               status: true,
               audience: true,
               deletedAt: true,
@@ -636,8 +766,13 @@ export async function submitQuizAttempt(
     select: { id: true },
   })
 
+  // When passed, marking the lesson complete may also complete the
+  // whole course — capture justCompleted from that call so the quiz
+  // UI can route the user to the celebration screen.
+  let justCompleted = false
   if (passed) {
-    await markLessonProgress(userId, lessonId, true)
+    const markResult = await markLessonProgress(userId, lessonId, true)
+    justCompleted = markResult.justCompleted
   }
 
   return {
@@ -647,6 +782,8 @@ export async function submitQuizAttempt(
     total,
     passingScore,
     breakdown,
+    justCompleted,
+    courseSlug: course.slug,
   }
 }
 
@@ -745,6 +882,7 @@ export const memberCourseService = {
   listCatalog: listCatalogForMember,
   getById: getCourseForMember,
   getBySlug: getCourseForMemberBySlug,
+  suggestNextCourse: suggestNextCourseForMember,
   ensureEnrollment,
   markLessonProgress,
   recordLessonView,

@@ -179,7 +179,9 @@ export default async function CourseDetailPage({
         </Card>
       ) : null}
 
-      {/* Completion celebration — only fires at 100%. */}
+      {/* Completion celebration — only fires at 100%. The summary
+          page lives at /courses/[slug]/complete and shows recap +
+          recommended next course. */}
       {completed ? (
         <Card
           variant="raised"
@@ -194,16 +196,15 @@ export default async function CourseDetailPage({
             </h2>
             <p className="text-sm text-muted-foreground">
               All {course.lessonsCount} lessons are done — revisit any
-              chapter below, or jump back into the catalog for your next
-              track.
+              chapter below, or open your completion summary for what to
+              tackle next.
             </p>
           </div>
           <Button
-            variant="outline"
-            render={<Link href="/courses" />}
+            render={<Link href={`/courses/${course.slug}/complete`} />}
             className="sm:shrink-0"
           >
-            Browse courses
+            View completion summary
           </Button>
         </Card>
       ) : null}

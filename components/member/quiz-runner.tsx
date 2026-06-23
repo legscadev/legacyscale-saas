@@ -57,6 +57,10 @@ interface QuizResult {
     correctIndex: number
     explanation: string | null
   }>
+  /** Set when passing this quiz flipped the whole course to 100%.
+   *  Drives the "View course completion" CTA on the result card. */
+  justCompleted: boolean
+  courseSlug: string | null
 }
 
 type Phase = 'intro' | 'active' | 'result'
@@ -136,6 +140,8 @@ export function QuizRunner({
         total: res.total!,
         passingScore: res.passingScore!,
         breakdown: res.breakdown!,
+        justCompleted: res.justCompleted ?? false,
+        courseSlug: res.courseSlug ?? null,
       })
       setPhase('result')
       if (res.passed) {
@@ -238,17 +244,33 @@ export function QuizRunner({
                 <RotateCcw />
                 Try again
               </Button>
-              <Button
-                variant="ghost"
-                onClick={skipQuiz}
-                disabled={navigating}
-                aria-live="polite"
-              >
-                {navigating ? (
-                  <ArrowRight className="animate-pulse" />
-                ) : null}
-                {navigating ? 'Moving to next lesson…' : 'Skip quiz'}
-              </Button>
+              {result.justCompleted && result.courseSlug ? (
+                <Button
+                  onClick={() => {
+                    setNavigating(true)
+                    router.push(`/courses/${result.courseSlug}/complete`)
+                  }}
+                  disabled={navigating}
+                  aria-live="polite"
+                >
+                  {navigating ? (
+                    <ArrowRight className="animate-pulse" />
+                  ) : null}
+                  {navigating ? 'Opening summary…' : 'View course completion'}
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  onClick={skipQuiz}
+                  disabled={navigating}
+                  aria-live="polite"
+                >
+                  {navigating ? (
+                    <ArrowRight className="animate-pulse" />
+                  ) : null}
+                  {navigating ? 'Moving to next lesson…' : 'Skip quiz'}
+                </Button>
+              )}
             </div>
           </div>
         </Card>

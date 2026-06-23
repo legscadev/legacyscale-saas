@@ -10,6 +10,13 @@ interface SetCompleteResult {
   progressPercent?: number
   completedCount?: number
   lessonsTotal?: number
+  /** True when this call was the one that flipped progress to 100%
+   *  for the first time (i.e. it stamped Enrollment.completedAt).
+   *  Lets the caller route into the celebration screen. */
+  justCompleted?: boolean
+  /** Slug of the course this lesson belongs to — handy so the client
+   *  can push to /courses/<slug>/complete without a second lookup. */
+  courseSlug?: string
   error?: string
 }
 
@@ -28,6 +35,10 @@ interface SubmitQuizResult {
   total?: number
   passingScore?: number
   breakdown?: QuizBreakdownItem[]
+  /** True when passing this quiz flipped the course to 100%. Quiz
+   *  runner uses this to route into the celebration screen. */
+  justCompleted?: boolean
+  courseSlug?: string
   error?: string
 }
 
@@ -70,6 +81,8 @@ export async function setLessonCompleteAction(
       progressPercent: result.progressPercent,
       completedCount: result.completedCount,
       lessonsTotal: result.lessonsTotal,
+      justCompleted: result.justCompleted,
+      courseSlug: result.courseSlug,
     }
   } catch (error) {
     const message =
@@ -109,6 +122,8 @@ export async function submitQuizAttemptAction(
       total: result.total,
       passingScore: result.passingScore,
       breakdown: result.breakdown,
+      justCompleted: result.justCompleted,
+      courseSlug: result.courseSlug,
     }
   } catch (error) {
     const message =

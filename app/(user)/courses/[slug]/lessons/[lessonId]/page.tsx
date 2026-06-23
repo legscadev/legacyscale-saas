@@ -271,7 +271,11 @@ export default async function LessonPlayerPage({
                 You&apos;re on the final lesson
               </p>
               <p className="text-xs text-muted-foreground">
-                Finish this video and the course will be marked complete.
+                {lesson.type === 'VIDEO'
+                  ? 'Finish this video and the course will be marked complete.'
+                  : lesson.type === 'QUIZ'
+                    ? 'Pass this quiz and the course will be marked complete.'
+                    : 'Mark this lesson complete to finish the course.'}
               </p>
             </Card>
           ) : courseCompleted ? (
