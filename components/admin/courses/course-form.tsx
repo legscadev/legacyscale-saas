@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Image as ImageIcon, Save, Trash2 } from 'lucide-react'
+import { Check, Image as ImageIcon, Save, Tag, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CourseAudience, CourseStatus } from '@prisma/client'
 
@@ -43,6 +43,11 @@ export interface CourseFormSubmitResult {
   fieldErrors?: Record<string, string[]>
 }
 
+export interface CourseFormCategoryOption {
+  id: string
+  name: string
+}
+
 export interface CourseFormDefaults {
   title?: string
   slug?: string | null
@@ -53,12 +58,15 @@ export interface CourseFormDefaults {
   accessDays?: number | null
   isFree?: boolean
   audience?: CourseAudience
+  categoryIds?: string[]
 }
 
 interface CourseFormProps {
   mode: 'create' | 'edit'
   defaults?: CourseFormDefaults
   submitLabel: string
+  /** Full list of selectable categories. Empty array hides the section. */
+  categories: CourseFormCategoryOption[]
   /** Existing course id for edit. Omitted on create — the form mints
    *  a UUID up front so the signed-upload flow has a stable folder
    *  before the row exists. */
@@ -83,6 +91,7 @@ export function CourseForm({
   mode,
   defaults,
   submitLabel,
+  categories,
   courseId,
   onSubmit,
   destructiveAction,
@@ -115,6 +124,9 @@ export function CourseForm({
   const [isFree, setIsFree] = useState<boolean>(defaults?.isFree ?? false)
   const [audience, setAudience] = useState<CourseAudience>(
     defaults?.audience ?? 'MEMBERS',
+  )
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(
+    () => new Set(defaults?.categoryIds ?? []),
   )
 
   const derivedSlug = useMemo(() => slugify(title), [title])
@@ -208,6 +220,13 @@ export function CourseForm({
       if (coverPath.path) formData.set('coverImagePath', coverPath.path)
       if (coverPicker.cleared && !coverPicker.file) {
         formData.set('clearCoverImage', '1')
+      }
+      // Always send the categories key — even empty — so the server
+      // treats this as a full replace (clearing on edit when the
+      // admin removes every chip).
+      formData.append('categoryIds', '')
+      for (const cid of selectedCategoryIds) {
+        formData.append('categoryIds', cid)
       }
 
       const result = await onSubmit(formData)
@@ -334,6 +353,30 @@ export function CourseForm({
             </p>
           )}
         </div>
+      </FormSection>
+
+      <FormSection
+        title="Categories"
+        description="Group this course alongside related programs. Members can browse by category."
+      >
+        <CategoryPicker
+          categories={categories}
+          selected={selectedCategoryIds}
+          onToggle={(id) => {
+            setSelectedCategoryIds((prev) => {
+              const next = new Set(prev)
+              if (next.has(id)) next.delete(id)
+              else next.add(id)
+              return next
+            })
+          }}
+          disabled={submitting}
+        />
+        {fieldErrors.categoryIds?.[0] && (
+          <p className="text-xs text-destructive" role="alert">
+            {fieldErrors.categoryIds[0]}
+          </p>
+        )}
       </FormSection>
 
       <FormSection
@@ -562,6 +605,73 @@ function AudienceOption({
       <span className="text-sm font-medium">{title}</span>
       <span className="text-xs text-muted-foreground">{body}</span>
     </button>
+  )
+}
+
+// ===========================================================
+// Category picker — chip-style toggle list
+// ===========================================================
+
+interface CategoryPickerProps {
+  categories: CourseFormCategoryOption[]
+  selected: Set<string>
+  onToggle: (id: string) => void
+  disabled?: boolean
+}
+
+function CategoryPicker({
+  categories,
+  selected,
+  onToggle,
+  disabled,
+}: CategoryPickerProps) {
+  if (categories.length === 0) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+        <Tag className="size-4" />
+        <span>
+          No categories yet —{' '}
+          <a
+            href="/admin/categories"
+            className="font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            create one
+          </a>{' '}
+          to start grouping courses.
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {categories.map((cat) => {
+        const active = selected.has(cat.id)
+        return (
+          <button
+            key={cat.id}
+            type="button"
+            onClick={() => onToggle(cat.id)}
+            disabled={disabled}
+            aria-pressed={active}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              active
+                ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'border-border bg-muted/40 text-foreground hover:bg-muted',
+              disabled && 'cursor-not-allowed opacity-60',
+            )}
+          >
+            {active ? (
+              <Check className="size-3.5" />
+            ) : (
+              <Tag className="size-3.5 text-muted-foreground" />
+            )}
+            {cat.name}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

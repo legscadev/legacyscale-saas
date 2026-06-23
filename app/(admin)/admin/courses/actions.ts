@@ -55,6 +55,14 @@ function parseCourseImagePath(
   return m ? (m[1] as CourseImageKind) : null
 }
 
+// The course form sends categoryIds as repeated form fields.
+// Empty array (no key, or single empty value) means "no categories".
+function parseCategoryIds(formData: FormData): string[] {
+  return formData
+    .getAll('categoryIds')
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+}
+
 export interface CoursesQueryState {
   search: string
   status: CourseStatus | null
@@ -229,6 +237,7 @@ export async function createCourseAction(
     audience: (formData.get('audience') as string) || 'MEMBERS',
     thumbnailUrl: imageResolve.thumbnailUrl,
     coverImageUrl: imageResolve.coverImageUrl,
+    categoryIds: parseCategoryIds(formData),
   })
 
   if (!parsed.success) {
@@ -376,6 +385,9 @@ export async function updateCourseAction(
   }
   if (formData.has('audience')) {
     input.audience = formData.get('audience')
+  }
+  if (formData.has('categoryIds')) {
+    input.categoryIds = parseCategoryIds(formData)
   }
 
   const parsed = updateCourseSchema.safeParse(input)

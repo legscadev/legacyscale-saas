@@ -233,11 +233,45 @@ model Course {
   chapters    Chapter[]
   modules     Module[]
   enrollments Enrollment[]
+  categories  CourseCategory[]
 
   @@index([status])
   @@index([deletedAt])
   @@index([orderIndex])
   @@map("courses")
+}
+
+/// Flat tag-style grouping for courses. Admins manage these in
+/// /admin/categories; courses join via the CourseCategory pivot.
+/// `slug` powers any future /categories/[slug] browse page.
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  courses CourseCategory[]
+
+  @@map("categories")
+}
+
+/// Junction row connecting a course to a category. Composite PK
+/// guarantees a single (course, category) edge. Both sides cascade
+/// on delete so removing a category cleans up its memberships.
+model CourseCategory {
+  courseId   String   @map("course_id")
+  categoryId String   @map("category_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, categoryId])
+  @@index([categoryId])
+  @@map("course_categories")
 }
 
 /// Optional grouping layer between Course and Chapter. A course may

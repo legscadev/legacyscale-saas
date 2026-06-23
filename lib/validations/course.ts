@@ -43,6 +43,12 @@ export const courseSlugSchema = z
     message: 'Slug may only contain lowercase letters, numbers, and hyphens',
   })
 
+// Distinct array of category UUIDs. Replace-all semantics on update.
+export const categoryIdsSchema = z
+  .array(idSchema)
+  .max(20, 'Too many categories')
+  .transform((ids) => Array.from(new Set(ids)))
+
 export const createCourseSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title is too long'),
   slug: courseSlugSchema.optional(),
@@ -53,6 +59,7 @@ export const createCourseSchema = z.object({
   accessDays: accessDaysSchema.default(null),
   isFree: z.boolean().default(false),
   audience: courseAudienceSchema.default('MEMBERS'),
+  categoryIds: categoryIdsSchema.default([]),
 })
 
 export const updateCourseSchema = z
@@ -67,6 +74,7 @@ export const updateCourseSchema = z
     isFree: z.boolean().optional(),
     audience: courseAudienceSchema.optional(),
     orderIndex: z.number().int().min(0).optional(),
+    categoryIds: categoryIdsSchema.optional(),
   })
   .refine(
     (data) => Object.values(data).some((v) => v !== undefined),

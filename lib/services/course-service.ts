@@ -77,17 +77,25 @@ const courseListSelect = {
   chapters: {
     select: { _count: { select: { lessons: true } } },
   },
+  categories: {
+    select: {
+      category: {
+        select: { id: true, name: true, slug: true },
+      },
+    },
+  },
 } satisfies Prisma.CourseSelect
 
 type CourseListRow = Prisma.CourseGetPayload<{ select: typeof courseListSelect }>
 
 function withLessonCount(row: CourseListRow) {
-  const { chapters, _count, ...rest } = row
+  const { chapters, categories, _count, ...rest } = row
   const lessons = chapters.reduce((sum, c) => sum + c._count.lessons, 0)
   return {
     ...rest,
     chaptersCount: _count.chapters,
     lessonsCount: lessons,
+    categories: categories.map((c) => c.category),
   }
 }
 
@@ -199,6 +207,7 @@ async function createCourse(
 
   const shouldPublishNow = input.status === 'PUBLISHED'
   const slug = await resolveSlug({ desired: input.slug, title: input.title })
+  const categoryIds = input.categoryIds ?? []
 
   const row = await prisma.course.create({
     data: {
@@ -215,6 +224,9 @@ async function createCourse(
       orderIndex,
       createdBy,
       publishedAt: shouldPublishNow ? new Date() : null,
+      categories: categoryIds.length
+        ? { create: categoryIds.map((categoryId) => ({ categoryId })) }
+        : undefined,
     },
     select: courseListSelect,
   })
@@ -267,6 +279,25 @@ async function updateCourse(id: string, input: UpdateCourseInput) {
         data.publishedAt = new Date()
       }
     }
+  }
+
+  // Replace-all semantics for category memberships: delete then create
+  // inside a transaction so the row never appears with a partial set.
+  if (input.categoryIds !== undefined) {
+    await prisma.$transaction([
+      prisma.courseCategory.deleteMany({ where: { courseId: id } }),
+      ...(input.categoryIds.length
+        ? [
+            prisma.courseCategory.createMany({
+              data: input.categoryIds.map((categoryId) => ({
+                courseId: id,
+                categoryId,
+              })),
+              skipDuplicates: true,
+            }),
+          ]
+        : []),
+    ])
   }
 
   const row = await prisma.course.update({

@@ -6,6 +6,7 @@ import {
   type LucideIcon,
   Megaphone,
   Settings,
+  Tag,
   TrendingUp,
   User,
   Users,
@@ -33,6 +34,7 @@ export const adminNav: NavSection[] = [
     label: 'Content',
     items: [
       { label: 'Courses', href: '/admin/courses', icon: GraduationCap },
+      { label: 'Categories', href: '/admin/categories', icon: Tag },
       { label: 'Announcements', href: '/admin/announcements', icon: Megaphone },
     ],
   },
