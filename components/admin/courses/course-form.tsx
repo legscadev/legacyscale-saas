@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Image as ImageIcon, Save, Tag, Trash2 } from 'lucide-react'
+import { Check, Image as ImageIcon, Save, Tag, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CourseAudience, CourseStatus } from '@prisma/client'
 
@@ -761,6 +761,12 @@ interface ImagePickerProps {
   error?: string
 }
 
+const ACCEPTED_IMAGE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+])
+
 function ImagePicker({
   label,
   inputId,
@@ -770,43 +776,117 @@ function ImagePicker({
   disabled,
   error,
 }: ImagePickerProps) {
+  const [isDragging, setIsDragging] = useState(false)
   const stillShowing = !!picker.file || (picker.hadExisting && !picker.cleared)
+
+  function adoptFile(next: File | null) {
+    if (!next) return
+    if (!ACCEPTED_IMAGE_TYPES.has(next.type)) {
+      toast.error(`${label} must be a PNG, JPEG, or WebP image`)
+      return
+    }
+    picker.setFile(next)
+    picker.setCleared(false)
+  }
+
+  function openFilePicker() {
+    if (disabled) return
+    picker.inputRef.current?.click()
+  }
+
+  function onDragOver(e: React.DragEvent<HTMLDivElement>) {
+    // Only flag drags that carry files — ignores text/element drags.
+    if (disabled) return
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    setIsDragging(true)
+  }
+
+  function onDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    // dragleave fires when entering child elements too; ignore those
+    // by checking the related target is outside the container.
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setIsDragging(false)
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    if (disabled) return
+    e.preventDefault()
+    setIsDragging(false)
+    const next = e.dataTransfer.files?.[0] ?? null
+    adoptFile(next)
+  }
+
   return (
     <div className="space-y-2">
       <Label htmlFor={inputId}>{label}</Label>
       <div className="space-y-3">
         <div
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          aria-label={`${label} — drag and drop an image, or click to browse`}
+          onClick={openFilePicker}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              openFilePicker()
+            }
+          }}
+          onDragEnter={onDragOver}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
           className={cn(
-            'grid w-44 max-w-full place-items-center overflow-hidden rounded-md border border-dashed bg-muted',
+            'group relative grid w-44 max-w-full cursor-pointer place-items-center overflow-hidden rounded-md border border-dashed bg-muted transition-colors',
             aspectClass,
+            !disabled && 'hover:border-foreground/30 hover:bg-muted/70',
+            isDragging && 'border-primary bg-primary/5 ring-2 ring-primary/30',
             error && 'border-destructive',
+            disabled && 'cursor-not-allowed opacity-60',
           )}
         >
           {picker.preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={picker.preview}
-              alt=""
-              className="size-full object-cover"
-            />
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={picker.preview}
+                alt=""
+                className="size-full object-cover"
+              />
+              {!disabled ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  <Upload className="mr-1 size-3.5" />
+                  Replace
+                </div>
+              ) : null}
+            </>
           ) : (
-            <ImageIcon className="size-8 text-muted-foreground" />
+            <div className="pointer-events-none flex flex-col items-center gap-1 px-3 text-center">
+              {isDragging ? (
+                <Upload className="size-7 text-primary" />
+              ) : (
+                <ImageIcon className="size-7 text-muted-foreground" />
+              )}
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {isDragging ? 'Drop to upload' : 'Drag & drop or click'}
+              </span>
+            </div>
           )}
         </div>
-        <div className="flex flex-col gap-2">
-          <input
-            ref={picker.inputRef}
-            id={inputId}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={(e) => {
-              const next = e.target.files?.[0] ?? null
-              picker.setFile(next)
-              picker.setCleared(false)
-            }}
-            disabled={disabled}
-            className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/80"
-          />
+        <input
+          ref={picker.inputRef}
+          id={inputId}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => {
+            const next = e.target.files?.[0] ?? null
+            adoptFile(next)
+          }}
+          disabled={disabled}
+          className="sr-only"
+        />
+        <div className="flex flex-col gap-1">
           <p className="text-xs text-muted-foreground">{helper}</p>
           {stillShowing && (
             <button
