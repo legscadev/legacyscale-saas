@@ -6,7 +6,7 @@ import { ArrowRight, Check, CircleCheck, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { setLessonCompleteAction } from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+import { setLessonCompleteAction } from '@/app/(user)/courses/[slug]/lessons/[lessonId]/actions'
 
 interface MarkCompleteButtonProps {
   lessonId: string

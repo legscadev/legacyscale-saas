@@ -89,7 +89,7 @@ export default async function UserDashboardPage() {
                     thumbnailUrl: course.thumbnailUrl,
                     status: course.status,
                   }}
-                  href={`/courses/${course.id}`}
+                  href={`/courses/${course.slug}`}
                 />
               ))}
             </div>

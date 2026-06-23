@@ -919,6 +919,7 @@ export interface MemberCourseChapter {
 
 export interface MemberCourseProgress {
   courseId: string
+  courseSlug: string
   courseTitle: string
   chapters: MemberCourseChapter[]
 }
@@ -933,6 +934,7 @@ async function getMemberCourseProgress(
       where: { id: courseId, deletedAt: null },
       select: {
         id: true,
+        slug: true,
         title: true,
         chapters: {
           where: { deletedAt: null },
@@ -1003,6 +1005,7 @@ async function getMemberCourseProgress(
 
   return {
     courseId: course.id,
+    courseSlug: course.slug,
     courseTitle: course.title,
     chapters,
   }
@@ -1121,6 +1124,7 @@ async function listCoursesWithProgress(
 export interface CourseProgressSummary {
   course: {
     id: string
+    slug: string
     title: string
     thumbnailUrl: string | null
     status: CourseStatus
@@ -1164,6 +1168,7 @@ async function getCourseProgressSummary(
       where: { id: courseId, deletedAt: null },
       select: {
         id: true,
+        slug: true,
         title: true,
         thumbnailUrl: true,
         status: true,

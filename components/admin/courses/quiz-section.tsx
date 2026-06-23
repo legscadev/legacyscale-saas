@@ -37,7 +37,7 @@ import {
   listQuizQuestionsAction,
   reorderQuizQuestionsAction,
   updateQuizQuestionAction,
-} from '@/app/(admin)/admin/courses/[id]/quiz-actions'
+} from '@/app/(admin)/admin/courses/[slug]/quiz-actions'
 import type { QuizQuestionItem } from '@/lib/services/quiz-service'
 import type { CreateQuestionInput } from '@/lib/validations/quiz'
 

@@ -87,7 +87,7 @@ export async function createQuizQuestionAction(
       correctIndex: parsed.data.correctIndex,
       explanation: parsed.data.explanation ?? null,
     })
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, question }
   } catch (err) {
     console.error('Quiz question create failed:', err)
@@ -119,7 +119,7 @@ export async function updateQuizQuestionAction(
       correctIndex: parsed.data.correctIndex,
       explanation: parsed.data.explanation ?? null,
     })
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, question }
   } catch (err) {
     console.error('Quiz question update failed:', err)
@@ -138,7 +138,7 @@ export async function deleteQuizQuestionAction(
   await requireAdmin()
   try {
     await quizService.delete(questionId)
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
     console.error('Quiz question delete failed:', err)
@@ -164,7 +164,7 @@ export async function reorderQuizQuestionsAction(
 
   try {
     await quizService.reorder(lessonId, parsed.data.orderedIds)
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
     console.error('Quiz question reorder failed:', err)

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { slugify } from '@/lib/utils/slug'
 import { FormSection } from '@/components/shared'
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client'
 import { prepareCourseImageUploadAction } from '@/app/(admin)/admin/courses/actions'
@@ -44,6 +45,7 @@ export interface CourseFormSubmitResult {
 
 export interface CourseFormDefaults {
   title?: string
+  slug?: string | null
   description?: string | null
   thumbnailUrl?: string | null
   coverImageUrl?: string | null
@@ -93,6 +95,11 @@ export function CourseForm({
   const courseIdRef = useRef<string>(courseId ?? crypto.randomUUID())
 
   const [title, setTitle] = useState(defaults?.title ?? '')
+  const [slug, setSlug] = useState(defaults?.slug ?? '')
+  // Once the admin types into the slug field we stop auto-deriving
+  // from the title — otherwise we'd clobber their intent on every
+  // keystroke. Edit mode starts "manual" since there's a saved slug.
+  const [slugTouched, setSlugTouched] = useState(mode === 'edit')
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [status, setStatus] = useState<CourseStatus>(
     defaults?.status ?? 'DRAFT',
@@ -109,6 +116,11 @@ export function CourseForm({
   const [audience, setAudience] = useState<CourseAudience>(
     defaults?.audience ?? 'MEMBERS',
   )
+
+  const derivedSlug = useMemo(() => slugify(title), [title])
+  // Surfaced placeholder so admins know what the auto-slug will be
+  // before they save.
+  const slugForSubmit = slugTouched ? slug.trim() : derivedSlug
 
   const thumbnailPicker = useImagePicker({
     existingUrl: defaults?.thumbnailUrl,
@@ -181,6 +193,9 @@ export function CourseForm({
       const formData = new FormData()
       formData.set('courseId', id)
       formData.set('title', trimmedTitle)
+      // Empty slug on edit means "re-derive from title"; on create
+      // the server falls back to title-derived too.
+      formData.set('slug', slugForSubmit)
       if (description.trim()) formData.set('description', description.trim())
       formData.set('status', status)
       formData.set('isFree', isFree ? '1' : '0')
@@ -269,6 +284,37 @@ export function CourseForm({
           {fieldErrors.title?.[0] && (
             <p className="text-xs text-destructive" role="alert">
               {fieldErrors.title[0]}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="course-slug">URL slug</Label>
+          <div className="flex items-center gap-1 rounded-md border bg-muted/40 focus-within:ring-2 focus-within:ring-ring/40">
+            <span className="select-none pl-3 text-sm text-muted-foreground">
+              /courses/
+            </span>
+            <Input
+              id="course-slug"
+              value={slugTouched ? slug : derivedSlug}
+              onChange={(e) => {
+                setSlugTouched(true)
+                setSlug(e.target.value.toLowerCase())
+              }}
+              placeholder={derivedSlug || 'my-course'}
+              disabled={submitting}
+              aria-invalid={!!fieldErrors.slug}
+              className="border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
+            />
+          </div>
+          {fieldErrors.slug?.[0] ? (
+            <p className="text-xs text-destructive" role="alert">
+              {fieldErrors.slug[0]}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Used in the public course URL. Auto-derived from the title — edit
+              for a tighter SEO target. Lowercase letters, numbers, and hyphens.
             </p>
           )}
         </div>

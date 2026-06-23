@@ -154,10 +154,7 @@ export function MemberEnrollmentsTable({
                     No curriculum to show.
                   </p>
                 ) : (
-                  <CourseDrilldown
-                    courseId={e.courseId}
-                    data={drill.data}
-                  />
+                  <CourseDrilldown data={drill.data} />
                 )}
               </div>
             ) : null}
@@ -169,17 +166,15 @@ export function MemberEnrollmentsTable({
 }
 
 function CourseDrilldown({
-  courseId,
   data,
 }: {
-  courseId: string
   data: MemberCourseProgress
 }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end">
         <Link
-          href={`/admin/courses/${courseId}`}
+          href={`/admin/courses/${data.courseSlug}`}
           className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ExternalLink className="size-3" />

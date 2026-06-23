@@ -1,4 +1,6 @@
 import { z } from 'zod'
+
+import { isValidSlug } from '@/lib/utils/slug'
 import { idSchema, optionalUrlSchema } from './common'
 
 // ============================================
@@ -31,8 +33,19 @@ export const accessDaysSchema = z
   .max(36500, 'Access days is too large')
   .nullable()
 
+// Admin-supplied slugs are validated for shape. Empty string is
+// allowed because the service derives a slug from the title when
+// the admin leaves the field blank.
+export const courseSlugSchema = z
+  .string()
+  .max(80, 'Slug is too long')
+  .refine((v) => v === '' || isValidSlug(v), {
+    message: 'Slug may only contain lowercase letters, numbers, and hyphens',
+  })
+
 export const createCourseSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title is too long'),
+  slug: courseSlugSchema.optional(),
   description: z.string().max(5000, 'Description is too long').optional(),
   thumbnailUrl: optionalUrlSchema,
   coverImageUrl: optionalUrlSchema,
@@ -45,6 +58,7 @@ export const createCourseSchema = z.object({
 export const updateCourseSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
+    slug: courseSlugSchema.optional(),
     description: z.string().max(5000).optional(),
     thumbnailUrl: optionalUrlSchema,
     coverImageUrl: optionalUrlSchema,

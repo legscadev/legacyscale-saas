@@ -35,6 +35,7 @@ import {
 
 interface CourseActionsMenuProps {
   courseId: string
+  courseSlug: string
   courseTitle: string
   status: CourseStatus
   isDeleted: boolean
@@ -43,6 +44,7 @@ interface CourseActionsMenuProps {
 
 export function CourseActionsMenu({
   courseId,
+  courseSlug,
   courseTitle,
   status,
   isDeleted,
@@ -144,13 +146,13 @@ export function CourseActionsMenu({
           ) : (
             <>
               <DropdownMenuItem
-                onClick={() => router.push(`/admin/courses/${courseId}`)}
+                onClick={() => router.push(`/admin/courses/${courseSlug}`)}
               >
                 <ExternalLink />
                 Open
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => router.push(`/admin/courses/${courseId}/edit`)}
+                onClick={() => router.push(`/admin/courses/${courseSlug}/edit`)}
               >
                 <Edit3 />
                 Edit details

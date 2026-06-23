@@ -23,7 +23,7 @@ import { Progress } from '@/components/ui/progress'
 import {
   setLessonCompleteAction,
   submitQuizAttemptAction,
-} from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+} from '@/app/(user)/courses/[slug]/lessons/[lessonId]/actions'
 
 interface QuizQuestion {
   id: string

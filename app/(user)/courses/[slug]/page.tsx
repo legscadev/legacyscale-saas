@@ -26,7 +26,7 @@ import { memberCourseService } from '@/lib/services/member-course-service'
 import { startCourseAction } from '../actions'
 
 interface CourseDetailPageProps {
-  params: Promise<{ courseId: string }>
+  params: Promise<{ slug: string }>
 }
 
 function formatTotalDuration(seconds: number): string | null {
@@ -41,10 +41,11 @@ function formatTotalDuration(seconds: number): string | null {
 export default async function CourseDetailPage({
   params,
 }: CourseDetailPageProps) {
-  const { courseId } = await params
+  const { slug } = await params
   const user = await requireActiveUser()
-  const course = await memberCourseService.getById(user.id, courseId)
+  const course = await memberCourseService.getBySlug(user.id, slug)
   if (!course) notFound()
+  const courseId = course.id
 
   const started = course.progressPercent > 0
   const completed =
@@ -229,7 +230,7 @@ export default async function CourseDetailPage({
             <CurriculumOutline
               modules={course.modules}
               looseChapters={course.looseChapters}
-              courseId={course.id}
+              courseSlug={course.slug}
               unlockedIds={gating.unlockedIds}
             />
           ) : (
@@ -246,7 +247,7 @@ export default async function CourseDetailPage({
             <UpNextCard
               chapterTitle={upNextChapter.title}
               lesson={upNext}
-              href={`/courses/${course.id}/lessons/${upNext.id}`}
+              href={`/courses/${course.slug}/lessons/${upNext.id}`}
               ctaLabel={started ? 'Resume' : 'Start lesson'}
             />
           ) : null}

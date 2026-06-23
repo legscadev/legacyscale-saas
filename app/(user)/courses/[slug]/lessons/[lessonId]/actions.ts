@@ -59,8 +59,10 @@ export async function setLessonCompleteAction(
       complete,
     )
 
-    revalidatePath(`/courses/${result.courseId}/lessons/${lessonId}`)
-    revalidatePath(`/courses/${result.courseId}`)
+    // The course slug isn't on `result`, so invalidate the
+     // dynamic-route shapes instead — covers any slug for this course.
+    revalidatePath('/courses/[slug]/lessons/[lessonId]', 'page')
+    revalidatePath('/courses/[slug]', 'page')
     revalidatePath('/courses')
 
     return {

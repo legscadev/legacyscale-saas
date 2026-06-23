@@ -203,6 +203,10 @@ model LoginEvent {
 model Course {
   id           String       @id @default(uuid())
   title        String
+  // URL-safe identifier used on both public and admin pages. Unique.
+  // Auto-derived from title when the admin leaves the field blank;
+  // editable for SEO tuning. See lib/utils/slug.ts for generation.
+  slug         String       @unique
   description  String?
   thumbnailUrl String?      @map("thumbnail_url")
   // Wide 16:9 hero image used on the course detail page. Optional —

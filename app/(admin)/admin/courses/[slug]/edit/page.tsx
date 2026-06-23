@@ -8,15 +8,16 @@ import { CourseDeleteButton } from '@/components/admin/courses/course-delete-but
 import { updateCourseAction } from '../../actions'
 
 interface EditCoursePageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ slug: string }>
 }
 
 export default async function EditCoursePage({ params }: EditCoursePageProps) {
   await requireAdmin()
-  const { id } = await params
+  const { slug } = await params
 
-  const course = await courseService.getById(id)
+  const course = await courseService.getBySlug(slug)
   if (!course) notFound()
+  const id = course.id
 
   return (
     <div className="space-y-6">
@@ -30,6 +31,7 @@ export default async function EditCoursePage({ params }: EditCoursePageProps) {
         courseId={id}
         defaults={{
           title: course.title,
+          slug: course.slug,
           description: course.description,
           thumbnailUrl: course.thumbnailUrl,
           coverImageUrl: course.coverImageUrl,

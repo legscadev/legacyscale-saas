@@ -28,7 +28,7 @@ type Lesson = Chapter['lessons'][number]
 interface CurriculumOutlineProps {
   modules: MemberCourseDetail['modules']
   looseChapters: MemberCourseDetail['looseChapters']
-  courseId: string
+  courseSlug: string
   activeLessonId?: string
   variant?: 'page' | 'sidebar'
   /**
@@ -73,7 +73,7 @@ function chapterProgress(chapter: Chapter): {
 export function CurriculumOutline({
   modules,
   looseChapters,
-  courseId,
+  courseSlug,
   activeLessonId,
   variant = 'page',
   unlockedIds,
@@ -83,7 +83,7 @@ export function CurriculumOutline({
       <SidebarOutline
         modules={modules}
         looseChapters={looseChapters}
-        courseId={courseId}
+        courseSlug={courseSlug}
         activeLessonId={activeLessonId}
         unlockedIds={unlockedIds}
       />
@@ -93,7 +93,7 @@ export function CurriculumOutline({
     <PageOutline
       modules={modules}
       looseChapters={looseChapters}
-      courseId={courseId}
+      courseSlug={courseSlug}
       unlockedIds={unlockedIds}
     />
   )
@@ -120,12 +120,12 @@ function moduleProgress(m: Module): { completed: number; total: number } {
 function PageOutline({
   modules,
   looseChapters,
-  courseId,
+  courseSlug,
   unlockedIds,
 }: {
   modules: Module[]
   looseChapters: Chapter[]
-  courseId: string
+  courseSlug: string
   unlockedIds?: Set<string>
 }) {
   // Collapsed-id sets — initialized empty so everything renders expanded
@@ -167,7 +167,7 @@ function PageOutline({
         key={chapter.id}
         chapter={chapter}
         index={index}
-        courseId={courseId}
+        courseSlug={courseSlug}
         unlockedIds={unlockedIds}
         collapsed={collapsedChapters.has(chapter.id)}
         onToggle={() => toggleChapter(chapter.id)}
@@ -267,7 +267,7 @@ function ModuleCard({
 function ChapterCard({
   chapter,
   index,
-  courseId,
+  courseSlug,
   unlockedIds,
   collapsed,
   onToggle,
@@ -275,7 +275,7 @@ function ChapterCard({
 }: {
   chapter: Chapter
   index: number
-  courseId: string
+  courseSlug: string
   unlockedIds?: Set<string>
   collapsed: boolean
   onToggle: () => void
@@ -335,7 +335,7 @@ function ChapterCard({
             <PageLessonRow
               key={lesson.id}
               lesson={lesson}
-              courseId={courseId}
+              courseSlug={courseSlug}
               gated={
                 unlockedIds !== undefined && !unlockedIds.has(lesson.id)
               }
@@ -349,11 +349,11 @@ function ChapterCard({
 
 function PageLessonRow({
   lesson,
-  courseId,
+  courseSlug,
   gated,
 }: {
   lesson: Lesson
-  courseId: string
+  courseSlug: string
   gated: boolean
 }) {
   const { Icon, label } = lessonTypeIcon(lesson.type, lesson.status)
@@ -414,7 +414,7 @@ function PageLessonRow({
   return (
     <li>
       <Link
-        href={`/courses/${courseId}/lessons/${lesson.id}`}
+        href={`/courses/${courseSlug}/lessons/${lesson.id}`}
         className="flex items-center gap-3 px-5 py-3 text-sm transition-colors hover:bg-muted/60"
       >
         {body}
@@ -430,13 +430,13 @@ function PageLessonRow({
 function SidebarOutline({
   modules,
   looseChapters,
-  courseId,
+  courseSlug,
   activeLessonId,
   unlockedIds,
 }: {
   modules: Module[]
   looseChapters: Chapter[]
-  courseId: string
+  courseSlug: string
   activeLessonId?: string
   unlockedIds?: Set<string>
 }) {
@@ -448,7 +448,7 @@ function SidebarOutline({
         key={chapter.id}
         chapter={chapter}
         index={index}
-        courseId={courseId}
+        courseSlug={courseSlug}
         activeLessonId={activeLessonId}
         unlockedIds={unlockedIds}
       />
@@ -496,13 +496,13 @@ function SidebarOutline({
 function SidebarChapter({
   chapter,
   index,
-  courseId,
+  courseSlug,
   activeLessonId,
   unlockedIds,
 }: {
   chapter: Chapter
   index: number
-  courseId: string
+  courseSlug: string
   activeLessonId?: string
   unlockedIds?: Set<string>
 }) {
@@ -533,7 +533,7 @@ function SidebarChapter({
             <SidebarLessonRow
               key={lesson.id}
               lesson={lesson}
-              courseId={courseId}
+              courseSlug={courseSlug}
               active={lesson.id === activeLessonId}
               gated={
                 unlockedIds !== undefined && !unlockedIds.has(lesson.id)
@@ -548,12 +548,12 @@ function SidebarChapter({
 
 function SidebarLessonRow({
   lesson,
-  courseId,
+  courseSlug,
   active,
   gated,
 }: {
   lesson: Lesson
-  courseId: string
+  courseSlug: string
   active: boolean
   gated: boolean
 }) {
@@ -620,7 +620,7 @@ function SidebarLessonRow({
   return (
     <li>
       <Link
-        href={`/courses/${courseId}/lessons/${lesson.id}`}
+        href={`/courses/${courseSlug}/lessons/${lesson.id}`}
         scroll={false}
         aria-current={active ? 'page' : undefined}
         className={cn(

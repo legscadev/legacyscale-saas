@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card'
 import {
   setLessonCompleteAction,
   updateLessonPositionAction,
-} from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+} from '@/app/(user)/courses/[slug]/lessons/[lessonId]/actions'
 import { useAutoplayPreference } from '@/hooks/use-autoplay-preference'
 import { AutoNextOverlay } from './auto-next-overlay'
 

@@ -34,6 +34,7 @@ async function main() {
     create: {
       id: 'sample-course-1',
       title: '7-Figure Agency Program',
+      slug: '7-figure-agency-program',
       description: 'The complete training curriculum for building a 7-figure marketing agency.',
       status: 'PUBLISHED',
       orderIndex: 0,

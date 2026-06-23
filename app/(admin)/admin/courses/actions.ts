@@ -221,6 +221,7 @@ export async function createCourseAction(
 
   const parsed = createCourseSchema.safeParse({
     title: formData.get('title') ?? '',
+    slug: (formData.get('slug') as string) || undefined,
     description: (formData.get('description') as string) || undefined,
     status: (formData.get('status') as string) || 'DRAFT',
     accessDays,
@@ -361,6 +362,7 @@ export async function updateCourseAction(
   // get tripped up by validation on a field they aren't touching.
   const input: Record<string, unknown> = {}
   if (formData.has('title')) input.title = formData.get('title')
+  if (formData.has('slug')) input.slug = (formData.get('slug') as string) || ''
   if (formData.has('description')) {
     input.description = (formData.get('description') as string) || undefined
   }
@@ -432,7 +434,8 @@ export async function updateCourseAction(
   }
 
   revalidatePath('/admin/courses')
-  revalidatePath(`/admin/courses/${courseId}`)
+  // The slug isn't on courseId; revalidate the dynamic shape instead.
+  revalidatePath('/admin/courses/[slug]', 'page')
   return { ok: true }
 }
 

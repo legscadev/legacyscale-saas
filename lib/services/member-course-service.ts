@@ -41,6 +41,7 @@ const resolveVisibleAudiences = cache(
 
 const catalogSelect = {
   id: true,
+  slug: true,
   title: true,
   description: true,
   thumbnailUrl: true,
@@ -212,6 +213,7 @@ const chapterWithLessonsSelect = {
 
 const detailSelect = {
   id: true,
+  slug: true,
   title: true,
   description: true,
   thumbnailUrl: true,
@@ -246,18 +248,35 @@ const detailSelect = {
   },
 } as const
 
-export async function getCourseForMember(userId: string, courseId: string) {
+async function loadVisibleCourse(
+  userId: string,
+  by: { id: string } | { slug: string },
+) {
   const visibleAudiences = await resolveVisibleAudiences(userId)
-  const course = await prisma.course.findFirst({
+  return prisma.course.findFirst({
     where: {
-      id: courseId,
+      ...by,
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
     },
     select: detailSelect,
   })
+}
+
+export async function getCourseForMember(userId: string, courseId: string) {
+  return composeMemberCourse(userId, await loadVisibleCourse(userId, { id: courseId }))
+}
+
+export async function getCourseForMemberBySlug(userId: string, slug: string) {
+  return composeMemberCourse(userId, await loadVisibleCourse(userId, { slug }))
+}
+
+type RawCourse = Awaited<ReturnType<typeof loadVisibleCourse>>
+
+async function composeMemberCourse(userId: string, course: RawCourse) {
   if (!course) return null
+  const courseId = course.id
 
   // Per-lesson progress overlay. Collect lesson ids across both
   // module-bound chapters and loose chapters.
@@ -725,6 +744,7 @@ export async function updateLessonPosition(
 export const memberCourseService = {
   listCatalog: listCatalogForMember,
   getById: getCourseForMember,
+  getBySlug: getCourseForMemberBySlug,
   ensureEnrollment,
   markLessonProgress,
   recordLessonView,

@@ -1,6 +1,7 @@
 import { Prisma, type CourseStatus } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { ensureUniqueSlug, slugify } from '@/lib/utils/slug'
 import type {
   CreateCourseInput,
   UpdateCourseInput,
@@ -57,6 +58,7 @@ function buildOrderBy(
 const courseListSelect = {
   id: true,
   title: true,
+  slug: true,
   description: true,
   thumbnailUrl: true,
   coverImageUrl: true,
@@ -145,6 +147,44 @@ async function getCourseById(id: string) {
   return row ? withLessonCount(row) : null
 }
 
+async function getCourseBySlug(slug: string) {
+  const row = await prisma.course.findFirst({
+    where: { slug, deletedAt: null },
+    select: courseListSelect,
+  })
+  return row ? withLessonCount(row) : null
+}
+
+async function isSlugTakenByOther(slug: string, excludeId?: string) {
+  const hit = await prisma.course.findUnique({
+    where: { slug },
+    select: { id: true },
+  })
+  return hit !== null && hit.id !== excludeId
+}
+
+/**
+ * Resolves the slug to write to a course row. If the admin supplied
+ * one, validates it doesn't collide. Otherwise derives from the title
+ * and appends `-2`, `-3`, … until free.
+ */
+async function resolveSlug(opts: {
+  desired: string | undefined
+  title: string
+  existingId?: string
+}): Promise<string> {
+  const { desired, title, existingId } = opts
+  if (desired && desired.length > 0) {
+    if (await isSlugTakenByOther(desired, existingId)) {
+      throw new Error('That slug is already in use')
+    }
+    return desired
+  }
+  return ensureUniqueSlug(slugify(title) || 'course', (candidate) =>
+    isSlugTakenByOther(candidate, existingId),
+  )
+}
+
 async function createCourse(
   input: CreateCourseInput,
   createdBy: string,
@@ -158,11 +198,13 @@ async function createCourse(
   const orderIndex = (last?.orderIndex ?? -1) + 1
 
   const shouldPublishNow = input.status === 'PUBLISHED'
+  const slug = await resolveSlug({ desired: input.slug, title: input.title })
 
   const row = await prisma.course.create({
     data: {
       ...(options?.id ? { id: options.id } : {}),
       title: input.title,
+      slug,
       description: input.description,
       thumbnailUrl: input.thumbnailUrl || null,
       coverImageUrl: input.coverImageUrl || null,
@@ -196,6 +238,23 @@ async function updateCourse(id: string, input: UpdateCourseInput) {
   if (input.isFree !== undefined) data.isFree = input.isFree
   if (input.audience !== undefined) data.audience = input.audience
   if (input.orderIndex !== undefined) data.orderIndex = input.orderIndex
+
+  if (input.slug !== undefined) {
+    if (input.slug.length === 0) {
+      // Caller explicitly cleared the field — re-derive from title.
+      const title = input.title ?? (await prisma.course.findUniqueOrThrow({
+        where: { id },
+        select: { title: true },
+      })).title
+      data.slug = await resolveSlug({ desired: undefined, title, existingId: id })
+    } else {
+      data.slug = await resolveSlug({
+        desired: input.slug,
+        title: input.title ?? '',
+        existingId: id,
+      })
+    }
+  }
 
   if (input.status !== undefined) {
     data.status = input.status
@@ -238,6 +297,7 @@ export const courseService = {
   list: listCourses,
   counts: getCounts,
   getById: getCourseById,
+  getBySlug: getCourseBySlug,
   create: createCourse,
   update: updateCourse,
   softDelete: softDeleteCourse,
