@@ -1,7 +1,9 @@
 import { cache } from 'react'
+import { after } from 'next/server'
 import type { CourseAudience, Role } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { sendCourseCompleteEmail } from '@/lib/resend'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { visibleAudiencesFor } from '@/lib/auth/permissions'
 
@@ -534,6 +536,7 @@ export async function markLessonProgress(
             select: {
               id: true,
               slug: true,
+              title: true,
               status: true,
               audience: true,
               deletedAt: true,
@@ -614,6 +617,14 @@ export async function markLessonProgress(
     justCompleted = claim.count > 0
   }
 
+  // Fire the celebration email after the response. The write-once
+  // guard above means even a flurry of duplicate calls only triggers
+  // one email. `after()` keeps the user's mark-complete click snappy
+  // — Resend roundtrips don't block the action's return.
+  if (justCompleted) {
+    after(() => sendCourseCompleteAfter(userId, course))
+  }
+
   return {
     courseId: course.id,
     courseSlug: course.slug,
@@ -621,6 +632,35 @@ export async function markLessonProgress(
     completedCount,
     lessonsTotal,
     justCompleted,
+  }
+}
+
+/**
+ * Post-response email send for course completion. Looks up the user's
+ * delivery address + display name, builds the absolute completion URL,
+ * and hands off to Resend. Errors are swallowed (logged only) because
+ * `markLessonProgress` already committed — we never want a Resend
+ * blip to roll back a successful completion.
+ */
+async function sendCourseCompleteAfter(
+  userId: string,
+  course: { slug: string; title: string },
+) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    })
+    if (!user?.email) return
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    await sendCourseCompleteEmail(
+      user.email,
+      user.name?.split(' ')[0] ?? 'there',
+      course.title,
+      `${appUrl}/courses/${course.slug}/complete`,
+    )
+  } catch (err) {
+    console.error('Course completion email failed:', err)
   }
 }
 

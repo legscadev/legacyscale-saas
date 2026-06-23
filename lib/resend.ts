@@ -1,6 +1,7 @@
 import { type ReactElement } from 'react'
 import { Resend } from 'resend'
 import { AnnouncementEmail } from '@/emails/announcement'
+import { CourseCompleteEmail } from '@/emails/course-complete'
 import { PasswordResetEmail } from '@/emails/password-reset'
 import { WelcomeEmail } from '@/emails/welcome'
 
@@ -123,5 +124,19 @@ export async function sendAnnouncementEmail(
     purpose: 'notifications',
     subject: `New Announcement: ${title}`,
     react: AnnouncementEmail({ title, body, viewUrl }),
+  })
+}
+
+export async function sendCourseCompleteEmail(
+  to: string,
+  name: string,
+  courseTitle: string,
+  completeUrl: string
+) {
+  return sendEmail({
+    to,
+    purpose: 'notifications',
+    subject: `Congrats — you finished ${courseTitle}`,
+    react: CourseCompleteEmail({ name, courseTitle, completeUrl }),
   })
 }
