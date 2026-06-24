@@ -2,7 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { BookOpen, Play } from 'lucide-react'
 import { Card } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
+import { cn, htmlToPlainText } from '@/lib/utils'
 import { CourseProgress } from './progress-bar'
 import { BadgeArchived, BadgeDraft, BadgePublished } from './badge-status'
 
@@ -74,7 +74,7 @@ export function CourseCard({ course, progress, href, className }: CourseCardProp
 
         {course.description && (
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-            {course.description}
+            {htmlToPlainText(course.description)}
           </p>
         )}
 
