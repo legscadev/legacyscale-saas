@@ -612,7 +612,7 @@ export async function markLessonProgress(
         courseId: course.id,
         completedAt: null,
       },
-      data: { completedAt: new Date() },
+      data: { completedAt: new Date(), status: 'COMPLETED' },
     })
     justCompleted = claim.count > 0
   }

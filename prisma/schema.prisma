@@ -76,6 +76,11 @@ enum AnnouncementAuditAction {
 enum EnrollmentStatus {
   PENDING
   ACTIVE
+  // Course finished — `completedAt` is set, the user keeps access until
+  // `expiresAt`. Distinct from ACTIVE so cohort filters can split
+  // "currently learning" from "already completed" without re-deriving
+  // the state from progressPercent or completedAt.
+  COMPLETED
   EXPIRED
   REVOKED
 }

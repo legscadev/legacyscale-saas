@@ -83,9 +83,10 @@ export default async function AdminDashboardPage() {
     // extra service hop.
     prisma.enrollment.count({
       where: {
+        // ACTIVE excludes COMPLETED since the enum split; keep the
+        // predicate slim to match adminProgressService.getStuckLearners.
         status: 'ACTIVE',
-        completedAt: null,
-        progressPercent: { gt: 0, lt: 100 },
+        progressPercent: { gt: 0 },
         enrolledAt: { lt: stuckEnrolledCutoff },
         OR: [
           { lastAccessedAt: { lt: stuckInactivityCutoff } },

@@ -31,6 +31,7 @@ const STATUS_MAP: Record<string, { label: string; tone: Tone }> = {
   PROCESSING: { label: 'Processing', tone: 'warning' },
   // Enrollment
   ACTIVE: { label: 'Active', tone: 'success' },
+  COMPLETED: { label: 'Completed', tone: 'info' },
   PENDING: { label: 'Pending', tone: 'warning' },
   EXPIRED: { label: 'Expired', tone: 'neutral' },
   REVOKED: { label: 'Revoked', tone: 'danger' },
