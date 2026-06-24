@@ -10,25 +10,20 @@ import { updateNotificationPreferencesAction } from '@/lib/actions/notification-
 interface NotificationPreferencesProps {
   initial: {
     notifyAnnouncementEmail: boolean
-    notifyAnnouncementDiscord: boolean
   }
 }
 
 export function NotificationPreferences({ initial }: NotificationPreferencesProps) {
   const [email, setEmail] = useState(initial.notifyAnnouncementEmail)
-  const [discord, setDiscord] = useState(initial.notifyAnnouncementDiscord)
   const [pending, startTransition] = useTransition()
 
-  function update(input: { notifyAnnouncementEmail?: boolean; notifyAnnouncementDiscord?: boolean }) {
+  function update(input: { notifyAnnouncementEmail?: boolean }) {
     const previousEmail = email
-    const previousDiscord = discord
     if (input.notifyAnnouncementEmail !== undefined) setEmail(input.notifyAnnouncementEmail)
-    if (input.notifyAnnouncementDiscord !== undefined) setDiscord(input.notifyAnnouncementDiscord)
     startTransition(async () => {
       const res = await updateNotificationPreferencesAction(input)
       if (!res.ok) {
         setEmail(previousEmail)
-        setDiscord(previousDiscord)
         toast.error(res.error ?? 'Could not save preferences')
         return
       }
@@ -52,13 +47,6 @@ export function NotificationPreferences({ initial }: NotificationPreferencesProp
           checked={email}
           disabled={pending}
           onChange={(checked) => update({ notifyAnnouncementEmail: checked })}
-        />
-        <Row
-          title="Notify me on Discord"
-          body="Only relevant if you're on the Kondense Discord server. This is a global opt-out — the Discord crosspost is shared, so disabling does NOT skip you specifically yet."
-          checked={discord}
-          disabled={pending}
-          onChange={(checked) => update({ notifyAnnouncementDiscord: checked })}
         />
       </div>
     </Card>

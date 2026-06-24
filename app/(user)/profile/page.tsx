@@ -10,7 +10,6 @@ export default async function UserProfilePage() {
     where: { id: user.id },
     select: {
       notifyAnnouncementEmail: true,
-      notifyAnnouncementDiscord: true,
     },
   })
 
@@ -21,7 +20,6 @@ export default async function UserProfilePage() {
       <NotificationPreferences
         initial={{
           notifyAnnouncementEmail: prefs?.notifyAnnouncementEmail ?? true,
-          notifyAnnouncementDiscord: prefs?.notifyAnnouncementDiscord ?? true,
         }}
       />
     </div>
