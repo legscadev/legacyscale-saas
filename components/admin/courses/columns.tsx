@@ -74,7 +74,7 @@ export function getCourseColumns(
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <Link
-                  href={`/admin/courses/${c.id}`}
+                  href={`/admin/courses/${c.slug}`}
                   className="truncate text-sm font-medium transition-colors hover:text-primary hover:underline underline-offset-2"
                 >
                   {c.title}
@@ -150,6 +150,7 @@ export function getCourseColumns(
         <div className="flex justify-end">
           <CourseActionsMenu
             courseId={row.original.id}
+            courseSlug={row.original.slug}
             courseTitle={row.original.title}
             status={row.original.status}
             isDeleted={!!row.original.deletedAt}

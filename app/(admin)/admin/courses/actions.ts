@@ -55,6 +55,14 @@ function parseCourseImagePath(
   return m ? (m[1] as CourseImageKind) : null
 }
 
+// The course form sends categoryIds as repeated form fields.
+// Empty array (no key, or single empty value) means "no categories".
+function parseCategoryIds(formData: FormData): string[] {
+  return formData
+    .getAll('categoryIds')
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+}
+
 export interface CoursesQueryState {
   search: string
   status: CourseStatus | null
@@ -221,6 +229,7 @@ export async function createCourseAction(
 
   const parsed = createCourseSchema.safeParse({
     title: formData.get('title') ?? '',
+    slug: (formData.get('slug') as string) || undefined,
     description: (formData.get('description') as string) || undefined,
     status: (formData.get('status') as string) || 'DRAFT',
     accessDays,
@@ -228,6 +237,7 @@ export async function createCourseAction(
     audience: (formData.get('audience') as string) || 'MEMBERS',
     thumbnailUrl: imageResolve.thumbnailUrl,
     coverImageUrl: imageResolve.coverImageUrl,
+    categoryIds: parseCategoryIds(formData),
   })
 
   if (!parsed.success) {
@@ -361,6 +371,7 @@ export async function updateCourseAction(
   // get tripped up by validation on a field they aren't touching.
   const input: Record<string, unknown> = {}
   if (formData.has('title')) input.title = formData.get('title')
+  if (formData.has('slug')) input.slug = (formData.get('slug') as string) || ''
   if (formData.has('description')) {
     input.description = (formData.get('description') as string) || undefined
   }
@@ -374,6 +385,9 @@ export async function updateCourseAction(
   }
   if (formData.has('audience')) {
     input.audience = formData.get('audience')
+  }
+  if (formData.has('categoryIds')) {
+    input.categoryIds = parseCategoryIds(formData)
   }
 
   const parsed = updateCourseSchema.safeParse(input)
@@ -432,7 +446,8 @@ export async function updateCourseAction(
   }
 
   revalidatePath('/admin/courses')
-  revalidatePath(`/admin/courses/${courseId}`)
+  // The slug isn't on courseId; revalidate the dynamic shape instead.
+  revalidatePath('/admin/courses/[slug]', 'page')
   return { ok: true }
 }
 

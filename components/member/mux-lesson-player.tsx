@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card'
 import {
   setLessonCompleteAction,
   updateLessonPositionAction,
-} from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+} from '@/app/(user)/courses/[slug]/lessons/[lessonId]/actions'
 import { useAutoplayPreference } from '@/hooks/use-autoplay-preference'
 import { AutoNextOverlay } from './auto-next-overlay'
 
@@ -70,7 +70,16 @@ export function MuxLessonPlayer({
     const alreadyFired = firedRef.current
     firedRef.current = true
     void (async () => {
-      if (!alreadyFired) await setLessonCompleteAction(lessonId, true)
+      const result = alreadyFired
+        ? null
+        : await setLessonCompleteAction(lessonId, true)
+      // If this `ended` event flipped the whole course to 100%,
+      // navigate to the celebration screen and skip the autoplay
+      // overlay — there's no "next lesson" to chain into anyway.
+      if (result?.justCompleted && result.courseSlug) {
+        router.push(`/courses/${result.courseSlug}/complete`)
+        return
+      }
       if (autoplayEnabled && nextHref && nextTitle) {
         setShowAutoNext(true)
       }

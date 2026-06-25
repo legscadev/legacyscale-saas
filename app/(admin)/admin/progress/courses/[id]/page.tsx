@@ -167,7 +167,7 @@ export default async function AdminProgressCohortPage({
               <StatusBadge status={course.status} />
             </div>
             <Link
-              href={`/admin/courses/${course.id}`}
+              href={`/admin/courses/${course.slug}`}
               className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               Open course builder →

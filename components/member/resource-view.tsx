@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { getResourceDownloadUrlAction } from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+import { getResourceDownloadUrlAction } from '@/app/(user)/courses/[slug]/lessons/[lessonId]/actions'
 
 interface Resource {
   id: string

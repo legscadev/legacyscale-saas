@@ -99,7 +99,7 @@ export async function createChapterAction(
 
   try {
     const chapter = await chapterService.create(parsed.data)
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, chapter }
   } catch (err) {
     console.error('Chapter create failed:', err)
@@ -124,7 +124,7 @@ export async function updateChapterAction(
 
   try {
     const chapter = await chapterService.update(chapterId, parsed.data)
-    revalidatePath(`/admin/courses/${chapter.courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, chapter }
   } catch (err) {
     if (
@@ -144,12 +144,12 @@ export async function updateChapterAction(
 
 export async function deleteChapterAction(
   chapterId: string,
-  courseId: string,
+  _courseId: string,
 ): Promise<BaseResult> {
   await requireAdmin()
   try {
     await chapterService.delete(chapterId)
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
     if (
@@ -180,7 +180,7 @@ export async function reorderChaptersAction(
 
   try {
     await chapterService.reorder(parsed.data.courseId, parsed.data.orderedIds)
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
     console.error('Chapter reorder failed:', err)
@@ -219,7 +219,7 @@ export async function createLessonAction(
       chapterId: parsed.data.chapterId,
       type: parsed.data.type,
     })
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, lesson }
   } catch (err) {
     console.error('Lesson create failed:', err)
@@ -246,7 +246,7 @@ export async function updateLessonAction(
 
   try {
     const lesson = await lessonService.update(lessonId, parsed.data)
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, lesson }
   } catch (err) {
     if (
@@ -267,7 +267,7 @@ export async function deleteLessonAction(
   await requireAdmin()
   try {
     await lessonService.delete(lessonId)
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
     if (
@@ -302,7 +302,7 @@ export async function reorderLessonsAction(
       parsed.data.chapterId,
       parsed.data.orderedIds,
     )
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
     console.error('Lesson reorder failed:', err)
@@ -383,7 +383,7 @@ export async function saveCourseStructureAction(
       courseId,
       parsed.data.chapters,
     )
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, mappings }
   } catch (err) {
     console.error('Course structure save failed:', err)
@@ -533,7 +533,7 @@ export async function commitResourceUploadAction(
       where: { id: lessonId },
       data: { status: 'READY' },
     })
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, resource }
   } catch (err) {
     if (
@@ -574,7 +574,7 @@ export async function removeLessonResourceAction(
     }
 
     await prisma.lessonResource.delete({ where: { id: resourceId } })
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
     console.error('Resource delete failed:', err)
@@ -688,7 +688,7 @@ export async function createModuleAction(
       title: parsed.data.title,
       description: parsed.data.description ?? null,
     })
-    revalidatePath(`/admin/courses/${courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, module: moduleRow }
   } catch (err) {
     console.error('Module create failed:', err)
@@ -709,7 +709,7 @@ export async function updateModuleAction(
 
   try {
     const moduleRow = await moduleService.update(moduleId, parsed.data)
-    revalidatePath(`/admin/courses/${moduleRow.courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, module: moduleRow }
   } catch (err) {
     if (
@@ -738,7 +738,7 @@ export async function deleteModuleAction(
 
   try {
     await moduleService.delete(moduleId)
-    revalidatePath(`/admin/courses/${existing.courseId}`)
+    revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
     console.error('Module delete failed:', err)

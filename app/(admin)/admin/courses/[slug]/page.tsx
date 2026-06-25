@@ -7,21 +7,21 @@ import { moduleService } from '@/lib/services/module-service'
 import { CourseBuilder } from '@/components/admin/courses/course-builder'
 
 interface CourseDetailPageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ slug: string }>
 }
 
 export default async function CourseDetailPage({
   params,
 }: CourseDetailPageProps) {
   await requireAdmin()
-  const { id } = await params
+  const { slug } = await params
 
-  const course = await courseService.getById(id)
+  const course = await courseService.getBySlug(slug)
   if (!course) notFound()
 
   const [modules, chapters] = await Promise.all([
-    moduleService.list(id),
-    chapterService.list(id),
+    moduleService.list(course.id),
+    chapterService.list(course.id),
   ])
 
   return (

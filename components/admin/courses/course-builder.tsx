@@ -59,7 +59,7 @@ import {
   saveCourseStructureAction,
   updateModuleAction,
   type SaveStructureResult,
-} from '@/app/(admin)/admin/courses/[id]/actions'
+} from '@/app/(admin)/admin/courses/[slug]/actions'
 import type { CourseDetail } from '@/lib/services/course-service'
 import type {
   ChapterListItem,
@@ -1052,8 +1052,8 @@ export function CourseBuilder({
             </div>
 
             <Link
-              href={`/admin/courses/${course.id}/edit`}
-              onClick={guardNav(`/admin/courses/${course.id}/edit`)}
+              href={`/admin/courses/${course.slug}/edit`}
+              onClick={guardNav(`/admin/courses/${course.slug}/edit`)}
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             >
               <ExternalLink className="size-3" />

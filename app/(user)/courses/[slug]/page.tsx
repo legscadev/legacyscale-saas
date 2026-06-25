@@ -26,7 +26,7 @@ import { memberCourseService } from '@/lib/services/member-course-service'
 import { startCourseAction } from '../actions'
 
 interface CourseDetailPageProps {
-  params: Promise<{ courseId: string }>
+  params: Promise<{ slug: string }>
 }
 
 function formatTotalDuration(seconds: number): string | null {
@@ -41,10 +41,11 @@ function formatTotalDuration(seconds: number): string | null {
 export default async function CourseDetailPage({
   params,
 }: CourseDetailPageProps) {
-  const { courseId } = await params
+  const { slug } = await params
   const user = await requireActiveUser()
-  const course = await memberCourseService.getById(user.id, courseId)
+  const course = await memberCourseService.getBySlug(user.id, slug)
   if (!course) notFound()
+  const courseId = course.id
 
   const started = course.progressPercent > 0
   const completed =
@@ -178,7 +179,9 @@ export default async function CourseDetailPage({
         </Card>
       ) : null}
 
-      {/* Completion celebration — only fires at 100%. */}
+      {/* Completion celebration — only fires at 100%. The summary
+          page lives at /courses/[slug]/complete and shows recap +
+          recommended next course. */}
       {completed ? (
         <Card
           variant="raised"
@@ -193,16 +196,15 @@ export default async function CourseDetailPage({
             </h2>
             <p className="text-sm text-muted-foreground">
               All {course.lessonsCount} lessons are done — revisit any
-              chapter below, or jump back into the catalog for your next
-              track.
+              chapter below, or open your completion summary for what to
+              tackle next.
             </p>
           </div>
           <Button
-            variant="outline"
-            render={<Link href="/courses" />}
+            render={<Link href={`/courses/${course.slug}/complete`} />}
             className="sm:shrink-0"
           >
-            Browse courses
+            View completion summary
           </Button>
         </Card>
       ) : null}
@@ -229,7 +231,7 @@ export default async function CourseDetailPage({
             <CurriculumOutline
               modules={course.modules}
               looseChapters={course.looseChapters}
-              courseId={course.id}
+              courseSlug={course.slug}
               unlockedIds={gating.unlockedIds}
             />
           ) : (
@@ -246,7 +248,7 @@ export default async function CourseDetailPage({
             <UpNextCard
               chapterTitle={upNextChapter.title}
               lesson={upNext}
-              href={`/courses/${course.id}/lessons/${upNext.id}`}
+              href={`/courses/${course.slug}/lessons/${upNext.id}`}
               ctaLabel={started ? 'Resume' : 'Start lesson'}
             />
           ) : null}

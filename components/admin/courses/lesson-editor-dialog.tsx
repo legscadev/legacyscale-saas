@@ -35,7 +35,7 @@ import {
   getResourceDownloadUrlAction,
   prepareResourceUploadAction,
   removeLessonResourceAction,
-} from '@/app/(admin)/admin/courses/[id]/actions'
+} from '@/app/(admin)/admin/courses/[slug]/actions'
 import type {
   LessonListItem,
   LessonResourceItem,

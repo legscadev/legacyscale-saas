@@ -32,7 +32,7 @@ import {
 type OrderedLesson = MemberCourseDetail['chapters'][number]['lessons'][number]
 
 interface LessonPlayerPageProps {
-  params: Promise<{ courseId: string; lessonId: string }>
+  params: Promise<{ slug: string; lessonId: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
@@ -61,11 +61,11 @@ export default async function LessonPlayerPage({
   params,
   searchParams,
 }: LessonPlayerPageProps) {
-  const { courseId, lessonId } = await params
+  const { slug, lessonId } = await params
   const sp = await searchParams
   const autoPlay = sp.autoplay === '1'
   const user = await requireActiveUser()
-  const course = await memberCourseService.getById(user.id, courseId)
+  const course = await memberCourseService.getBySlug(user.id, slug)
   if (!course) notFound()
 
   const ordered = course.chapters.flatMap((c) => c.lessons)
@@ -82,9 +82,9 @@ export default async function LessonPlayerPage({
   const gating = computeLessonGating(ordered)
   if (!gating.unlockedIds.has(lesson.id)) {
     if (gating.frontierId) {
-      redirect(`/courses/${course.id}/lessons/${gating.frontierId}`)
+      redirect(`/courses/${course.slug}/lessons/${gating.frontierId}`)
     }
-    redirect(`/courses/${course.id}`)
+    redirect(`/courses/${course.slug}`)
   }
 
   const prev = findPlayable(ordered, gating.unlockedIds, pos, -1)
@@ -131,7 +131,7 @@ export default async function LessonPlayerPage({
           variant="ghost"
           size="sm"
           className="-ml-2"
-          render={<Link href={`/courses/${course.id}`} />}
+          render={<Link href={`/courses/${course.slug}`} />}
         >
           <ArrowLeft />
           <span className="truncate">{course.title}</span>
@@ -143,7 +143,7 @@ export default async function LessonPlayerPage({
             disabled={!prev}
             render={
               prev ? (
-                <Link href={`/courses/${course.id}/lessons/${prev.id}`} />
+                <Link href={`/courses/${course.slug}/lessons/${prev.id}`} />
               ) : undefined
             }
           >
@@ -156,7 +156,7 @@ export default async function LessonPlayerPage({
             disabled={!next}
             render={
               next ? (
-                <Link href={`/courses/${course.id}/lessons/${next.id}`} />
+                <Link href={`/courses/${course.slug}/lessons/${next.id}`} />
               ) : undefined
             }
           >
@@ -214,7 +214,7 @@ export default async function LessonPlayerPage({
             autoPlay={autoPlay}
             nextHref={
               nextInOrder
-                ? `/courses/${course.id}/lessons/${nextInOrder.id}`
+                ? `/courses/${course.slug}/lessons/${nextInOrder.id}`
                 : undefined
             }
             nextTitle={nextInOrder?.title}
@@ -247,7 +247,7 @@ export default async function LessonPlayerPage({
               <CurriculumOutline
                 modules={course.modules}
                 looseChapters={course.looseChapters}
-                courseId={course.id}
+                courseSlug={course.slug}
                 activeLessonId={lesson.id}
                 variant="sidebar"
                 unlockedIds={gating.unlockedIds}
@@ -259,7 +259,7 @@ export default async function LessonPlayerPage({
             <UpNextCard
               chapterTitle={upNextChapter.title}
               lesson={nextInOrder}
-              href={`/courses/${course.id}/lessons/${nextInOrder.id}`}
+              href={`/courses/${course.slug}/lessons/${nextInOrder.id}`}
               ctaLabel="Play next"
             />
           ) : isLastReady && !courseCompleted ? (
@@ -271,7 +271,11 @@ export default async function LessonPlayerPage({
                 You&apos;re on the final lesson
               </p>
               <p className="text-xs text-muted-foreground">
-                Finish this video and the course will be marked complete.
+                {lesson.type === 'VIDEO'
+                  ? 'Finish this video and the course will be marked complete.'
+                  : lesson.type === 'QUIZ'
+                    ? 'Pass this quiz and the course will be marked complete.'
+                    : 'Mark this lesson complete to finish the course.'}
               </p>
             </Card>
           ) : courseCompleted ? (

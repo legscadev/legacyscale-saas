@@ -22,7 +22,7 @@ function formatTotalDuration(seconds: number): string {
 }
 
 export function MemberCourseCard({ course, index = 0 }: MemberCourseCardProps) {
-  const href = `/courses/${course.id}`
+  const href = `/courses/${course.slug}`
   const started =
     course.progress != null && course.progress.percent > 0
 

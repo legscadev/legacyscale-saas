@@ -433,9 +433,11 @@ async function getStuckLearners(limit = 5): Promise<StuckLearner[]> {
 
   const rows = await prisma.enrollment.findMany({
     where: {
+      // ACTIVE excludes COMPLETED rows since the enum split, so
+      // `completedAt` and `progressPercent < 100` guards are redundant
+      // here but kept off the filter for clarity.
       status: 'ACTIVE',
-      completedAt: null,
-      progressPercent: { gt: 0, lt: 100 },
+      progressPercent: { gt: 0 },
       enrolledAt: { lt: ageCutoff },
       OR: [
         { lastAccessedAt: { lt: inactivityCutoff } },
@@ -919,6 +921,7 @@ export interface MemberCourseChapter {
 
 export interface MemberCourseProgress {
   courseId: string
+  courseSlug: string
   courseTitle: string
   chapters: MemberCourseChapter[]
 }
@@ -933,6 +936,7 @@ async function getMemberCourseProgress(
       where: { id: courseId, deletedAt: null },
       select: {
         id: true,
+        slug: true,
         title: true,
         chapters: {
           where: { deletedAt: null },
@@ -1003,6 +1007,7 @@ async function getMemberCourseProgress(
 
   return {
     courseId: course.id,
+    courseSlug: course.slug,
     courseTitle: course.title,
     chapters,
   }
@@ -1072,10 +1077,8 @@ async function listCoursesWithProgress(
 
   const rows: CourseListRow[] = courses.map((c) => {
     const enrolled = c.enrollments.length
-    const active = c.enrollments.filter(
-      (e) => e.status === 'ACTIVE' && !e.completedAt,
-    ).length
-    const completed = c.enrollments.filter((e) => e.completedAt).length
+    const active = c.enrollments.filter((e) => e.status === 'ACTIVE').length
+    const completed = c.enrollments.filter((e) => e.status === 'COMPLETED').length
     const avg =
       enrolled > 0
         ? Math.round(
@@ -1121,6 +1124,7 @@ async function listCoursesWithProgress(
 export interface CourseProgressSummary {
   course: {
     id: string
+    slug: string
     title: string
     thumbnailUrl: string | null
     status: CourseStatus
@@ -1164,6 +1168,7 @@ async function getCourseProgressSummary(
       where: { id: courseId, deletedAt: null },
       select: {
         id: true,
+        slug: true,
         title: true,
         thumbnailUrl: true,
         status: true,
@@ -1173,10 +1178,10 @@ async function getCourseProgressSummary(
       where: { courseId, status: { not: 'REVOKED' } },
     }),
     prisma.enrollment.count({
-      where: { courseId, status: 'ACTIVE', completedAt: null },
+      where: { courseId, status: 'ACTIVE' },
     }),
     prisma.enrollment.count({
-      where: { courseId, completedAt: { not: null } },
+      where: { courseId, status: 'COMPLETED' },
     }),
     prisma.enrollment.aggregate({
       where: { courseId, status: { not: 'REVOKED' } },
@@ -1281,9 +1286,8 @@ function buildCohortWhere(
 
   if (status === 'ACTIVE') {
     where.status = 'ACTIVE'
-    where.completedAt = null
   } else if (status === 'COMPLETED') {
-    where.completedAt = { not: null }
+    where.status = 'COMPLETED'
   } else if (status === 'EXPIRED') {
     where.status = 'EXPIRED'
   }
@@ -1431,7 +1435,7 @@ async function exportCourseCohortCsv(
       escape(r.user.name),
       escape(r.user.email),
       escape(r.user.role),
-      escape(r.completedAt ? 'COMPLETED' : r.status),
+      escape(r.status),
       escape(r.progressPercent),
       escape(iso(r.enrolledAt)),
       escape(iso(r.lastAccessedAt)),

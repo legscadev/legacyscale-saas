@@ -22,13 +22,17 @@ export default async function UserDashboardPage() {
   const [enrolledCount, lessonsCompleted, notesCount, enrollments] =
     await Promise.all([
       prisma.enrollment.count({
-        where: { userId: user.id, status: 'ACTIVE' },
+        // Both ACTIVE and COMPLETED count as "enrolled" for this stat
+        // — a finished course is still part of the member's library.
+        where: { userId: user.id, status: { in: ['ACTIVE', 'COMPLETED'] } },
       }),
       prisma.lessonProgress.count({
         where: { userId: user.id, completed: true },
       }),
       prisma.note.count({ where: { userId: user.id } }),
       prisma.enrollment.findMany({
+        // "Continue learning" is intentionally ACTIVE-only — completed
+        // courses live on the catalog if the member wants to revisit.
         where: { userId: user.id, status: 'ACTIVE' },
         include: { course: true },
         orderBy: { enrolledAt: 'desc' },
@@ -89,7 +93,7 @@ export default async function UserDashboardPage() {
                     thumbnailUrl: course.thumbnailUrl,
                     status: course.status,
                   }}
-                  href={`/courses/${course.id}`}
+                  href={`/courses/${course.slug}`}
                 />
               ))}
             </div>

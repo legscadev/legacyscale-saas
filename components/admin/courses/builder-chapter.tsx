@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { StatusBadge } from '@/components/shared'
 import { LessonTypeIcon } from './lesson-type'
-import { getResourceDownloadUrlAction } from '@/app/(admin)/admin/courses/[id]/actions'
+import { getResourceDownloadUrlAction } from '@/app/(admin)/admin/courses/[slug]/actions'
 import type {
   ChapterListItem,
   LessonListItem,

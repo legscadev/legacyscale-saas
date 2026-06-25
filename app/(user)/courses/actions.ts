@@ -45,7 +45,7 @@ export async function startCourseAction(
     return { ok: false, error: 'This course has no lessons yet' }
   }
 
-  redirect(`/courses/${courseId}/lessons/${next.id}`)
+  redirect(`/courses/${course.slug}/lessons/${next.id}`)
 }
 
 /**
@@ -59,5 +59,9 @@ export async function resumeCourseAction(formData: FormData): Promise<void> {
   const courseId = String(formData.get('courseId') ?? '')
   if (!courseId) redirect('/courses')
   await startCourseAction(courseId)
-  redirect(`/courses/${courseId}`)
+  // Fallback when startCourseAction returns instead of redirecting
+  // (e.g. no playable lesson yet). Need slug for the URL.
+  const user = await requireActiveUser()
+  const course = await memberCourseService.getById(user.id, courseId)
+  redirect(course ? `/courses/${course.slug}` : '/courses')
 }

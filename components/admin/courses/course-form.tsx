@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Image as ImageIcon, Save, Trash2 } from 'lucide-react'
+import { Check, Image as ImageIcon, Save, Tag, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CourseAudience, CourseStatus } from '@prisma/client'
 
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { slugify } from '@/lib/utils/slug'
 import { FormSection } from '@/components/shared'
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client'
 import { prepareCourseImageUploadAction } from '@/app/(admin)/admin/courses/actions'
@@ -42,8 +43,14 @@ export interface CourseFormSubmitResult {
   fieldErrors?: Record<string, string[]>
 }
 
+export interface CourseFormCategoryOption {
+  id: string
+  name: string
+}
+
 export interface CourseFormDefaults {
   title?: string
+  slug?: string | null
   description?: string | null
   thumbnailUrl?: string | null
   coverImageUrl?: string | null
@@ -51,12 +58,15 @@ export interface CourseFormDefaults {
   accessDays?: number | null
   isFree?: boolean
   audience?: CourseAudience
+  categoryIds?: string[]
 }
 
 interface CourseFormProps {
   mode: 'create' | 'edit'
   defaults?: CourseFormDefaults
   submitLabel: string
+  /** Full list of selectable categories. Empty array hides the section. */
+  categories: CourseFormCategoryOption[]
   /** Existing course id for edit. Omitted on create — the form mints
    *  a UUID up front so the signed-upload flow has a stable folder
    *  before the row exists. */
@@ -81,6 +91,7 @@ export function CourseForm({
   mode,
   defaults,
   submitLabel,
+  categories,
   courseId,
   onSubmit,
   destructiveAction,
@@ -93,6 +104,11 @@ export function CourseForm({
   const courseIdRef = useRef<string>(courseId ?? crypto.randomUUID())
 
   const [title, setTitle] = useState(defaults?.title ?? '')
+  const [slug, setSlug] = useState(defaults?.slug ?? '')
+  // Once the admin types into the slug field we stop auto-deriving
+  // from the title — otherwise we'd clobber their intent on every
+  // keystroke. Edit mode starts "manual" since there's a saved slug.
+  const [slugTouched, setSlugTouched] = useState(mode === 'edit')
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [status, setStatus] = useState<CourseStatus>(
     defaults?.status ?? 'DRAFT',
@@ -109,6 +125,14 @@ export function CourseForm({
   const [audience, setAudience] = useState<CourseAudience>(
     defaults?.audience ?? 'MEMBERS',
   )
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(
+    () => new Set(defaults?.categoryIds ?? []),
+  )
+
+  const derivedSlug = useMemo(() => slugify(title), [title])
+  // Surfaced placeholder so admins know what the auto-slug will be
+  // before they save.
+  const slugForSubmit = slugTouched ? slug.trim() : derivedSlug
 
   const thumbnailPicker = useImagePicker({
     existingUrl: defaults?.thumbnailUrl,
@@ -181,6 +205,9 @@ export function CourseForm({
       const formData = new FormData()
       formData.set('courseId', id)
       formData.set('title', trimmedTitle)
+      // Empty slug on edit means "re-derive from title"; on create
+      // the server falls back to title-derived too.
+      formData.set('slug', slugForSubmit)
       if (description.trim()) formData.set('description', description.trim())
       formData.set('status', status)
       formData.set('isFree', isFree ? '1' : '0')
@@ -193,6 +220,13 @@ export function CourseForm({
       if (coverPath.path) formData.set('coverImagePath', coverPath.path)
       if (coverPicker.cleared && !coverPicker.file) {
         formData.set('clearCoverImage', '1')
+      }
+      // Always send the categories key — even empty — so the server
+      // treats this as a full replace (clearing on edit when the
+      // admin removes every chip).
+      formData.append('categoryIds', '')
+      for (const cid of selectedCategoryIds) {
+        formData.append('categoryIds', cid)
       }
 
       const result = await onSubmit(formData)
@@ -274,6 +308,37 @@ export function CourseForm({
         </div>
 
         <div className="space-y-2">
+          <Label htmlFor="course-slug">URL slug</Label>
+          <div className="flex items-center gap-1 rounded-md border bg-muted/40 focus-within:ring-2 focus-within:ring-ring/40">
+            <span className="select-none pl-3 text-sm text-muted-foreground">
+              /courses/
+            </span>
+            <Input
+              id="course-slug"
+              value={slugTouched ? slug : derivedSlug}
+              onChange={(e) => {
+                setSlugTouched(true)
+                setSlug(e.target.value.toLowerCase())
+              }}
+              placeholder={derivedSlug || 'my-course'}
+              disabled={submitting}
+              aria-invalid={!!fieldErrors.slug}
+              className="border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
+            />
+          </div>
+          {fieldErrors.slug?.[0] ? (
+            <p className="text-xs text-destructive" role="alert">
+              {fieldErrors.slug[0]}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Used in the public course URL. Auto-derived from the title — edit
+              for a tighter SEO target. Lowercase letters, numbers, and hyphens.
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="course-description">Description</Label>
           <RichTextEditor
             id="course-description"
@@ -288,6 +353,30 @@ export function CourseForm({
             </p>
           )}
         </div>
+      </FormSection>
+
+      <FormSection
+        title="Categories"
+        description="Group this course alongside related programs. Members can browse by category."
+      >
+        <CategoryPicker
+          categories={categories}
+          selected={selectedCategoryIds}
+          onToggle={(id) => {
+            setSelectedCategoryIds((prev) => {
+              const next = new Set(prev)
+              if (next.has(id)) next.delete(id)
+              else next.add(id)
+              return next
+            })
+          }}
+          disabled={submitting}
+        />
+        {fieldErrors.categoryIds?.[0] && (
+          <p className="text-xs text-destructive" role="alert">
+            {fieldErrors.categoryIds[0]}
+          </p>
+        )}
       </FormSection>
 
       <FormSection
@@ -520,6 +609,73 @@ function AudienceOption({
 }
 
 // ===========================================================
+// Category picker — chip-style toggle list
+// ===========================================================
+
+interface CategoryPickerProps {
+  categories: CourseFormCategoryOption[]
+  selected: Set<string>
+  onToggle: (id: string) => void
+  disabled?: boolean
+}
+
+function CategoryPicker({
+  categories,
+  selected,
+  onToggle,
+  disabled,
+}: CategoryPickerProps) {
+  if (categories.length === 0) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+        <Tag className="size-4" />
+        <span>
+          No categories yet —{' '}
+          <a
+            href="/admin/categories"
+            className="font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            create one
+          </a>{' '}
+          to start grouping courses.
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {categories.map((cat) => {
+        const active = selected.has(cat.id)
+        return (
+          <button
+            key={cat.id}
+            type="button"
+            onClick={() => onToggle(cat.id)}
+            disabled={disabled}
+            aria-pressed={active}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              active
+                ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'border-border bg-muted/40 text-foreground hover:bg-muted',
+              disabled && 'cursor-not-allowed opacity-60',
+            )}
+          >
+            {active ? (
+              <Check className="size-3.5" />
+            ) : (
+              <Tag className="size-3.5 text-muted-foreground" />
+            )}
+            {cat.name}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ===========================================================
 // Image picker — shared by Thumbnail (4:3) and Cover (16:9)
 // ===========================================================
 
@@ -605,6 +761,12 @@ interface ImagePickerProps {
   error?: string
 }
 
+const ACCEPTED_IMAGE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+])
+
 function ImagePicker({
   label,
   inputId,
@@ -614,43 +776,117 @@ function ImagePicker({
   disabled,
   error,
 }: ImagePickerProps) {
+  const [isDragging, setIsDragging] = useState(false)
   const stillShowing = !!picker.file || (picker.hadExisting && !picker.cleared)
+
+  function adoptFile(next: File | null) {
+    if (!next) return
+    if (!ACCEPTED_IMAGE_TYPES.has(next.type)) {
+      toast.error(`${label} must be a PNG, JPEG, or WebP image`)
+      return
+    }
+    picker.setFile(next)
+    picker.setCleared(false)
+  }
+
+  function openFilePicker() {
+    if (disabled) return
+    picker.inputRef.current?.click()
+  }
+
+  function onDragOver(e: React.DragEvent<HTMLDivElement>) {
+    // Only flag drags that carry files — ignores text/element drags.
+    if (disabled) return
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    setIsDragging(true)
+  }
+
+  function onDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    // dragleave fires when entering child elements too; ignore those
+    // by checking the related target is outside the container.
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setIsDragging(false)
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    if (disabled) return
+    e.preventDefault()
+    setIsDragging(false)
+    const next = e.dataTransfer.files?.[0] ?? null
+    adoptFile(next)
+  }
+
   return (
     <div className="space-y-2">
       <Label htmlFor={inputId}>{label}</Label>
       <div className="space-y-3">
         <div
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          aria-label={`${label} — drag and drop an image, or click to browse`}
+          onClick={openFilePicker}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              openFilePicker()
+            }
+          }}
+          onDragEnter={onDragOver}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
           className={cn(
-            'grid w-44 max-w-full place-items-center overflow-hidden rounded-md border border-dashed bg-muted',
+            'group relative grid w-44 max-w-full cursor-pointer place-items-center overflow-hidden rounded-md border border-dashed bg-muted transition-colors',
             aspectClass,
+            !disabled && 'hover:border-foreground/30 hover:bg-muted/70',
+            isDragging && 'border-primary bg-primary/5 ring-2 ring-primary/30',
             error && 'border-destructive',
+            disabled && 'cursor-not-allowed opacity-60',
           )}
         >
           {picker.preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={picker.preview}
-              alt=""
-              className="size-full object-cover"
-            />
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={picker.preview}
+                alt=""
+                className="size-full object-cover"
+              />
+              {!disabled ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  <Upload className="mr-1 size-3.5" />
+                  Replace
+                </div>
+              ) : null}
+            </>
           ) : (
-            <ImageIcon className="size-8 text-muted-foreground" />
+            <div className="pointer-events-none flex flex-col items-center gap-1 px-3 text-center">
+              {isDragging ? (
+                <Upload className="size-7 text-primary" />
+              ) : (
+                <ImageIcon className="size-7 text-muted-foreground" />
+              )}
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {isDragging ? 'Drop to upload' : 'Drag & drop or click'}
+              </span>
+            </div>
           )}
         </div>
-        <div className="flex flex-col gap-2">
-          <input
-            ref={picker.inputRef}
-            id={inputId}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={(e) => {
-              const next = e.target.files?.[0] ?? null
-              picker.setFile(next)
-              picker.setCleared(false)
-            }}
-            disabled={disabled}
-            className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/80"
-          />
+        <input
+          ref={picker.inputRef}
+          id={inputId}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => {
+            const next = e.target.files?.[0] ?? null
+            adoptFile(next)
+          }}
+          disabled={disabled}
+          className="sr-only"
+        />
+        <div className="flex flex-col gap-1">
           <p className="text-xs text-muted-foreground">{helper}</p>
           {stillShowing && (
             <button

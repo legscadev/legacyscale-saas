@@ -1,10 +1,13 @@
 import { requireAdmin } from '@/lib/auth/get-user'
 import { PageHeader } from '@/components/shared'
 import { CourseForm } from '@/components/admin/courses/course-form'
+import { categoryService } from '@/lib/services/category-service'
 import { createCourseAction } from '../actions'
 
 export default async function NewCoursePage() {
   await requireAdmin()
+
+  const categories = await categoryService.list()
 
   return (
     <div className="space-y-6">
@@ -15,6 +18,7 @@ export default async function NewCoursePage() {
       <CourseForm
         mode="create"
         submitLabel="Create course"
+        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
         onSubmit={createCourseAction}
       />
     </div>

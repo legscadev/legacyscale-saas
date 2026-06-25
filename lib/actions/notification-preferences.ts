@@ -12,7 +12,6 @@ export interface UpdateNotificationPrefsResult {
 
 export async function updateNotificationPreferencesAction(input: {
   notifyAnnouncementEmail?: boolean
-  notifyAnnouncementDiscord?: boolean
 }): Promise<UpdateNotificationPrefsResult> {
   const user = await requireActiveUser()
   try {
@@ -21,9 +20,6 @@ export async function updateNotificationPreferencesAction(input: {
       data: {
         ...(input.notifyAnnouncementEmail !== undefined
           ? { notifyAnnouncementEmail: input.notifyAnnouncementEmail }
-          : {}),
-        ...(input.notifyAnnouncementDiscord !== undefined
-          ? { notifyAnnouncementDiscord: input.notifyAnnouncementDiscord }
           : {}),
       },
     })

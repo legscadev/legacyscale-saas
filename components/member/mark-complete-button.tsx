@@ -6,7 +6,7 @@ import { ArrowRight, Check, CircleCheck, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { setLessonCompleteAction } from '@/app/(user)/courses/[courseId]/lessons/[lessonId]/actions'
+import { setLessonCompleteAction } from '@/app/(user)/courses/[slug]/lessons/[lessonId]/actions'
 
 interface MarkCompleteButtonProps {
   lessonId: string
@@ -39,6 +39,14 @@ export function MarkCompleteButton({
         return
       }
       toast.success(next ? 'Lesson marked complete' : 'Marked as incomplete')
+      // Celebration takes precedence over auto-advance: if this call
+      // just flipped the whole course to 100%, route into the
+      // completion screen instead of the next lesson.
+      if (next && result.justCompleted && result.courseSlug) {
+        setNavigating(true)
+        router.push(`/courses/${result.courseSlug}/complete`)
+        return
+      }
       if (next && nextHref) {
         setNavigating(true)
         router.push(nextHref)
