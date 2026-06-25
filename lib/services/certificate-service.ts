@@ -224,8 +224,10 @@ async function renderCertificatePdf(ctx: CertificateContext): Promise<Uint8Array
 
   // ── Right panel content ───────────────────────────────────────
   // Walk top → bottom, tracking the running Y cursor so future
-  // adjustments only need to retune the deltas.
-  let y = PAGE_HEIGHT - 70
+  // adjustments only need to retune the deltas. Top Y is offset
+  // further down than 70pt so the content block sits closer to the
+  // vertical centre and the signer block doesn't float in white space.
+  let y = PAGE_HEIGHT - 130
 
   // Heading
   drawText(page, 'CERTIFICATE OF COMPLETION', {
@@ -237,13 +239,18 @@ async function renderCertificatePdf(ctx: CertificateContext): Promise<Uint8Array
   })
   y -= 22
 
-  // Cert ID
-  drawText(page, `#${ctx.enrollmentId}`, {
+  // Cert ID — last 8 chars of the enrollment UUID, prefixed with #.
+  // Keeps it verifiable (a support agent can look up by the suffix)
+  // without the visual clutter of a full UUID, and the small caps
+  // serif style sits more comfortably under the heading than Courier.
+  const shortId = ctx.enrollmentId.split('-').pop()?.slice(-8) ?? ctx.enrollmentId
+  drawText(page, `# ${shortId.toUpperCase()}`, {
     x: CONTENT_LEFT,
     y,
-    font: mono,
-    size: 9,
+    font: helv,
+    size: 10,
     color: MUTED,
+    spacing: 1,
   })
   y -= 50
 
@@ -334,10 +341,12 @@ async function renderCertificatePdf(ctx: CertificateContext): Promise<Uint8Array
 
   // ── Bottom-right signer block ────────────────────────────────
   // Rule + signer name + title. Keeps the layout grounded without
-  // needing an actual signature image asset.
+  // needing an actual signature image asset. Lifted from y=70 to
+  // y=110 so the block sits closer to the content above instead of
+  // hugging the bottom edge.
   const signerRight = CONTENT_RIGHT
   const signerLeft = signerRight - 180
-  const signerY = 70
+  const signerY = 110
 
   page.drawLine({
     start: { x: signerLeft, y: signerY + 22 },
