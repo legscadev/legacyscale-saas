@@ -202,7 +202,7 @@ export default async function CourseDetailPage({
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:shrink-0 sm:flex-row">
-            {course.certificateTemplateUrl && course.enrollment ? (
+            {course.certificateEnabled && course.enrollment ? (
               <CertificateDownloadButton
                 enrollmentId={course.enrollment.id}
                 variant="outline"

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, FileText, Image as ImageIcon, Save, Tag, Trash2, Upload } from 'lucide-react'
+import { Award, Check, Image as ImageIcon, Save, Tag, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CourseAudience, CourseStatus } from '@prisma/client'
 
@@ -22,14 +22,9 @@ import { cn } from '@/lib/utils'
 import { slugify } from '@/lib/utils/slug'
 import { FormSection } from '@/components/shared'
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client'
-import {
-  prepareCertificateTemplateUploadAction,
-  prepareCourseImageUploadAction,
-} from '@/app/(admin)/admin/courses/actions'
+import { prepareCourseImageUploadAction } from '@/app/(admin)/admin/courses/actions'
 
 const IMAGE_BUCKET = 'course-thumbnails'
-const CERTIFICATE_BUCKET = 'course-certificates'
-const CERTIFICATE_MAX_BYTES = 5 * 1024 * 1024 // 5 MB — matches server cap
 
 const CREATE_STATUSES: { value: CourseStatus; label: string }[] = [
   { value: 'DRAFT', label: 'Draft' },
@@ -59,7 +54,7 @@ export interface CourseFormDefaults {
   description?: string | null
   thumbnailUrl?: string | null
   coverImageUrl?: string | null
-  certificateTemplateUrl?: string | null
+  certificateEnabled?: boolean
   status?: CourseStatus
   accessDays?: number | null
   isFree?: boolean
@@ -146,9 +141,9 @@ export function CourseForm({
   const coverPicker = useImagePicker({
     existingUrl: defaults?.coverImageUrl,
   })
-  const certificatePicker = useCertificatePicker({
-    existingUrl: defaults?.certificateTemplateUrl,
-  })
+  const [certificateEnabled, setCertificateEnabled] = useState<boolean>(
+    defaults?.certificateEnabled ?? false,
+  )
 
   const [submitting, setSubmitting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -183,8 +178,6 @@ export function CourseForm({
     if (thumbnailLocalErr) localErrors.thumbnail = [thumbnailLocalErr]
     const coverLocalErr = coverPicker.validate('Cover image')
     if (coverLocalErr) localErrors.coverImage = [coverLocalErr]
-    const certLocalErr = certificatePicker.validate()
-    if (certLocalErr) localErrors.certificateTemplate = [certLocalErr]
 
     if (Object.keys(localErrors).length > 0) {
       setFieldErrors(localErrors)
@@ -212,14 +205,6 @@ export function CourseForm({
         setFieldErrors({ coverImage: [coverPath.error] })
         return
       }
-      const certTemplatePath = await uploadCertificateIfPicked(
-        certificatePicker,
-        id,
-      )
-      if (certTemplatePath.error) {
-        setFieldErrors({ certificateTemplate: [certTemplatePath.error] })
-        return
-      }
 
       const formData = new FormData()
       formData.set('courseId', id)
@@ -240,12 +225,7 @@ export function CourseForm({
       if (coverPicker.cleared && !coverPicker.file) {
         formData.set('clearCoverImage', '1')
       }
-      if (certTemplatePath.path) {
-        formData.set('certificateTemplatePath', certTemplatePath.path)
-      }
-      if (certificatePicker.cleared && !certificatePicker.file) {
-        formData.set('clearCertificateTemplate', '1')
-      }
+      formData.set('certificateEnabled', certificateEnabled ? '1' : '0')
       // Always send the categories key — even empty — so the server
       // treats this as a full replace (clearing on edit when the
       // admin removes every chip).
@@ -274,35 +254,6 @@ export function CourseForm({
     } finally {
       setSubmitting(false)
     }
-  }
-
-  // Upload a freshly-picked certificate template PDF via the signed
-  // upload URL. Returns the storage path on success so the caller
-  // can post it to the Server Action. No file picked → no-op.
-  async function uploadCertificateIfPicked(
-    picker: CertificatePickerState,
-    id: string,
-  ): Promise<{ path?: string; error?: string }> {
-    const file = picker.file
-    if (!file) return {}
-    const prep = await prepareCertificateTemplateUploadAction({
-      courseId: id,
-      filename: file.name,
-      size: file.size,
-      mimeType: 'application/pdf',
-    })
-    if (!prep.ok || !prep.signedUrl || !prep.token || !prep.path) {
-      return { error: prep.error ?? 'Could not start upload' }
-    }
-    const supabase = createBrowserSupabase()
-    const { error: uploadErr } = await supabase.storage
-      .from(CERTIFICATE_BUCKET)
-      .uploadToSignedUrl(prep.path, prep.token, file, {
-        contentType: 'application/pdf',
-        upsert: true,
-      })
-    if (uploadErr) return { error: uploadErr.message ?? 'Upload failed' }
-    return { path: prep.path }
   }
 
   // Upload one of the two image slots via signed URL. Returns the
@@ -462,13 +413,26 @@ export function CourseForm({
 
       <FormSection
         title="Completion certificate"
-        description="Optional. Upload a PDF template with blank space for the student name — we generate a personalised PDF when a member finishes the course."
+        description="When enabled, members who complete this course can download a Kondense-branded PDF certificate (name, course title, completion date, length, and a verification ID)."
       >
-        <CertificateTemplatePicker
-          picker={certificatePicker}
-          disabled={submitting}
-          error={fieldErrors.certificateTemplate?.[0]}
-        />
+        <label className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
+          <Checkbox
+            checked={certificateEnabled}
+            onCheckedChange={(c) => setCertificateEnabled(Boolean(c))}
+            disabled={submitting}
+            className="mt-0.5"
+          />
+          <div className="space-y-0.5">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <Award className="size-3.5 text-muted-foreground" />
+              Award a certificate on completion
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Off by default. Turn on for graded courses where finishing
+              earns a certificate worth sharing.
+            </p>
+          </div>
+        </label>
       </FormSection>
 
       <FormSection
@@ -974,126 +938,6 @@ function ImagePicker({
   )
 }
 
-// ===========================================================
-// Certificate template picker — PDF upload for completion certs
-// ===========================================================
-
-interface CertificatePickerState {
-  file: File | null
-  setFile: (f: File | null) => void
-  cleared: boolean
-  setCleared: (c: boolean) => void
-  hadExisting: boolean
-  existingUrl: string | null
-  inputRef: React.RefObject<HTMLInputElement | null>
-  reset: () => void
-  validate: () => string | null
-}
-
-function useCertificatePicker({
-  existingUrl,
-}: {
-  existingUrl?: string | null
-}): CertificatePickerState {
-  const [file, setFile] = useState<File | null>(null)
-  const [cleared, setCleared] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  return {
-    file,
-    setFile,
-    cleared,
-    setCleared,
-    hadExisting: !!existingUrl,
-    existingUrl: existingUrl ?? null,
-    inputRef,
-    reset: () => {
-      setFile(null)
-      setCleared(true)
-      if (inputRef.current) inputRef.current.value = ''
-    },
-    validate: () => {
-      if (!file) return null
-      if (file.type !== 'application/pdf') {
-        return 'Certificate template must be a PDF'
-      }
-      if (file.size > CERTIFICATE_MAX_BYTES) {
-        const mb = (file.size / (1024 * 1024)).toFixed(1)
-        return `Certificate template must be 5 MB or smaller (this one is ${mb} MB)`
-      }
-      return null
-    },
-  }
-}
-
-interface CertificatePickerProps {
-  picker: CertificatePickerState
-  disabled?: boolean
-  error?: string
-}
-
-function CertificateTemplatePicker({
-  picker,
-  disabled,
-  error,
-}: CertificatePickerProps) {
-  const showsExisting = picker.hadExisting && !picker.cleared && !picker.file
-  const showsPicked = !!picker.file
-  return (
-    <div className="space-y-2">
-      <div className="flex items-start gap-3 rounded-md border border-dashed bg-muted/30 p-4">
-        <FileText className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1 space-y-2">
-          {showsPicked ? (
-            <p className="truncate text-sm font-medium">{picker.file!.name}</p>
-          ) : showsExisting ? (
-            <a
-              href={picker.existingUrl!}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block truncate text-sm font-medium underline-offset-2 hover:underline"
-            >
-              Current template (open)
-            </a>
-          ) : (
-            <p className="text-sm text-muted-foreground">No template uploaded</p>
-          )}
-          <input
-            ref={picker.inputRef}
-            id="course-certificate-template"
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => {
-              const next = e.target.files?.[0] ?? null
-              picker.setFile(next)
-              picker.setCleared(false)
-            }}
-            disabled={disabled}
-            className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/80"
-          />
-          <p className="text-xs text-muted-foreground">
-            PDF only, 5 MB max. We stamp the student name, completion date,
-            and certificate ID onto your template — centred horizontally at
-            roughly mid-page. Leave blank to disable certificates for this
-            course.
-          </p>
-          {(showsExisting || showsPicked) && (
-            <button
-              type="button"
-              onClick={picker.reset}
-              className="self-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-              disabled={disabled}
-            >
-              Remove
-            </button>
-          )}
-          {error && (
-            <p className="text-xs text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
+// (Certificate template picker removed — superseded by the from-scratch
+// generator in lib/services/certificate-service.ts. Admins now toggle
+// `certificateEnabled` per course instead of uploading a template.)

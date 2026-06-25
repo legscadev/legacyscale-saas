@@ -1,15 +1,22 @@
-// Course completion certificate generation (Ticket 6.2).
+// Course completion certificate (Ticket 6.2).
 //
-// The admin uploads a PDF template (with blank space for the student
-// name) per-course. When a completed member requests their cert, we:
-//   1. Fetch the template from Supabase Storage
-//   2. Stamp three text overlays (name, completion date, cert ID)
-//   3. Cache the generated PDF at `<enrollmentId>.pdf`
-//   4. Return a signed download URL
+// Generates a Kondense-branded PDF from scratch when a completed
+// member clicks Download. No template upload — we own the design here
+// so it stays consistent across courses and we don't have to tune
+// stamp coordinates. Layout is inspired by DataCamp's Statement of
+// Accomplishment (two-column, dark brand panel on the left, content
+// on the right).
 //
-// Generation is lazy + cached: the first download triggers the stamp;
-// subsequent downloads just return the cached file. Cert ID is the
-// enrollment UUID — already unique, no separate counter needed.
+// First-request flow:
+//   1. Authz: enrollment must belong to user, have completedAt, and
+//      course.certificateEnabled must be true.
+//   2. Pull course duration (sum of lesson durationSeconds).
+//   3. Generate the PDF with pdf-lib using standard fonts.
+//   4. Cache at course-certificates/<enrollmentId>.pdf.
+//   5. Return a short-lived signed download URL.
+//
+// Subsequent requests skip step 3 and just re-sign the cached PDF.
+// Cert ID is the enrollment UUID — already unique, no counter needed.
 
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
@@ -17,31 +24,41 @@ import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const CERTIFICATE_BUCKET = 'course-certificates'
-const SIGNED_URL_TTL_SEC = 60 * 10 // 10 minutes — plenty for a click-to-download
+const SIGNED_URL_TTL_SEC = 60 * 10 // 10 min — plenty for click-to-download
 
-const CERT_DATE_FMT = new Intl.DateTimeFormat('en-US', {
-  month: 'long',
-  day: 'numeric',
+// Hardcoded signer; ticketed in 6.2 as a v1 simplification.
+const SIGNER_NAME = 'Keanu Vasquez'
+const SIGNER_TITLE = 'Founder'
+
+// Brand palette. Kondense red on the left panel, cream content area,
+// near-black for body, muted slate for eyebrow labels.
+const KONDENSE_RED = rgb(0.819, 0.102, 0.102) // #d11a1a
+const CREAM = rgb(0.984, 0.976, 0.961)
+const NEAR_BLACK = rgb(0.039, 0.039, 0.043)
+const MUTED = rgb(0.42, 0.42, 0.45)
+const RULE_GREY = rgb(0.78, 0.78, 0.8)
+
+// A4 landscape in PDF points (72pt = 1in). Used as a fixed canvas
+// so layout positions stay deterministic across courses.
+const PAGE_WIDTH = 842
+const PAGE_HEIGHT = 595
+const LEFT_PANEL_WIDTH = 200
+const CONTENT_LEFT = LEFT_PANEL_WIDTH + 56
+const CONTENT_RIGHT = PAGE_WIDTH - 56
+
+const DATE_FMT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: '2-digit',
   year: 'numeric',
 })
-
-// Stamp positions (as fractions of page width/height, 0–1). Designed
-// for a template where the student name sits in the centre of the
-// page. Tweak these if your template's blank fields move.
-const NAME_Y_FRACTION = 0.55 // ~55% from bottom = vertically slightly above centre
-const DATE_Y_FRACTION = 0.38
-const CERT_ID_Y_FRACTION = 0.12
-
-const NAME_FONT_SIZE = 36
-const DATE_FONT_SIZE = 14
-const CERT_ID_FONT_SIZE = 9
 
 interface CertificateContext {
   enrollmentId: string
   memberName: string
   courseTitle: string
   completedAt: Date
-  templatePath: string
+  /** Total content duration across READY lessons, in seconds. */
+  totalSeconds: number
 }
 
 export interface CertificateResult {
@@ -56,9 +73,9 @@ export interface CertificateError {
 }
 
 /**
- * Look up an enrollment + its course, gate on completion, then return
- * a signed download URL for the cert. Generates the PDF on the first
- * request and caches it in storage.
+ * Look up an enrollment + its course, gate on completion + cert
+ * enabled, then return a signed download URL for the cert. Generates
+ * the PDF on the first request and caches it in storage.
  */
 export async function generateOrFetchCertificate(
   userId: string,
@@ -73,7 +90,16 @@ export async function generateOrFetchCertificate(
         select: {
           id: true,
           title: true,
-          certificateTemplateUrl: true,
+          certificateEnabled: true,
+          chapters: {
+            where: { deletedAt: null },
+            select: {
+              lessons: {
+                where: { deletedAt: null, status: 'READY' },
+                select: { durationSeconds: true },
+              },
+            },
+          },
         },
       },
       user: {
@@ -87,24 +113,24 @@ export async function generateOrFetchCertificate(
   if (!enrollment.completedAt) {
     return { ok: false, error: 'Course not yet completed' }
   }
-  if (!enrollment.course.certificateTemplateUrl) {
-    return { ok: false, error: 'No certificate template configured for this course' }
-  }
-
-  const templatePath = extractTemplatePath(enrollment.course.certificateTemplateUrl)
-  if (!templatePath) {
-    return { ok: false, error: 'Certificate template URL is malformed' }
+  if (!enrollment.course.certificateEnabled) {
+    return { ok: false, error: 'Certificates are not enabled for this course' }
   }
 
   const memberName =
     enrollment.user.name?.trim() || enrollment.user.email.split('@')[0] || 'Member'
+  const totalSeconds = enrollment.course.chapters.reduce(
+    (sum, ch) =>
+      sum + ch.lessons.reduce((s, l) => s + (l.durationSeconds ?? 0), 0),
+    0,
+  )
 
   return ensureAndSignCertificate({
     enrollmentId: enrollment.id,
     memberName,
     courseTitle: enrollment.course.title,
     completedAt: enrollment.completedAt,
-    templatePath,
+    totalSeconds,
   })
 }
 
@@ -114,21 +140,16 @@ async function ensureAndSignCertificate(
   const supabase = createAdminClient()
   const certPath = `${ctx.enrollmentId}.pdf`
 
-  // Check whether the cert already exists by listing the bucket for
-  // this exact filename. Cheaper than downloading + 404 handling.
   const { data: existing } = await supabase.storage
     .from(CERTIFICATE_BUCKET)
     .list('', { search: certPath, limit: 1 })
-
   const alreadyGenerated = existing?.some((f) => f.name === certPath)
 
   if (!alreadyGenerated) {
-    const stamped = await stampCertificate(ctx, supabase)
-    if (!stamped.ok) return stamped
-
+    const bytes = await renderCertificatePdf(ctx)
     const { error: uploadErr } = await supabase.storage
       .from(CERTIFICATE_BUCKET)
-      .upload(certPath, stamped.bytes, {
+      .upload(certPath, bytes, {
         contentType: 'application/pdf',
         upsert: true,
       })
@@ -155,109 +176,302 @@ async function ensureAndSignCertificate(
   }
 }
 
-interface StampSuccess {
-  ok: true
-  bytes: Uint8Array
+async function renderCertificatePdf(ctx: CertificateContext): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create()
+  pdf.setTitle(`${ctx.courseTitle} — Certificate`)
+  pdf.setAuthor('Kondense')
+  pdf.setCreator('Kondense')
+
+  const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+  const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold)
+  const helv = await pdf.embedFont(StandardFonts.Helvetica)
+  const mono = await pdf.embedFont(StandardFonts.Courier)
+
+  // ── Background ────────────────────────────────────────────────
+  // Cream content area (full page), then a Kondense-red panel on the
+  // left. Layering this way means any subtle accents (gold border,
+  // future watermark) can sit on top of the cream without leaking
+  // into the brand panel.
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: PAGE_WIDTH,
+    height: PAGE_HEIGHT,
+    color: CREAM,
+  })
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: LEFT_PANEL_WIDTH,
+    height: PAGE_HEIGHT,
+    color: KONDENSE_RED,
+  })
+
+  // ── Left panel: Kondense wordmark ─────────────────────────────
+  // No image asset yet — render the wordmark as a centred big bold
+  // word. Easy to swap for an embedded logo later (embedPng / embedJpg).
+  drawCentredIn(
+    page,
+    'Kondense',
+    {
+      cx: LEFT_PANEL_WIDTH / 2,
+      y: PAGE_HEIGHT / 2,
+      font: helvBold,
+      size: 32,
+      color: rgb(1, 1, 1),
+    },
+  )
+
+  // ── Right panel content ───────────────────────────────────────
+  // Walk top → bottom, tracking the running Y cursor so future
+  // adjustments only need to retune the deltas.
+  let y = PAGE_HEIGHT - 70
+
+  // Heading
+  drawText(page, 'CERTIFICATE OF COMPLETION', {
+    x: CONTENT_LEFT,
+    y,
+    font: helvBold,
+    size: 26,
+    color: NEAR_BLACK,
+  })
+  y -= 22
+
+  // Cert ID
+  drawText(page, `#${ctx.enrollmentId}`, {
+    x: CONTENT_LEFT,
+    y,
+    font: mono,
+    size: 9,
+    color: MUTED,
+  })
+  y -= 50
+
+  // Awarded-to eyebrow + name
+  drawText(page, 'HAS BEEN AWARDED TO', {
+    x: CONTENT_LEFT,
+    y,
+    font: helvBold,
+    size: 9,
+    color: KONDENSE_RED,
+    spacing: 2,
+  })
+  y -= 28
+  drawText(page, ctx.memberName, {
+    x: CONTENT_LEFT,
+    y,
+    font: helvBold,
+    size: 28,
+    color: NEAR_BLACK,
+  })
+  y -= 44
+
+  // Course-completion eyebrow + course title
+  drawText(page, 'FOR SUCCESSFULLY COMPLETING', {
+    x: CONTENT_LEFT,
+    y,
+    font: helvBold,
+    size: 9,
+    color: KONDENSE_RED,
+    spacing: 2,
+  })
+  y -= 26
+  // Course title can wrap to a second line if it's long. Wrap at the
+  // content right edge; clamp to 2 lines so the rest of the layout
+  // doesn't shift.
+  const titleLines = wrapText(ctx.courseTitle, {
+    font: helvBold,
+    size: 22,
+    maxWidth: CONTENT_RIGHT - CONTENT_LEFT,
+    maxLines: 2,
+  })
+  for (const line of titleLines) {
+    drawText(page, line, {
+      x: CONTENT_LEFT,
+      y,
+      font: helvBold,
+      size: 22,
+      color: NEAR_BLACK,
+    })
+    y -= 28
+  }
+  y -= 10
+
+  // Length + completion date sit side-by-side
+  const colTwoX = CONTENT_LEFT + 220
+
+  drawText(page, 'LENGTH', {
+    x: CONTENT_LEFT,
+    y,
+    font: helvBold,
+    size: 9,
+    color: KONDENSE_RED,
+    spacing: 2,
+  })
+  drawText(page, 'COMPLETED ON', {
+    x: colTwoX,
+    y,
+    font: helvBold,
+    size: 9,
+    color: KONDENSE_RED,
+    spacing: 2,
+  })
+  y -= 20
+  drawText(page, formatDuration(ctx.totalSeconds), {
+    x: CONTENT_LEFT,
+    y,
+    font: helvBold,
+    size: 16,
+    color: NEAR_BLACK,
+  })
+  drawText(page, DATE_FMT.format(ctx.completedAt).toUpperCase(), {
+    x: colTwoX,
+    y,
+    font: helvBold,
+    size: 16,
+    color: NEAR_BLACK,
+  })
+
+  // ── Bottom-right signer block ────────────────────────────────
+  // Rule + signer name + title. Keeps the layout grounded without
+  // needing an actual signature image asset.
+  const signerRight = CONTENT_RIGHT
+  const signerLeft = signerRight - 180
+  const signerY = 70
+
+  page.drawLine({
+    start: { x: signerLeft, y: signerY + 22 },
+    end: { x: signerRight, y: signerY + 22 },
+    thickness: 0.5,
+    color: RULE_GREY,
+  })
+  drawText(page, SIGNER_NAME, {
+    x: signerLeft,
+    y: signerY + 8,
+    font: helvBold,
+    size: 11,
+    color: NEAR_BLACK,
+  })
+  drawText(page, SIGNER_TITLE.toUpperCase(), {
+    x: signerLeft,
+    y: signerY - 6,
+    font: helv,
+    size: 8,
+    color: MUTED,
+    spacing: 1.5,
+  })
+
+  return pdf.save()
 }
 
-async function stampCertificate(
-  ctx: CertificateContext,
-  supabase: ReturnType<typeof createAdminClient>,
-): Promise<StampSuccess | CertificateError> {
-  // Pull the template bytes from the admin client so we can read
-  // even if the bucket is private.
-  const { data: templateBlob, error: dlErr } = await supabase.storage
-    .from(CERTIFICATE_BUCKET)
-    .download(ctx.templatePath)
-  if (dlErr || !templateBlob) {
-    console.error('Certificate template download failed:', dlErr)
-    return { ok: false, error: 'Certificate template is unavailable' }
-  }
-
-  const templateBytes = new Uint8Array(await templateBlob.arrayBuffer())
-  const pdf = await PDFDocument.load(templateBytes)
-
-  // Stamp on the first page only — template is expected to be a
-  // single-page certificate.
-  const page = pdf.getPages()[0]
-  if (!page) {
-    return { ok: false, error: 'Certificate template has no pages' }
-  }
-
-  const font = await pdf.embedFont(StandardFonts.HelveticaBold)
-  const regularFont = await pdf.embedFont(StandardFonts.Helvetica)
-  const monoFont = await pdf.embedFont(StandardFonts.Courier)
-
-  const { width, height } = page.getSize()
-  const black = rgb(0.1, 0.1, 0.1)
-  const muted = rgb(0.35, 0.35, 0.35)
-
-  // Name — large, bold, horizontally centred.
-  drawCentered(page, ctx.memberName, {
-    y: height * NAME_Y_FRACTION,
-    font,
-    size: NAME_FONT_SIZE,
-    color: black,
-    pageWidth: width,
-  })
-
-  // Date — smaller, mid font weight.
-  drawCentered(page, CERT_DATE_FMT.format(ctx.completedAt), {
-    y: height * DATE_Y_FRACTION,
-    font: regularFont,
-    size: DATE_FONT_SIZE,
-    color: muted,
-    pageWidth: width,
-  })
-
-  // Cert ID footer — tiny mono, for verification reference.
-  drawCentered(page, `Certificate ID: ${ctx.enrollmentId}`, {
-    y: height * CERT_ID_Y_FRACTION,
-    font: monoFont,
-    size: CERT_ID_FONT_SIZE,
-    color: muted,
-    pageWidth: width,
-  })
-
-  const bytes = await pdf.save()
-  return { ok: true, bytes }
-}
-
-interface DrawCenteredOptions {
+interface DrawTextOptions {
+  x: number
   y: number
   font: Awaited<ReturnType<PDFDocument['embedFont']>>
   size: number
   color: ReturnType<typeof rgb>
-  pageWidth: number
+  spacing?: number // letter-spacing for eyebrow labels
 }
 
-function drawCentered(
-  page: ReturnType<PDFDocument['getPages']>[number],
+function drawText(
+  page: ReturnType<PDFDocument['addPage']>,
   text: string,
-  opts: DrawCenteredOptions,
-) {
-  const textWidth = opts.font.widthOfTextAtSize(text, opts.size)
-  const x = (opts.pageWidth - textWidth) / 2
+  opts: DrawTextOptions,
+): void {
   page.drawText(text, {
-    x,
+    x: opts.x,
     y: opts.y,
+    size: opts.size,
+    font: opts.font,
+    color: opts.color,
+    ...(opts.spacing != null ? { characterSpacing: opts.spacing } : {}),
+  })
+}
+
+interface CentredOptions {
+  cx: number
+  y: number
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>
+  size: number
+  color: ReturnType<typeof rgb>
+}
+
+function drawCentredIn(
+  page: ReturnType<PDFDocument['addPage']>,
+  text: string,
+  opts: CentredOptions,
+): void {
+  const w = opts.font.widthOfTextAtSize(text, opts.size)
+  page.drawText(text, {
+    x: opts.cx - w / 2,
+    y: opts.y - opts.size / 2,
     size: opts.size,
     font: opts.font,
     color: opts.color,
   })
 }
 
+interface WrapOptions {
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>
+  size: number
+  maxWidth: number
+  maxLines: number
+}
+
 /**
- * Parse the storage path from a Supabase public URL. The URL pattern is
- *   https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
- * Returns null if the URL doesn't belong to our certificates bucket.
+ * Greedy word-wrap that respects the embedded font's metrics. Last
+ * line is hard-truncated with an ellipsis if the text overflows
+ * maxLines so the layout stays predictable.
  */
-function extractTemplatePath(url: string): string | null {
-  const m = url.match(/\/storage\/v1\/object\/public\/course-certificates\/(.+)$/)
-  return m ? decodeURIComponent(m[1]) : null
+function wrapText(text: string, opts: WrapOptions): string[] {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (opts.font.widthOfTextAtSize(candidate, opts.size) <= opts.maxWidth) {
+      current = candidate
+    } else {
+      if (current) lines.push(current)
+      current = word
+      if (lines.length >= opts.maxLines) break
+    }
+  }
+  if (current && lines.length < opts.maxLines) lines.push(current)
+
+  if (lines.length > opts.maxLines) {
+    // Truncate + ellipsis on the last allowed line.
+    const truncated = lines.slice(0, opts.maxLines)
+    let last = truncated[opts.maxLines - 1]!
+    while (
+      last.length > 1 &&
+      opts.font.widthOfTextAtSize(last + '…', opts.size) > opts.maxWidth
+    ) {
+      last = last.slice(0, -1)
+    }
+    truncated[opts.maxLines - 1] = last + '…'
+    return truncated
+  }
+  return lines
+}
+
+/**
+ * Human-readable course length. Mirrors the formatTotalDuration helper
+ * on the completion page so the cert and on-screen recap agree.
+ *   3600 → "1 HOUR", 7200 → "2 HOURS", 1800 → "30 MIN"
+ */
+function formatDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return '—'
+  const totalMin = Math.round(seconds / 60)
+  if (totalMin < 60) return `${totalMin} MIN`
+  const hr = Math.floor(totalMin / 60)
+  const min = totalMin % 60
+  if (min === 0) return `${hr} HOUR${hr === 1 ? '' : 'S'}`
+  return `${hr} HR ${min} MIN`
 }
 
 function certificateFilename(ctx: CertificateContext): string {
-  const safeTitle = ctx.courseTitle.replace(/[^a-zA-Z0-9 ]+/g, '').trim() || 'Course'
+  const safeTitle =
+    ctx.courseTitle.replace(/[^a-zA-Z0-9 ]+/g, '').trim() || 'Course'
   return `${safeTitle} — Certificate.pdf`
 }

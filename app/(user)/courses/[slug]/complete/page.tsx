@@ -136,7 +136,7 @@ export default async function CourseCompletePage({
         </Card>
       ) : null}
 
-      {course.certificateTemplateUrl && course.enrollment ? (
+      {course.certificateEnabled && course.enrollment ? (
         <Card variant="raised" className="flex flex-col gap-3 border-success/30 bg-success/[0.04] p-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-0.5">
             <p className="text-sm font-semibold">Your certificate is ready</p>

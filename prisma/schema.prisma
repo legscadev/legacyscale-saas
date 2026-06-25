@@ -230,9 +230,17 @@ model Course {
   audience     CourseAudience @default(MEMBERS)
   orderIndex   Int          @default(0) @map("order_index")
   accessDays   Int?         @map("access_days") // null = forever
-  // Public URL of an admin-uploaded PDF template. Members can download
-  // a personalised certificate (name + date + cert ID stamped on top)
-  // once they hit 100%. Null = no certificate offered for this course.
+  // When true, members who complete this course can download a
+  // personalised PDF certificate generated from scratch (Kondense-
+  // branded layout in lib/services/certificate-service.ts). Off by
+  // default — admins opt in per course so a 10-minute intro doesn't
+  // accidentally award a cert.
+  certificateEnabled     Boolean @default(false) @map("certificate_enabled")
+  // Deprecated: lingers from the earlier "stamp text onto admin-
+  // uploaded template" approach. Replaced by the from-scratch
+  // generator; the field is harmless but unused. Safe to drop in a
+  // later migration once we're sure we don't want a custom-template
+  // override.
   certificateTemplateUrl String? @map("certificate_template_url")
   publishedAt  DateTime?    @map("published_at")
   createdBy    String?      @map("created_by")
