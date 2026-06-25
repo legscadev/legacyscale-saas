@@ -265,8 +265,8 @@ export function MemberCreateDialog({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Gates access to paid courses in this tier. Free and
-                uncategorised courses stay visible to everyone.
+                Gates access to paid courses in this tier. Only courses
+                marked free stay visible to everyone.
               </p>
             </div>
           ) : null}

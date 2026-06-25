@@ -68,20 +68,17 @@ const resolveMemberAccess = cache(
 
 /**
  * Build the OR-branch that gates which courses a member-tier user can
- * see. Three ways a course slips past the gate:
- *   - It's marked isFree (free for everyone).
- *   - It has no categories assigned (admin hasn't categorised yet —
- *     backward-compat with pre-category-gating courses).
+ * see. Two ways a course slips past the gate:
+ *   - It's marked isFree (free for everyone, regardless of category).
  *   - The member has a category and the course shares it.
- * Members with no category assigned only see the first two buckets.
+ * Members with no category assigned only see free courses.
+ * Uncategorised paid courses are hidden from MEMBER role; ADMIN/TEAM
+ * still see them via the bypass branch above.
  */
 function buildMemberCategoryAccessWhere(
   categoryId: string | null,
 ): Prisma.CourseWhereInput {
-  const branches: Prisma.CourseWhereInput[] = [
-    { isFree: true },
-    { categories: { none: {} } },
-  ]
+  const branches: Prisma.CourseWhereInput[] = [{ isFree: true }]
   if (categoryId) {
     branches.push({ categories: { some: { categoryId } } })
   }
@@ -106,7 +103,6 @@ function passesMemberCategoryGate(
 ): boolean {
   if (access.bypassesCategoryGate) return true
   if (course.isFree) return true
-  if (course.categories.length === 0) return true
   if (
     access.memberCategoryId &&
     course.categories.some((c) => c.categoryId === access.memberCategoryId)
