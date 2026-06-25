@@ -22,6 +22,17 @@ interface ResumeLesson {
  *
  * `lessons` is expected to be in curriculum order (chapters by
  * orderIndex, lessons by orderIndex within each chapter, flattened).
+ *
+ * NOTE on completed courses (Ticket 6.22): this picker runs against a
+ * single course's lessons — it doesn't decide which courses surface
+ * elsewhere. Completed courses are already kept out of the dashboard's
+ * "Continue learning" list at the query level
+ * (Enrollment.status = 'ACTIVE', which excludes COMPLETED rows since
+ * the 6.19 enum split). The course detail page also hides its
+ * "Up Next" card when the course is complete. So the replay-from-start
+ * behavior in rule 4 is intentional and only surfaces when a caller
+ * deliberately opens a finished course (e.g. via "Revisit this course"
+ * from the completion screen).
  */
 export function pickResumeLesson<T extends ResumeLesson>(
   lessons: T[],
