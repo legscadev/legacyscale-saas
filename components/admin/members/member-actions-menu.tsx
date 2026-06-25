@@ -30,12 +30,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MemberEditDialog } from './member-edit-dialog'
+import type { MemberCategoryOption } from './members-shell'
 
 interface MemberActionsMenuProps {
   memberId: string
   memberName: string
   memberEmail: string
   memberRole: 'ADMIN' | 'TEAM' | 'MEMBER'
+  memberCategoryId: string | null
+  categories: MemberCategoryOption[]
   isActive: boolean
   isArchived: boolean
   isSelf: boolean
@@ -47,6 +50,8 @@ export function MemberActionsMenu({
   memberName,
   memberEmail,
   memberRole,
+  memberCategoryId,
+  categories,
   isActive,
   isArchived,
   isSelf,
@@ -296,7 +301,9 @@ export function MemberActionsMenu({
           name: memberName,
           email: memberEmail,
           role: memberRole,
+          categoryId: memberCategoryId,
         }}
+        categories={categories}
         canChangeRole={!isSelf}
         onSaved={onRefetch}
       />

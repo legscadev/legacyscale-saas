@@ -1,6 +1,6 @@
 import { cache } from 'react'
 import { after } from 'next/server'
-import type { CourseAudience, Role } from '@prisma/client'
+import type { CourseAudience, Prisma, Role } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { postCompletionToDiscord } from '@/lib/discord'
@@ -25,18 +25,96 @@ const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-downloa
 // MEMBERS+BOTH; TEAM and ADMIN also see INTERNAL. Methods that filter
 // by audience accept the role explicitly OR look it up.
 
+interface MemberAccess {
+  /** Course audiences this member is allowed to see, derived from role. */
+  visibleAudiences: CourseAudience[]
+  /** Prisma WHERE fragment that gates which courses the member can see
+   *  based on their assigned category (and the free / uncategorized
+   *  bypasses). Spread into a `course.findMany` where clause. ADMIN
+   *  and TEAM roles get an empty object — they see every course. */
+  categoryAccessWhere: Prisma.CourseWhereInput
+  /** True when role bypasses the member-tier category filter. */
+  bypassesCategoryGate: boolean
+  /** The member's assigned category, when role doesn't bypass. */
+  memberCategoryId: string | null
+}
+
 // Per-request memoization: a single page render that calls both
 // listCatalogForMember and getCourseForMember (e.g. dashboard + course
 // detail composition) now does one `user.findUnique` instead of two.
-const resolveVisibleAudiences = cache(
-  async (userId: string): Promise<CourseAudience[]> => {
+const resolveMemberAccess = cache(
+  async (userId: string): Promise<MemberAccess> => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, categoryId: true },
     })
-    return visibleAudiencesFor(user?.role ?? ('MEMBER' as Role))
+    const role = user?.role ?? ('MEMBER' as Role)
+    const visibleAudiences = visibleAudiencesFor(role)
+
+    // ADMIN + TEAM bypass the member-tier category filter and see
+    // every course (mirrors how INTERNAL audience is granted to them).
+    const isStaff = role === 'ADMIN' || role === 'TEAM'
+    const memberCategoryId = user?.categoryId ?? null
+    return {
+      visibleAudiences,
+      categoryAccessWhere: isStaff
+        ? {}
+        : buildMemberCategoryAccessWhere(memberCategoryId),
+      bypassesCategoryGate: isStaff,
+      memberCategoryId,
+    }
   },
 )
+
+/**
+ * Build the OR-branch that gates which courses a member-tier user can
+ * see. Three ways a course slips past the gate:
+ *   - It's marked isFree (free for everyone).
+ *   - It has no categories assigned (admin hasn't categorised yet —
+ *     backward-compat with pre-category-gating courses).
+ *   - The member has a category and the course shares it.
+ * Members with no category assigned only see the first two buckets.
+ */
+function buildMemberCategoryAccessWhere(
+  categoryId: string | null,
+): Prisma.CourseWhereInput {
+  const branches: Prisma.CourseWhereInput[] = [
+    { isFree: true },
+    { categories: { none: {} } },
+  ]
+  if (categoryId) {
+    branches.push({ categories: { some: { categoryId } } })
+  }
+  return { OR: branches }
+}
+
+// Back-compat shim: a few helpers (resolveMemberAccess users) still
+// reach for just the audiences list. Wraps the richer call.
+async function resolveVisibleAudiences(userId: string): Promise<CourseAudience[]> {
+  return (await resolveMemberAccess(userId)).visibleAudiences
+}
+
+/**
+ * In-memory mirror of `buildMemberCategoryAccessWhere` for callers
+ * that already have the course's isFree + categories loaded (e.g.
+ * the lesson-access guard inside markLessonProgress / submitQuiz).
+ * Saves a second DB round-trip per request.
+ */
+function passesMemberCategoryGate(
+  access: MemberAccess,
+  course: { isFree: boolean; categories: { categoryId: string }[] },
+): boolean {
+  if (access.bypassesCategoryGate) return true
+  if (course.isFree) return true
+  if (course.categories.length === 0) return true
+  if (
+    access.memberCategoryId &&
+    course.categories.some((c) => c.categoryId === access.memberCategoryId)
+  ) {
+    return true
+  }
+  return false
+}
 
 // ============================================
 // LIST — catalog grid
@@ -69,12 +147,13 @@ const catalogSelect = {
 } as const
 
 export async function listCatalogForMember(userId: string) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
   const rows = await prisma.course.findMany({
     where: {
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
+      ...categoryAccessWhere,
     },
     orderBy: { orderIndex: 'asc' },
     select: catalogSelect,
@@ -185,7 +264,7 @@ export async function suggestNextCourseForMember(
   userId: string,
   justFinishedCourseId: string,
 ) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
 
   // Course just finished — need its category memberships for the
   // sibling lookup. Use findUnique with select for a single round-trip.
@@ -209,6 +288,7 @@ export async function suggestNextCourseForMember(
     status: 'PUBLISHED' as const,
     audience: { in: visibleAudiences },
     id: { notIn: [...completedIds, justFinishedCourseId] },
+    ...categoryAccessWhere,
   }
 
   // 1. Same-category sibling.
@@ -240,6 +320,7 @@ export async function suggestNextCourseForMember(
         deletedAt: null,
         status: 'PUBLISHED',
         audience: { in: visibleAudiences },
+        ...categoryAccessWhere,
       },
     },
     orderBy: { lastAccessedAt: 'desc' },
@@ -355,13 +436,14 @@ async function loadVisibleCourse(
   userId: string,
   by: { id: string } | { slug: string },
 ) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
   return prisma.course.findFirst({
     where: {
       ...by,
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
+      ...categoryAccessWhere,
     },
     select: detailSelect,
   })
@@ -477,7 +559,7 @@ export type MemberCourseDetail = NonNullable<
  * function doesn't need to gate). Paid integrations land in Sprint 5+.
  */
 export async function ensureEnrollment(userId: string, courseId: string) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
   // Confirm the course is actually visible to this member before we
   // create a row.
   const course = await prisma.course.findFirst({
@@ -486,6 +568,7 @@ export async function ensureEnrollment(userId: string, courseId: string) {
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
+      ...categoryAccessWhere,
     },
     select: { id: true, accessDays: true },
   })
@@ -542,6 +625,8 @@ export async function markLessonProgress(
               status: true,
               audience: true,
               deletedAt: true,
+              isFree: true,
+              categories: { select: { categoryId: true } },
             },
           },
         },
@@ -551,12 +636,13 @@ export async function markLessonProgress(
   if (!lesson) throw new Error('Lesson not found')
 
   const course = lesson.chapter.course
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const access = await resolveMemberAccess(userId)
   if (
     !course ||
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !visibleAudiences.includes(course.audience)
+    !access.visibleAudiences.includes(course.audience) ||
+    !passesMemberCategoryGate(access, course)
   ) {
     throw new Error('Lesson not accessible')
   }
@@ -788,6 +874,8 @@ export async function submitQuizAttempt(
               status: true,
               audience: true,
               deletedAt: true,
+              isFree: true,
+              categories: { select: { categoryId: true } },
             },
           },
         },
@@ -801,12 +889,13 @@ export async function submitQuizAttempt(
   if (!lesson) throw new Error('Quiz not found')
 
   const course = lesson.chapter.course
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const access = await resolveMemberAccess(userId)
   if (
     !course ||
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !visibleAudiences.includes(course.audience)
+    !access.visibleAudiences.includes(course.audience) ||
+    !passesMemberCategoryGate(access, course)
   ) {
     throw new Error('Quiz not accessible')
   }
@@ -888,6 +977,8 @@ export async function getResourceDownloadUrl(
                   status: true,
                   audience: true,
                   deletedAt: true,
+                  isFree: true,
+                  categories: { select: { categoryId: true } },
                 },
               },
             },
@@ -900,11 +991,12 @@ export async function getResourceDownloadUrl(
     throw new Error('Resource not found')
   }
   const course = resource.lesson.chapter.course
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const access = await resolveMemberAccess(userId)
   if (
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !visibleAudiences.includes(course.audience)
+    !access.visibleAudiences.includes(course.audience) ||
+    !passesMemberCategoryGate(access, course)
   ) {
     throw new Error('Resource not accessible')
   }

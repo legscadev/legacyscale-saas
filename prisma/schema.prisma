@@ -117,11 +117,17 @@ model User {
   /** Per-user notification opt-out. Defaults true so current behaviour
    *  is preserved; members can disable from the preferences page. */
   notifyAnnouncementEmail Boolean @default(true) @map("notify_announcement_email")
+  /** Optional category tier. When set, the member sees published
+   *  courses that either share this category, are marked isFree, or
+   *  have no categories at all. ADMIN/TEAM roles bypass the check.
+   *  Null = no tier assigned; member only sees free + uncategorized. */
+  categoryId    String?   @map("category_id")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
   // Relations
+  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   enrollments       Enrollment[]
   lessonProgress    LessonProgress[]
   quizAttempts      QuizAttempt[]
@@ -273,6 +279,7 @@ model Category {
 
   // Relations
   courses CourseCategory[]
+  members User[]
 
   @@map("categories")
 }

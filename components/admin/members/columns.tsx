@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AvatarLightbox, StatusBadge } from '@/components/shared'
 import { MemberActionsMenu } from './member-actions-menu'
+import type { MemberCategoryOption } from './members-shell'
 import type { MemberListItem } from '@/lib/services/member-service'
 
 function getInitials(name: string | null, email: string): string {
@@ -99,6 +100,7 @@ export function getMemberColumns(
   currentUserId: string,
   onRefetch: () => void,
   sparklines: Record<string, number[]> = {},
+  categories: MemberCategoryOption[] = [],
 ): ColumnDef<MemberListItem>[] {
   return [
     {
@@ -182,6 +184,28 @@ export function getMemberColumns(
       meta: { label: 'Role' },
     },
     {
+      id: 'category',
+      accessorFn: (row) => row.category?.name ?? null,
+      header: 'Category',
+      meta: { label: 'Category' },
+      cell: ({ row }) => {
+        const cat = row.original.category
+        if (!cat) {
+          return (
+            <span className="text-xs italic text-muted-foreground">
+              None
+            </span>
+          )
+        }
+        return (
+          <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+            {cat.name}
+          </span>
+        )
+      },
+      enableSorting: false,
+    },
+    {
       accessorKey: 'isActive',
       header: 'Status',
       meta: { label: 'Status' },
@@ -256,6 +280,8 @@ export function getMemberColumns(
             memberName={row.original.name ?? row.original.email}
             memberEmail={row.original.email}
             memberRole={row.original.role}
+            memberCategoryId={row.original.categoryId}
+            categories={categories}
             isActive={row.original.isActive}
             isArchived={!!row.original.deletedAt}
             isSelf={row.original.id === currentUserId}

@@ -29,6 +29,8 @@ export const adminUpdateMemberSchema = z
     password: passwordSchema.optional(),
     /** true: soft-delete (sets deletedAt). false: restore from archive. */
     archive: z.boolean().optional(),
+    /** Category tier. null clears it (member loses access to gated courses). */
+    categoryId: z.string().uuid().nullable().optional(),
   })
   .refine(
     (data) => Object.values(data).some((v) => v !== undefined),
