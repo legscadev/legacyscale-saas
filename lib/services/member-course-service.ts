@@ -3,6 +3,7 @@ import { after } from 'next/server'
 import type { CourseAudience, Role } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { postCompletionToDiscord } from '@/lib/discord'
 import { sendCourseCompleteEmail } from '@/lib/resend'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { visibleAudiencesFor } from '@/lib/auth/permissions'
@@ -617,12 +618,14 @@ export async function markLessonProgress(
     justCompleted = claim.count > 0
   }
 
-  // Fire the celebration email after the response. The write-once
-  // guard above means even a flurry of duplicate calls only triggers
-  // one email. `after()` keeps the user's mark-complete click snappy
-  // — Resend roundtrips don't block the action's return.
+  // Fire post-completion side-effects after the response. The
+  // write-once guard above means even a flurry of duplicate calls
+  // only triggers each side-effect once. `after()` keeps the user's
+  // mark-complete click snappy — Resend + Discord roundtrips don't
+  // block the action's return.
   if (justCompleted) {
     after(() => sendCourseCompleteAfter(userId, course))
+    after(() => postCompletionToDiscordAfter(userId, course))
   }
 
   return {
@@ -661,6 +664,34 @@ async function sendCourseCompleteAfter(
     )
   } catch (err) {
     console.error('Course completion email failed:', err)
+  }
+}
+
+/**
+ * Post-response Discord crosspost (Ticket 6.21). Posts an embed to the
+ * configured achievements channel. Channel-wide — no per-user opt-out
+ * (webhook posts are broadcast). No-ops silently when the webhook
+ * isn't configured. Same error-swallowing rationale as the email
+ * helper: completion already committed, don't roll back on Discord
+ * trouble.
+ */
+async function postCompletionToDiscordAfter(
+  userId: string,
+  course: { slug: string; title: string },
+) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    })
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    await postCompletionToDiscord({
+      memberName: user?.name?.trim() || 'A member',
+      courseTitle: course.title,
+      courseUrl: `${appUrl}/courses/${course.slug}`,
+    })
+  } catch (err) {
+    console.error('Course completion Discord crosspost failed:', err)
   }
 }
 
