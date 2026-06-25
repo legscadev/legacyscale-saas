@@ -88,6 +88,9 @@ async function blastAnnouncementEmail(announcement: {
 function revalidateAnnouncements(announcementId?: string) {
   revalidatePath('/admin/announcements')
   revalidatePath('/announcements')
+  // Member dashboard surfaces the top 5 published announcements +
+  // unread flags — a new/edited/published row changes both.
+  revalidatePath('/dashboard')
   if (announcementId) {
     revalidatePath(`/admin/announcements/${announcementId}/edit`)
     revalidatePath(`/announcements/${announcementId}`)

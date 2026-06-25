@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { requireActiveUser } from '@/lib/auth'
@@ -44,6 +45,13 @@ export async function startCourseAction(
   if (!next) {
     return { ok: false, error: 'This course has no lessons yet' }
   }
+
+  // A fresh ensureEnrollment changes both stats (enrolledCount) and
+  // the "Continue Learning" rail on /dashboard, plus the catalog's
+  // enrollment-aware sort. Bust both Router Caches before redirecting
+  // into the player so a back-nav doesn't show pre-enrollment state.
+  revalidatePath('/dashboard')
+  revalidatePath('/courses')
 
   redirect(`/courses/${course.slug}/lessons/${next.id}`)
 }

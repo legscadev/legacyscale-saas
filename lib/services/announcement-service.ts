@@ -4,7 +4,7 @@ import {
   type AnnouncementCategory,
   type AnnouncementStatus,
 } from '@prisma/client'
-import { unstable_cache, updateTag } from 'next/cache'
+import { revalidatePath, unstable_cache, updateTag } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
 import type {
@@ -453,8 +453,13 @@ async function markAsRead(userId: string, announcementIds: string[]) {
   })
   // If anything actually got written, the user's unread count just
   // dropped — wipe the cache so the Bell badge reflects it on the
-  // next page render instead of waiting for the 60s TTL.
-  if (result.count > 0) updateTag(UNREAD_COUNT_CACHE_TAG)
+  // next page render instead of waiting for the 60s TTL. Also bust
+  // the /dashboard Router Cache so its "Recent announcements" list
+  // shows the now-read items without their unread dot on next nav.
+  if (result.count > 0) {
+    updateTag(UNREAD_COUNT_CACHE_TAG)
+    revalidatePath('/dashboard')
+  }
 }
 
 // Powers the unread-count badge on the top-bar Bell icon. Counts
