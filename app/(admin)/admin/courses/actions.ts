@@ -184,6 +184,73 @@ export async function prepareCourseImageUploadAction(
 }
 
 // ===========================================================
+// PREPARE CERTIFICATE TEMPLATE UPLOAD (signed URL)
+// ===========================================================
+
+// Mirrors the image upload pattern but for PDF templates that admins
+// stamp student names onto for course-completion certificates (6.2).
+// Lives in its own bucket (`course-certificates`) with PDF-only MIME
+// allowlist and a smaller per-file cap.
+
+const CERTIFICATE_BUCKET = 'course-certificates'
+const CERTIFICATE_TEMPLATE_MAX_BYTES = 5 * 1024 * 1024 // 5 MB
+
+const prepareCertificateTemplateUploadSchema = z.object({
+  courseId: z.string().regex(UUID_RE, 'courseId must be a UUID'),
+  filename: z.string().min(1).max(200),
+  size: z.number().int().positive().max(CERTIFICATE_TEMPLATE_MAX_BYTES),
+  mimeType: z.literal('application/pdf'),
+})
+
+function certificateTemplatePathFor(courseId: string): string {
+  return `templates/${courseId}.pdf`
+}
+
+export async function prepareCertificateTemplateUploadAction(
+  input: unknown,
+): Promise<PrepareCourseImageUploadResult> {
+  await requireAdmin()
+
+  const parsed = prepareCertificateTemplateUploadSchema.safeParse(input)
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {}
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.map(String).join('.')
+      if (!fieldErrors[key]) fieldErrors[key] = []
+      fieldErrors[key]!.push(issue.message)
+    }
+    return { ok: false, fieldErrors }
+  }
+
+  const path = certificateTemplatePathFor(parsed.data.courseId)
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.storage
+    .from(CERTIFICATE_BUCKET)
+    .createSignedUploadUrl(path, { upsert: true })
+  if (error || !data) {
+    console.error('Certificate template signed URL creation failed:', error)
+    return { ok: false, error: 'Could not start upload' }
+  }
+  return {
+    ok: true,
+    signedUrl: data.signedUrl,
+    token: data.token,
+    path: data.path,
+  }
+}
+
+// Parses a client-supplied storage path for a certificate template.
+// Mirrors parseCourseImagePath — rejects anything that doesn't look
+// like one of our own paths so an admin can't set course A's
+// certificate template to a file living in course B's path.
+function parseCertificateTemplatePath(
+  path: string,
+  courseId: string,
+): boolean {
+  return path === certificateTemplatePathFor(courseId)
+}
+
+// ===========================================================
 // CREATE
 // ===========================================================
 
@@ -226,6 +293,7 @@ export async function createCourseAction(
   // a stable display URL like before.
   const imageResolve = resolveImagePaths(formData, courseId)
   if (!imageResolve.ok) return imageResolve.error
+  const certificateTemplateUrl = resolveCertificateTemplateUrl(formData, courseId)
 
   const parsed = createCourseSchema.safeParse({
     title: formData.get('title') ?? '',
@@ -237,6 +305,7 @@ export async function createCourseAction(
     audience: (formData.get('audience') as string) || 'MEMBERS',
     thumbnailUrl: imageResolve.thumbnailUrl,
     coverImageUrl: imageResolve.coverImageUrl,
+    certificateTemplateUrl,
     categoryIds: parseCategoryIds(formData),
   })
 
@@ -322,6 +391,34 @@ function resolveImagePaths(
   return out
 }
 
+/**
+ * Resolve a freshly-uploaded certificate template path into a public
+ * URL the row can store. Returns `undefined` when no template was
+ * uploaded in this form submission (caller treats that as "no change").
+ * Returns the rejection error inline as a string when the path looks
+ * tampered-with (e.g. cross-course path).
+ */
+function resolveCertificateTemplateUrl(
+  formData: FormData,
+  courseId: string,
+): string | undefined {
+  const raw = formData.get('certificateTemplatePath')
+  if (typeof raw !== 'string' || raw.length === 0) return undefined
+  if (!parseCertificateTemplatePath(raw, courseId)) {
+    console.error(
+      'Certificate template path does not match course:',
+      raw,
+      courseId,
+    )
+    return undefined
+  }
+  const supabase = createAdminClient()
+  const { data } = supabase.storage
+    .from(CERTIFICATE_BUCKET)
+    .getPublicUrl(raw)
+  return data.publicUrl
+}
+
 // Removes any `${kind}.*` objects in the course folder that aren't
 // the one we just committed. Covers the jpg→png case where the new
 // upload lives at a different leaf than the existing object.
@@ -404,9 +501,11 @@ export async function updateCourseAction(
 
   const clearThumbnail = formData.get('clearThumbnail') === '1'
   const clearCoverImage = formData.get('clearCoverImage') === '1'
+  const clearCertificateTemplate = formData.get('clearCertificateTemplate') === '1'
 
   const imageResolve = resolveImagePaths(formData, courseId)
   if (!imageResolve.ok) return imageResolve.error
+  const certificateTemplateUrl = resolveCertificateTemplateUrl(formData, courseId)
 
   // Fold the resolved image URLs / clears into the primitive update.
   const update: Record<string, unknown> = { ...parsed.data }
@@ -419,6 +518,11 @@ export async function updateCourseAction(
     update.coverImageUrl = imageResolve.coverImageUrl
   } else if (clearCoverImage) {
     update.coverImageUrl = ''
+  }
+  if (certificateTemplateUrl !== undefined) {
+    update.certificateTemplateUrl = certificateTemplateUrl
+  } else if (clearCertificateTemplate) {
+    update.certificateTemplateUrl = ''
   }
 
   try {

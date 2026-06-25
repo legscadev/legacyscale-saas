@@ -230,6 +230,10 @@ model Course {
   audience     CourseAudience @default(MEMBERS)
   orderIndex   Int          @default(0) @map("order_index")
   accessDays   Int?         @map("access_days") // null = forever
+  // Public URL of an admin-uploaded PDF template. Members can download
+  // a personalised certificate (name + date + cert ID stamped on top)
+  // once they hit 100%. Null = no certificate offered for this course.
+  certificateTemplateUrl String? @map("certificate_template_url")
   publishedAt  DateTime?    @map("published_at")
   createdBy    String?      @map("created_by")
   createdAt    DateTime     @default(now()) @map("created_at")

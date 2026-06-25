@@ -320,6 +320,7 @@ const detailSelect = {
   description: true,
   thumbnailUrl: true,
   coverImageUrl: true,
+  certificateTemplateUrl: true,
   status: true,
   audience: true,
   isFree: true,

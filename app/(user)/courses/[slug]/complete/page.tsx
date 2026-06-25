@@ -11,6 +11,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { CertificateDownloadButton } from '@/components/member/certificate-download-button'
 import { requireActiveUser } from '@/lib/auth'
 import { memberCourseService } from '@/lib/services/member-course-service'
 
@@ -132,6 +133,21 @@ export default async function CourseCompletePage({
               <ArrowRight />
             </Button>
           </div>
+        </Card>
+      ) : null}
+
+      {course.certificateTemplateUrl && course.enrollment ? (
+        <Card variant="raised" className="flex flex-col gap-3 border-success/30 bg-success/[0.04] p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-semibold">Your certificate is ready</p>
+            <p className="text-xs text-muted-foreground">
+              Personalised PDF — name, completion date, and certificate ID stamped on your template.
+            </p>
+          </div>
+          <CertificateDownloadButton
+            enrollmentId={course.enrollment.id}
+            className="sm:shrink-0"
+          />
         </Card>
       ) : null}
 

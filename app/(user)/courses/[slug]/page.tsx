@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/shared'
+import { CertificateDownloadButton } from '@/components/member/certificate-download-button'
 import { CurriculumOutline } from '@/components/member/curriculum-outline'
 import { UpNextCard } from '@/components/member/up-next-card'
 import { requireActiveUser } from '@/lib/auth'
@@ -200,12 +201,19 @@ export default async function CourseDetailPage({
               tackle next.
             </p>
           </div>
-          <Button
-            render={<Link href={`/courses/${course.slug}/complete`} />}
-            className="sm:shrink-0"
-          >
-            View completion summary
-          </Button>
+          <div className="flex flex-col gap-2 sm:shrink-0 sm:flex-row">
+            {course.certificateTemplateUrl && course.enrollment ? (
+              <CertificateDownloadButton
+                enrollmentId={course.enrollment.id}
+                variant="outline"
+              />
+            ) : null}
+            <Button
+              render={<Link href={`/courses/${course.slug}/complete`} />}
+            >
+              View completion summary
+            </Button>
+          </div>
         </Card>
       ) : null}
 
