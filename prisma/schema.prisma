@@ -6,6 +6,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Connection URLs live in prisma.config.ts (required by Prisma 7).
+  // Runtime app uses DATABASE_URL via the pg adapter in lib/prisma.ts;
+  // Prisma CLI commands (migrate, db push) use DIRECT_URL configured
+  // in prisma.config.ts.
 }
 
 // ============================================
