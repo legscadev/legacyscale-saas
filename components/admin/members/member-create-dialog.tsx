@@ -23,13 +23,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
+import type { MemberCategoryOption } from './members-shell'
 
 type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
-type FieldErrors = Partial<Record<'name' | 'email' | 'role', string[]>>
+type FieldErrors = Partial<
+  Record<'name' | 'email' | 'role' | 'categoryId', string[]>
+>
+
+/** Sentinel for "no category" — Radix Select disallows empty values. */
+const NONE_CATEGORY = '__none__'
 
 interface MemberCreateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  categories: MemberCategoryOption[]
   /** Fires after a member is successfully created. */
   onCreated: () => void
 }
@@ -51,11 +58,13 @@ function RequiredMark() {
 export function MemberCreateDialog({
   open,
   onOpenChange,
+  categories,
   onCreated,
 }: MemberCreateDialogProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Role>('MEMBER')
+  const [categoryId, setCategoryId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -64,6 +73,7 @@ export function MemberCreateDialog({
     setName('')
     setEmail('')
     setRole('MEMBER')
+    setCategoryId(null)
     setError(null)
     setFieldErrors({})
     setSubmitting(false)
@@ -79,13 +89,26 @@ export function MemberCreateDialog({
     setError(null)
     setFieldErrors({})
 
+    // Category only applies to MEMBER role — admins/team bypass the gate.
+    const payloadCategoryId = role === 'MEMBER' ? categoryId : null
+
     // Client-side Zod validation — same schema the API uses.
-    const parsed = adminCreateMemberSchema.safeParse({ name, email, role })
+    const parsed = adminCreateMemberSchema.safeParse({
+      name,
+      email,
+      role,
+      categoryId: payloadCategoryId,
+    })
     if (!parsed.success) {
       const next: FieldErrors = {}
       for (const issue of parsed.error.issues) {
         const key = issue.path[0]
-        if (key === 'name' || key === 'email' || key === 'role') {
+        if (
+          key === 'name' ||
+          key === 'email' ||
+          key === 'role' ||
+          key === 'categoryId'
+        ) {
           if (!next[key]) next[key] = []
           next[key]!.push(issue.message)
         }
@@ -211,6 +234,42 @@ export function MemberCreateDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {role === 'MEMBER' ? (
+            <div className="space-y-2">
+              <Label htmlFor="member-category">Category</Label>
+              <Select
+                value={categoryId ?? NONE_CATEGORY}
+                onValueChange={(v) =>
+                  setCategoryId(v === NONE_CATEGORY ? null : v)
+                }
+                disabled={submitting}
+              >
+                <SelectTrigger className="w-full" id="member-category">
+                  <SelectValue>
+                    {(v: string) =>
+                      v === NONE_CATEGORY || !v
+                        ? 'No category'
+                        : (categories.find((c) => c.id === v)?.name ??
+                          'No category')
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_CATEGORY}>No category</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Gates access to paid courses in this tier. Free and
+                uncategorised courses stay visible to everyone.
+              </p>
+            </div>
+          ) : null}
 
           {error && (
             <p className="text-sm text-destructive" role="alert">

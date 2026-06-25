@@ -259,6 +259,7 @@ export function MembersShell({
       <MemberCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
+        categories={categories}
         onCreated={refetch}
       />
     </div>

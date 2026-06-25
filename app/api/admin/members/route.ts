@@ -37,8 +37,11 @@ export async function POST(request: NextRequest) {
   const validation = await validateBody(request, adminCreateMemberSchema)
   if (validation.error) return validation.error
 
-  const { name, email, role } = validation.data
+  const { name, email, role, categoryId } = validation.data
   const normalizedEmail = email.toLowerCase().trim()
+  // ADMIN/TEAM bypass the category gate entirely, so a category on
+  // those roles would just be noise. Only persist it for MEMBER.
+  const effectiveCategoryId = role === 'MEMBER' ? (categoryId ?? null) : null
 
   // Pre-check the DB (source of truth) so the duplicate-email error
   // carries a field-level detail without depending on Supabase string
@@ -80,14 +83,21 @@ export async function POST(request: NextRequest) {
     })
 
     // Honor the role the admin picked (sync defaults new rows to MEMBER).
-    if (user.role !== role) {
+    if (user.role !== role || user.categoryId !== effectiveCategoryId) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { role },
+        data: {
+          ...(user.role !== role ? { role } : {}),
+          ...(user.categoryId !== effectiveCategoryId
+            ? { categoryId: effectiveCategoryId }
+            : {}),
+        },
       })
-      await admin.auth.admin.updateUserById(created.user.id, {
-        app_metadata: { role },
-      })
+      if (user.role !== role) {
+        await admin.auth.admin.updateUserById(created.user.id, {
+          app_metadata: { role },
+        })
+      }
     }
 
     // 3. Issue the onboarding invite token (also invalidates any

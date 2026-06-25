@@ -11,6 +11,9 @@ export const adminCreateMemberSchema = z.object({
   name: nameSchema,
   email: emailSchema,
   role: userRoleSchema.default('MEMBER'),
+  /** Optional category tier — only meaningful for MEMBER role. The API
+   *  ignores it for ADMIN/TEAM (they bypass the category gate). */
+  categoryId: z.string().uuid().nullable().optional(),
 })
 
 /**
