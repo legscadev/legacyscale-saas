@@ -19,7 +19,7 @@ import { Progress } from '@/components/ui/progress'
 import {
   EmptyState,
   SectionCard,
-  StatCard,
+  StatStrip,
   StatusBadge,
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
@@ -176,64 +176,59 @@ export default async function AdminProgressCohortPage({
         </div>
       </SectionCard>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <StatCard
-          size="sm"
-          title="Enrolled"
-          value={kpis.enrolled}
-          icon={UsersIcon}
-          tone="info"
-        />
-        <StatCard
-          size="sm"
-          title="In progress"
-          value={kpis.active}
-          icon={PlayCircle}
-          tone="neutral"
-        />
-        <StatCard
-          size="sm"
-          title="Completed"
-          value={kpis.completed}
-          icon={CheckCircle2}
-          tone="success"
-        />
-        <StatCard
-          size="sm"
-          title="Avg progress"
-          value={`${kpis.avgProgressPercent}%`}
-          icon={TrendingUp}
-          tone="brand"
-          description={progressDeltaLabel}
-        />
-        <StatCard
-          size="sm"
-          title="Completion rate"
-          value={`${kpis.completionRate}%`}
-          icon={GraduationCap}
-          tone="success"
-        />
-        <StatCard
-          size="sm"
-          title="Avg time to complete"
-          value={
-            kpis.avgTimeToCompletionDays === null
-              ? '—'
-              : `${kpis.avgTimeToCompletionDays}d`
-          }
-          icon={Hourglass}
-          tone="warning"
-          description="Enrolled → completed"
-        />
-        <StatCard
-          size="sm"
-          title="Weekly active"
-          value={kpis.weeklyActive}
-          icon={Zap}
-          tone="violet"
-          description="Last 7 days"
-        />
-      </div>
+      {/* 7 KPIs split into two strips so the dense xl-7-col grid
+          can drop without losing any signal — keeps the per-page
+          treatment consistent with the rest of the app. */}
+      <StatStrip
+        cells={[
+          {
+            label: 'Enrolled',
+            value: kpis.enrolled.toLocaleString(),
+            icon: UsersIcon,
+          },
+          {
+            label: 'In progress',
+            value: kpis.active.toLocaleString(),
+            icon: PlayCircle,
+          },
+          {
+            label: 'Completed',
+            value: kpis.completed.toLocaleString(),
+            icon: CheckCircle2,
+          },
+          {
+            label: 'Avg progress',
+            value: `${kpis.avgProgressPercent}%`,
+            description: progressDeltaLabel,
+            icon: TrendingUp,
+          },
+        ]}
+      />
+      <StatStrip
+        className="sm:grid-cols-3"
+        cells={[
+          {
+            label: 'Completion rate',
+            value: `${kpis.completionRate}%`,
+            icon: GraduationCap,
+          },
+          {
+            label: 'Avg time to complete',
+            value:
+              kpis.avgTimeToCompletionDays === null
+                ? '—'
+                : `${kpis.avgTimeToCompletionDays}d`,
+            description: 'Enrolled → completed',
+            icon: Hourglass,
+          },
+          {
+            label: 'Weekly active',
+            value: kpis.weeklyActive.toLocaleString(),
+            description: 'Last 7 days',
+            icon: Zap,
+          },
+        ]}
+      />
 
       <SectionCard
         title="Completion funnel"

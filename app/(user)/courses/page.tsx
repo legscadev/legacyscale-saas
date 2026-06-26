@@ -1,6 +1,6 @@
 import { BookOpen, CheckCircle2, GraduationCap, PlayCircle } from 'lucide-react'
 
-import { PageHeader, EmptyState, StatCard } from '@/components/shared'
+import { PageHeader, EmptyState, StatStrip } from '@/components/shared'
 import { CourseRow } from '@/components/member/course-row'
 import { ContinueHero } from '@/components/member/continue-hero'
 import { requireActiveUser } from '@/lib/auth'
@@ -112,26 +112,26 @@ function StatsStrip({
   stats: { total: number; inProgress: number; completed: number }
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
-      <StatCard
-        title="Courses available"
-        value={stats.total}
-        icon={GraduationCap}
-        tone="brand"
-      />
-      <StatCard
-        title="In progress"
-        value={stats.inProgress}
-        icon={PlayCircle}
-        tone="warning"
-      />
-      <StatCard
-        title="Completed"
-        value={stats.completed}
-        icon={CheckCircle2}
-        tone="success"
-      />
-    </div>
+    <StatStrip
+      className="sm:grid-cols-3"
+      cells={[
+        {
+          label: 'Courses available',
+          value: stats.total.toLocaleString(),
+          icon: GraduationCap,
+        },
+        {
+          label: 'In progress',
+          value: stats.inProgress.toLocaleString(),
+          icon: PlayCircle,
+        },
+        {
+          label: 'Completed',
+          value: stats.completed.toLocaleString(),
+          icon: CheckCircle2,
+        },
+      ]}
+    />
   )
 }
 
