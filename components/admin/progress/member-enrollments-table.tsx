@@ -187,42 +187,53 @@ function CourseDrilldown({
         </p>
       ) : (
         <ul className="space-y-3">
-          {data.chapters.map((ch) => (
-            <li
-              key={ch.id}
-              className="rounded-lg border bg-background"
-            >
-              <div className="flex flex-col gap-2 border-b px-4 py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    {ch.moduleTitle ? (
-                      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                        {ch.moduleTitle}
-                      </p>
-                    ) : null}
-                    <p className="truncate text-sm font-medium">{ch.title}</p>
+          {data.chapters.map((ch, i) => {
+            // Module eyebrow renders only on the first chapter of each
+            // module group. Service-side ordering guarantees chapters
+            // for the same module are contiguous, so a simple equality
+            // check against the previous row is enough.
+            const prev = data.chapters[i - 1] ?? null
+            const showModuleHeader =
+              ch.moduleTitle !== null && ch.moduleTitle !== prev?.moduleTitle
+            return (
+              <li
+                key={ch.id}
+                className="rounded-lg border bg-background"
+              >
+                {showModuleHeader ? (
+                  <div className="bg-muted/30 px-4 py-1.5">
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      {ch.moduleTitle}
+                    </p>
                   </div>
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                    {ch.completedLessons} / {ch.totalLessons}
-                  </span>
-                </div>
-                {ch.totalLessons > 0 ? (
-                  <Progress value={ch.percent} className="h-1" />
                 ) : null}
-              </div>
-              {ch.lessons.length === 0 ? (
-                <p className="px-4 py-3 text-xs text-muted-foreground">
-                  No lessons yet.
-                </p>
-              ) : (
-                <ul className="divide-y">
-                  {ch.lessons.map((l) => (
-                    <LessonRow key={l.id} lesson={l} />
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
+                <div className="flex flex-col gap-2 border-b px-4 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 truncate text-sm font-medium">
+                      {ch.title}
+                    </p>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {ch.completedLessons} / {ch.totalLessons}
+                    </span>
+                  </div>
+                  {ch.totalLessons > 0 ? (
+                    <Progress value={ch.percent} className="h-1" />
+                  ) : null}
+                </div>
+                {ch.lessons.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-muted-foreground">
+                    No lessons yet.
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {ch.lessons.map((l) => (
+                      <LessonRow key={l.id} lesson={l} />
+                    ))}
+                  </ul>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
