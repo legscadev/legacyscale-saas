@@ -25,6 +25,7 @@ export { AnnouncementReactions } from './announcement-reactions'
 export { FormSection } from './form-section'
 export {
   DashboardSkeleton,
+  AdminDashboardSkeleton,
   TableSkeleton,
   CourseGridSkeleton,
   AnnouncementListSkeleton,
