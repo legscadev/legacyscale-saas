@@ -87,7 +87,7 @@ export default function LoginPage() {
             type="submit"
             className="w-full"
             size="lg"
-            disabled={pending}
+            loading={pending}
           >
             {pending ? 'Signing in…' : 'Sign in'}
             {!pending && <ArrowRight />}

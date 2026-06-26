@@ -111,7 +111,8 @@ function ResetForm() {
           type="submit"
           className="w-full"
           size="lg"
-          disabled={pending || mismatch}
+          loading={pending}
+          disabled={mismatch}
         >
           {pending ? 'Updating…' : 'Update password'}
           {!pending && <ArrowRight />}

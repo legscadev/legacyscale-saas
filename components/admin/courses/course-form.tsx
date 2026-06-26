@@ -576,7 +576,7 @@ export function CourseForm({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" loading={submitting}>
             {submitting ? (
               'Saving…'
             ) : (

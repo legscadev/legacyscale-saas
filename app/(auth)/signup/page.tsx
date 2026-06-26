@@ -70,7 +70,7 @@ export default function SignupPage() {
           {state && 'error' in state && (
             <p className="text-sm text-destructive">{state.error}</p>
           )}
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" className="w-full" loading={pending}>
             {pending ? 'Creating account…' : 'Create Account'}
           </Button>
         </form>
