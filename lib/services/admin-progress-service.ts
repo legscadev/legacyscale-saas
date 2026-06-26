@@ -940,11 +940,20 @@ async function getMemberCourseProgress(
         title: true,
         chapters: {
           where: { deletedAt: null },
-          orderBy: { orderIndex: 'asc' },
+          // Sort by module first, then chapter within module. Without
+          // the module-level sort, every module's "Chapter 1" lands
+          // together (they all have orderIndex 0), scrambling the
+          // curriculum view. Loose chapters (moduleId = null) sort
+          // last by Postgres's default NULLS LAST behavior — matches
+          // the member-side curriculum outline.
+          orderBy: [
+            { module: { orderIndex: 'asc' } },
+            { orderIndex: 'asc' },
+          ],
           select: {
             id: true,
             title: true,
-            module: { select: { title: true } },
+            module: { select: { title: true, orderIndex: true } },
             lessons: {
               where: { deletedAt: null },
               orderBy: { orderIndex: 'asc' },
