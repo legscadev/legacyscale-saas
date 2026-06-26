@@ -10,7 +10,7 @@ import {
 
 import {
   PageHeader,
-  StatCard,
+  StatStrip,
   CourseCard,
   EmptyState,
 } from '@/components/shared'
@@ -43,26 +43,26 @@ export default async function UserDashboardPage() {
     <div className="space-y-6">
       <PageHeader title="Dashboard" description="Track your learning progress" />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard
-          title="Courses Enrolled"
-          value={stats.enrolledCount}
-          icon={GraduationCap}
-          tone="brand"
-        />
-        <StatCard
-          title="Lessons Completed"
-          value={stats.lessonsCompleted}
-          icon={BookOpen}
-          tone="success"
-        />
-        <StatCard
-          title="Notes Taken"
-          value={stats.notesCount}
-          icon={FileText}
-          tone="info"
-        />
-      </div>
+      <StatStrip
+        className="sm:grid-cols-3"
+        cells={[
+          {
+            label: 'Courses Enrolled',
+            value: stats.enrolledCount.toLocaleString(),
+            icon: GraduationCap,
+          },
+          {
+            label: 'Lessons Completed',
+            value: stats.lessonsCompleted.toLocaleString(),
+            icon: BookOpen,
+          },
+          {
+            label: 'Notes Taken',
+            value: stats.notesCount.toLocaleString(),
+            icon: FileText,
+          },
+        ]}
+      />
 
       {continueLearning ? (
         <Card variant="raised" className="gap-4 p-6">

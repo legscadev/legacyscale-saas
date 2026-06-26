@@ -381,7 +381,7 @@ export function MemberEditDialog({
           )}
 
           <DialogFooter showCloseButton>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" loading={submitting}>
               {submitting ? (
                 'Saving…'
               ) : (
