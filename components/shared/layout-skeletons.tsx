@@ -213,7 +213,7 @@ export function CourseDetailSkeleton() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
         {/* Curriculum outline */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -280,7 +280,7 @@ export function LessonPlayerSkeleton() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
         {/* Main body */}
         <div className="min-w-0 space-y-5">
           {/* Video / content area */}
