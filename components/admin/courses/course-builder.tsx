@@ -888,7 +888,7 @@ export function CourseBuilder({
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           {modules.length === 0 && chapters.length === 0 ? (
             <EmptyState
