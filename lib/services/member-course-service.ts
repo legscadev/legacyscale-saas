@@ -7,6 +7,11 @@ import { postCompletionToDiscord } from '@/lib/discord'
 import { sendCourseCompleteEmail } from '@/lib/resend'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { visibleAudiencesFor } from '@/lib/auth/permissions'
+import {
+  buildMemberCategoryAccessWhere,
+  passesMemberCategoryGate,
+  type MemberAccess,
+} from './member-course-gate'
 
 const RESOURCE_BUCKET = 'lesson-resources'
 const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-download
@@ -25,19 +30,6 @@ const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-downloa
 // MEMBERS+BOTH; TEAM and ADMIN also see INTERNAL. Methods that filter
 // by audience accept the role explicitly OR look it up.
 
-interface MemberAccess {
-  /** Course audiences this member is allowed to see, derived from role. */
-  visibleAudiences: CourseAudience[]
-  /** Prisma WHERE fragment that gates which courses the member can see
-   *  based on their assigned category (and the free / uncategorized
-   *  bypasses). Spread into a `course.findMany` where clause. ADMIN
-   *  and TEAM roles get an empty object — they see every course. */
-  categoryAccessWhere: Prisma.CourseWhereInput
-  /** True when role bypasses the member-tier category filter. */
-  bypassesCategoryGate: boolean
-  /** The member's assigned category, when role doesn't bypass. */
-  memberCategoryId: string | null
-}
 
 // Per-request memoization: a single page render that calls both
 // listCatalogForMember and getCourseForMember (e.g. dashboard + course
@@ -66,50 +58,10 @@ const resolveMemberAccess = cache(
   },
 )
 
-/**
- * Build the OR-branch that gates which courses a member-tier user can
- * see. Two ways a course slips past the gate:
- *   - It's marked isFree (free for everyone, regardless of category).
- *   - The member has a category and the course shares it.
- * Members with no category assigned only see free courses.
- * Uncategorised paid courses are hidden from MEMBER role; ADMIN/TEAM
- * still see them via the bypass branch above.
- */
-function buildMemberCategoryAccessWhere(
-  categoryId: string | null,
-): Prisma.CourseWhereInput {
-  const branches: Prisma.CourseWhereInput[] = [{ isFree: true }]
-  if (categoryId) {
-    branches.push({ categories: { some: { categoryId } } })
-  }
-  return { OR: branches }
-}
-
 // Back-compat shim: a few helpers (resolveMemberAccess users) still
 // reach for just the audiences list. Wraps the richer call.
 async function resolveVisibleAudiences(userId: string): Promise<CourseAudience[]> {
   return (await resolveMemberAccess(userId)).visibleAudiences
-}
-
-/**
- * In-memory mirror of `buildMemberCategoryAccessWhere` for callers
- * that already have the course's isFree + categories loaded (e.g.
- * the lesson-access guard inside markLessonProgress / submitQuiz).
- * Saves a second DB round-trip per request.
- */
-function passesMemberCategoryGate(
-  access: MemberAccess,
-  course: { isFree: boolean; categories: { categoryId: string }[] },
-): boolean {
-  if (access.bypassesCategoryGate) return true
-  if (course.isFree) return true
-  if (
-    access.memberCategoryId &&
-    course.categories.some((c) => c.categoryId === access.memberCategoryId)
-  ) {
-    return true
-  }
-  return false
 }
 
 // ============================================
