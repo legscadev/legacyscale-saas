@@ -1,5 +1,7 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Loader2 } from "lucide-react"
+import { Children, isValidElement } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -41,25 +43,59 @@ const buttonVariants = cva(
   }
 )
 
+interface ButtonExtraProps {
+  /** When true, replaces the first SVG child with a spinner and
+   *  disables the button. Keeps the existing text label intact so
+   *  forms can swap their "Save" → "Saving…" copy independently. */
+  loading?: boolean
+}
+
 function Button({
   className,
   variant = "default",
   size = "default",
   render,
   nativeButton,
+  loading = false,
+  disabled,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> &
+  ButtonExtraProps) {
+  // When loading, swap a spinner in. If the first child is an
+  // element (the leading icon convention used across the app — e.g.
+  // `<Button><Save /> Save changes</Button>`), the spinner *replaces*
+  // it. Otherwise the spinner is prepended.
+  let renderedChildren = children
+  if (loading) {
+    const array = Children.toArray(children)
+    const dropLeadingIcon = array.length > 0 && isValidElement(array[0])
+    renderedChildren = (
+      <>
+        <Loader2 className="animate-spin" />
+        {dropLeadingIcon ? array.slice(1) : array}
+      </>
+    )
+  }
   return (
     <ButtonPrimitive
       data-slot="button"
+      data-loading={loading || undefined}
       render={render}
       // When rendering a custom element (e.g. a Next.js <Link>/<a>), it is no
       // longer a native <button>, so disable that assumption to keep correct
       // semantics and silence Base UI's nativeButton warning.
       nativeButton={nativeButton ?? (render ? false : undefined)}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(
+        buttonVariants({ variant, size, className }),
+        loading && "cursor-wait",
+      )}
+      disabled={disabled || loading}
       {...props}
-    />
+    >
+      {renderedChildren}
+    </ButtonPrimitive>
   )
 }
 

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { adminNav, memberNav } from '@/lib/config/navigation'
 import { BrandMark } from './brand-mark'
+import { PageTransition } from './page-transition'
 import { SidebarNav } from './sidebar-nav'
 import { SidebarProvider, useSidebar } from './sidebar-context'
 import { TopBar } from './top-bar'
@@ -162,7 +163,9 @@ function AppShellInner({
           unreadAnnouncements={unreadAnnouncements}
         />
         <main className="flex-1">
-          <div className="p-4 sm:p-6 lg:p-8">{children}</div>
+          <div className="p-4 sm:p-6 lg:p-8">
+            <PageTransition>{children}</PageTransition>
+          </div>
         </main>
       </div>
     </div>

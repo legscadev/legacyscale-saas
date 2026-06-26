@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -53,7 +54,7 @@ export function SidebarNav({
                 aria-current={active ? 'page' : undefined}
                 aria-label={collapsed ? item.label : undefined}
                 className={cn(
-                  'flex h-8 items-center rounded-md text-sm font-medium transition-colors',
+                  'relative flex h-8 items-center rounded-md text-sm font-medium transition-colors',
                   collapsed
                     ? 'size-8 justify-center'
                     : 'gap-2.5 px-2',
@@ -62,6 +63,22 @@ export function SidebarNav({
                     : 'text-neutral-400 hover:bg-white/[0.06] hover:text-white',
                 )}
               >
+                {/* Animated rail bar — shared layoutId means framer
+                    smoothly slides this between active items as the
+                    pathname changes. Sits flush to the left edge of
+                    the item. */}
+                {active ? (
+                  <motion.span
+                    layoutId="sidebar-active-rail"
+                    aria-hidden
+                    className="absolute -left-0.5 top-1.5 bottom-1.5 w-0.5 rounded-full bg-brand-500"
+                    transition={{
+                      type: 'spring',
+                      stiffness: 380,
+                      damping: 30,
+                    }}
+                  />
+                ) : null}
                 <Icon
                   className={cn(
                     'size-4 shrink-0',

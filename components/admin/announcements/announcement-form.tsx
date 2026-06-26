@@ -431,7 +431,7 @@ export function AnnouncementForm({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" loading={submitting}>
             <Save />
             {submitting ? 'Saving…' : submitLabel}
           </Button>
