@@ -127,16 +127,19 @@ export default async function LessonPlayerPage({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
+        {/* min-w-0 + the button's own min-w-0 lets the inner truncate
+            actually kick in — without it, the long course title forces
+            the row past the viewport at mobile. */}
         <Button
           variant="ghost"
           size="sm"
-          className="-ml-2"
+          className="-ml-2 min-w-0 max-w-full"
           render={<Link href={`/courses/${course.slug}`} />}
         >
-          <ArrowLeft />
+          <ArrowLeft className="shrink-0" />
           <span className="truncate">{course.title}</span>
         </Button>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -166,7 +169,12 @@ export default async function LessonPlayerPage({
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      {/* grid-cols-1 is required at mobile — without an explicit
+          mobile track definition, CSS Grid falls back to sizing the
+          single auto-flow column to its widest child's min-content,
+          which the chapter rail's truncated lesson titles inflate
+          past the viewport. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-5">
           {/* Lesson header — eyebrow with chapter + position + type +
               duration, then the lesson title. More substantial than

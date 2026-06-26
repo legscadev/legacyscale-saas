@@ -192,7 +192,7 @@ export default async function AdminDashboardPage() {
         <StatStrip cells={cells} />
       </Link>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SectionCard
           title="Completions over time"
           description="Course completions per week, last 12 weeks."
@@ -215,7 +215,7 @@ export default async function AdminDashboardPage() {
         </SectionCard>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <SectionCard
             title="Needs attention"

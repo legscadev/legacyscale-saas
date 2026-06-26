@@ -217,7 +217,11 @@ export default async function CourseDetailPage({
         </Card>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+      {/* grid-cols-1 is required at mobile — without it, the single
+          auto-flow column sizes to the widest child's min-content
+          (long lesson titles in the curriculum / aside details),
+          overflowing the viewport. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold tracking-tight">
