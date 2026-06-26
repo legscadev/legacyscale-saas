@@ -37,21 +37,29 @@ interface ExecuteWebhookPayload {
 const DISCORD_WEBHOOK_TIMEOUT_MS = 10_000
 const KONDENSE_BRAND_RED = 0xd11a1a
 
-// Webhook URL lives in the `app_settings` table; admins set it via
+// Webhook URLs live in the `app_settings` table; admins set them via
 // /admin/settings → Integrations. No env-var fallback — if the row is
 // missing, callers no-op silently. Returning null is the "no webhook
 // configured" signal.
-async function resolveWebhookUrl(): Promise<string | null> {
-  const raw = await getRawSetting(SETTING_KEYS.DISCORD_WEBHOOK_URL).catch(
-    (err) => {
-      console.error('Failed to read Discord webhook setting from DB:', err)
-      return null
-    },
-  )
+//
+// Two webhook channels today: `DISCORD_WEBHOOK_URL` (announcements)
+// and `DISCORD_ACHIEVEMENTS_WEBHOOK_URL` (course-completion crossposts).
+type WebhookKey = typeof SETTING_KEYS.DISCORD_WEBHOOK_URL
+  | typeof SETTING_KEYS.DISCORD_ACHIEVEMENTS_WEBHOOK_URL
+
+async function resolveWebhookUrl(
+  key: WebhookKey = SETTING_KEYS.DISCORD_WEBHOOK_URL,
+): Promise<string | null> {
+  const raw = await getRawSetting(key).catch((err) => {
+    console.error(`Failed to read Discord webhook setting ${key} from DB:`, err)
+    return null
+  })
   const trimmed = raw?.trim()
   if (!trimmed) return null
   if (!/^https:\/\/discord(app)?\.com\/api\/webhooks\//.test(trimmed)) {
-    console.error('Stored Discord webhook URL does not look like a webhook URL')
+    console.error(
+      `Stored Discord webhook URL for ${key} does not look like a webhook URL`,
+    )
     return null
   }
   return trimmed
@@ -60,8 +68,9 @@ async function resolveWebhookUrl(): Promise<string | null> {
 async function executeWebhook(
   payload: ExecuteWebhookPayload,
   overrideUrl?: string,
+  webhookKey: WebhookKey = SETTING_KEYS.DISCORD_WEBHOOK_URL,
 ): Promise<void> {
-  const url = overrideUrl ?? (await resolveWebhookUrl())
+  const url = overrideUrl ?? (await resolveWebhookUrl(webhookKey))
   if (!url) {
     // No webhook configured — silently no-op so the caller doesn't
     // have to gate every call site.
@@ -126,6 +135,41 @@ export async function postAnnouncementToDiscord(
   })
 }
 
+interface CompletionCrossPostInput {
+  memberName: string
+  courseTitle: string
+  /** Public course URL for the embed link (clickable title). */
+  courseUrl: string
+}
+
+/**
+ * Channel-wide celebration when a member finishes a course (Ticket 6.21).
+ * Posts to the achievements webhook (separate from announcements).
+ * Fires from `markLessonProgress` inside `after()` so it never blocks
+ * the user's mark-complete click. No per-user opt-out — webhook posts
+ * are channel-broadcast.
+ */
+export async function postCompletionToDiscord(
+  input: CompletionCrossPostInput,
+): Promise<void> {
+  await executeWebhook(
+    {
+      embeds: [
+        {
+          title: `🎉 ${input.memberName} just completed ${input.courseTitle}`,
+          url: input.courseUrl,
+          color: KONDENSE_BRAND_RED,
+          timestamp: new Date().toISOString(),
+          footer: { text: 'Kondense · course completion' },
+        },
+      ],
+      allowed_mentions: { parse: [] },
+    },
+    undefined,
+    SETTING_KEYS.DISCORD_ACHIEVEMENTS_WEBHOOK_URL,
+  )
+}
+
 /**
  * Post a dry-run embed to verify a webhook URL works. Unlike
  * `postAnnouncementToDiscord` (which swallows errors so a broken
@@ -133,12 +177,15 @@ export async function postAnnouncementToDiscord(
  * admin UI can show a clear error toast.
  *
  * `overrideUrl` lets admins test a *candidate* URL before saving it.
- * When omitted, falls back to the currently resolved URL (DB → env).
+ * `webhookKey` selects which stored webhook to fall back to when
+ * `overrideUrl` is omitted — defaults to the announcements webhook
+ * for backwards compatibility with the existing admin settings UI.
  */
 export async function testDiscordWebhook(
   overrideUrl?: string,
+  webhookKey: WebhookKey = SETTING_KEYS.DISCORD_WEBHOOK_URL,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const url = overrideUrl?.trim() || (await resolveWebhookUrl())
+  const url = overrideUrl?.trim() || (await resolveWebhookUrl(webhookKey))
   if (!url) {
     return { ok: false, error: 'No Discord webhook URL configured' }
   }

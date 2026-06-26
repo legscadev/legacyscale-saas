@@ -1,11 +1,17 @@
 import { cache } from 'react'
 import { after } from 'next/server'
-import type { CourseAudience, Role } from '@prisma/client'
+import type { CourseAudience, Prisma, Role } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { postCompletionToDiscord } from '@/lib/discord'
 import { sendCourseCompleteEmail } from '@/lib/resend'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { visibleAudiencesFor } from '@/lib/auth/permissions'
+import {
+  buildMemberCategoryAccessWhere,
+  passesMemberCategoryGate,
+  type MemberAccess,
+} from './member-course-gate'
 
 const RESOURCE_BUCKET = 'lesson-resources'
 const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-download
@@ -24,18 +30,39 @@ const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-downloa
 // MEMBERS+BOTH; TEAM and ADMIN also see INTERNAL. Methods that filter
 // by audience accept the role explicitly OR look it up.
 
+
 // Per-request memoization: a single page render that calls both
 // listCatalogForMember and getCourseForMember (e.g. dashboard + course
 // detail composition) now does one `user.findUnique` instead of two.
-const resolveVisibleAudiences = cache(
-  async (userId: string): Promise<CourseAudience[]> => {
+const resolveMemberAccess = cache(
+  async (userId: string): Promise<MemberAccess> => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, categoryId: true },
     })
-    return visibleAudiencesFor(user?.role ?? ('MEMBER' as Role))
+    const role = user?.role ?? ('MEMBER' as Role)
+    const visibleAudiences = visibleAudiencesFor(role)
+
+    // ADMIN + TEAM bypass the member-tier category filter and see
+    // every course (mirrors how INTERNAL audience is granted to them).
+    const isStaff = role === 'ADMIN' || role === 'TEAM'
+    const memberCategoryId = user?.categoryId ?? null
+    return {
+      visibleAudiences,
+      categoryAccessWhere: isStaff
+        ? {}
+        : buildMemberCategoryAccessWhere(memberCategoryId),
+      bypassesCategoryGate: isStaff,
+      memberCategoryId,
+    }
   },
 )
+
+// Back-compat shim: a few helpers (resolveMemberAccess users) still
+// reach for just the audiences list. Wraps the richer call.
+async function resolveVisibleAudiences(userId: string): Promise<CourseAudience[]> {
+  return (await resolveMemberAccess(userId)).visibleAudiences
+}
 
 // ============================================
 // LIST — catalog grid
@@ -68,12 +95,13 @@ const catalogSelect = {
 } as const
 
 export async function listCatalogForMember(userId: string) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
   const rows = await prisma.course.findMany({
     where: {
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
+      ...categoryAccessWhere,
     },
     orderBy: { orderIndex: 'asc' },
     select: catalogSelect,
@@ -184,7 +212,7 @@ export async function suggestNextCourseForMember(
   userId: string,
   justFinishedCourseId: string,
 ) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
 
   // Course just finished — need its category memberships for the
   // sibling lookup. Use findUnique with select for a single round-trip.
@@ -208,6 +236,7 @@ export async function suggestNextCourseForMember(
     status: 'PUBLISHED' as const,
     audience: { in: visibleAudiences },
     id: { notIn: [...completedIds, justFinishedCourseId] },
+    ...categoryAccessWhere,
   }
 
   // 1. Same-category sibling.
@@ -239,6 +268,7 @@ export async function suggestNextCourseForMember(
         deletedAt: null,
         status: 'PUBLISHED',
         audience: { in: visibleAudiences },
+        ...categoryAccessWhere,
       },
     },
     orderBy: { lastAccessedAt: 'desc' },
@@ -319,6 +349,7 @@ const detailSelect = {
   description: true,
   thumbnailUrl: true,
   coverImageUrl: true,
+  certificateEnabled: true,
   status: true,
   audience: true,
   isFree: true,
@@ -353,13 +384,14 @@ async function loadVisibleCourse(
   userId: string,
   by: { id: string } | { slug: string },
 ) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
   return prisma.course.findFirst({
     where: {
       ...by,
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
+      ...categoryAccessWhere,
     },
     select: detailSelect,
   })
@@ -475,7 +507,7 @@ export type MemberCourseDetail = NonNullable<
  * function doesn't need to gate). Paid integrations land in Sprint 5+.
  */
 export async function ensureEnrollment(userId: string, courseId: string) {
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
   // Confirm the course is actually visible to this member before we
   // create a row.
   const course = await prisma.course.findFirst({
@@ -484,6 +516,7 @@ export async function ensureEnrollment(userId: string, courseId: string) {
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
+      ...categoryAccessWhere,
     },
     select: { id: true, accessDays: true },
   })
@@ -540,6 +573,8 @@ export async function markLessonProgress(
               status: true,
               audience: true,
               deletedAt: true,
+              isFree: true,
+              categories: { select: { categoryId: true } },
             },
           },
         },
@@ -549,12 +584,13 @@ export async function markLessonProgress(
   if (!lesson) throw new Error('Lesson not found')
 
   const course = lesson.chapter.course
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const access = await resolveMemberAccess(userId)
   if (
     !course ||
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !visibleAudiences.includes(course.audience)
+    !access.visibleAudiences.includes(course.audience) ||
+    !passesMemberCategoryGate(access, course)
   ) {
     throw new Error('Lesson not accessible')
   }
@@ -617,12 +653,14 @@ export async function markLessonProgress(
     justCompleted = claim.count > 0
   }
 
-  // Fire the celebration email after the response. The write-once
-  // guard above means even a flurry of duplicate calls only triggers
-  // one email. `after()` keeps the user's mark-complete click snappy
-  // — Resend roundtrips don't block the action's return.
+  // Fire post-completion side-effects after the response. The
+  // write-once guard above means even a flurry of duplicate calls
+  // only triggers each side-effect once. `after()` keeps the user's
+  // mark-complete click snappy — Resend + Discord roundtrips don't
+  // block the action's return.
   if (justCompleted) {
     after(() => sendCourseCompleteAfter(userId, course))
+    after(() => postCompletionToDiscordAfter(userId, course))
   }
 
   return {
@@ -661,6 +699,34 @@ async function sendCourseCompleteAfter(
     )
   } catch (err) {
     console.error('Course completion email failed:', err)
+  }
+}
+
+/**
+ * Post-response Discord crosspost (Ticket 6.21). Posts an embed to the
+ * configured achievements channel. Channel-wide — no per-user opt-out
+ * (webhook posts are broadcast). No-ops silently when the webhook
+ * isn't configured. Same error-swallowing rationale as the email
+ * helper: completion already committed, don't roll back on Discord
+ * trouble.
+ */
+async function postCompletionToDiscordAfter(
+  userId: string,
+  course: { slug: string; title: string },
+) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    })
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    await postCompletionToDiscord({
+      memberName: user?.name?.trim() || 'A member',
+      courseTitle: course.title,
+      courseUrl: `${appUrl}/courses/${course.slug}`,
+    })
+  } catch (err) {
+    console.error('Course completion Discord crosspost failed:', err)
   }
 }
 
@@ -756,6 +822,8 @@ export async function submitQuizAttempt(
               status: true,
               audience: true,
               deletedAt: true,
+              isFree: true,
+              categories: { select: { categoryId: true } },
             },
           },
         },
@@ -769,12 +837,13 @@ export async function submitQuizAttempt(
   if (!lesson) throw new Error('Quiz not found')
 
   const course = lesson.chapter.course
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const access = await resolveMemberAccess(userId)
   if (
     !course ||
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !visibleAudiences.includes(course.audience)
+    !access.visibleAudiences.includes(course.audience) ||
+    !passesMemberCategoryGate(access, course)
   ) {
     throw new Error('Quiz not accessible')
   }
@@ -856,6 +925,8 @@ export async function getResourceDownloadUrl(
                   status: true,
                   audience: true,
                   deletedAt: true,
+                  isFree: true,
+                  categories: { select: { categoryId: true } },
                 },
               },
             },
@@ -868,11 +939,12 @@ export async function getResourceDownloadUrl(
     throw new Error('Resource not found')
   }
   const course = resource.lesson.chapter.course
-  const visibleAudiences = await resolveVisibleAudiences(userId)
+  const access = await resolveMemberAccess(userId)
   if (
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
-    !visibleAudiences.includes(course.audience)
+    !access.visibleAudiences.includes(course.audience) ||
+    !passesMemberCategoryGate(access, course)
   ) {
     throw new Error('Resource not accessible')
   }

@@ -62,6 +62,7 @@ const courseListSelect = {
   description: true,
   thumbnailUrl: true,
   coverImageUrl: true,
+  certificateEnabled: true,
   status: true,
   isFree: true,
   audience: true,
@@ -217,6 +218,7 @@ async function createCourse(
       description: input.description,
       thumbnailUrl: input.thumbnailUrl || null,
       coverImageUrl: input.coverImageUrl || null,
+      certificateEnabled: input.certificateEnabled ?? false,
       status: input.status,
       isFree: input.isFree ?? false,
       audience: input.audience ?? 'MEMBERS',
@@ -245,6 +247,9 @@ async function updateCourse(id: string, input: UpdateCourseInput) {
   }
   if (input.coverImageUrl !== undefined) {
     data.coverImageUrl = input.coverImageUrl || null
+  }
+  if (input.certificateEnabled !== undefined) {
+    data.certificateEnabled = input.certificateEnabled
   }
   if (input.accessDays !== undefined) data.accessDays = input.accessDays
   if (input.isFree !== undefined) data.isFree = input.isFree

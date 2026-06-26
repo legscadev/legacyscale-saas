@@ -27,4 +27,7 @@ export {
   DashboardSkeleton,
   TableSkeleton,
   CourseGridSkeleton,
+  AnnouncementListSkeleton,
+  CourseDetailSkeleton,
+  LessonPlayerSkeleton,
 } from './layout-skeletons'

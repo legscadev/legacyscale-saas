@@ -75,6 +75,10 @@ export async function setLessonCompleteAction(
     revalidatePath('/courses/[slug]/lessons/[lessonId]', 'page')
     revalidatePath('/courses/[slug]', 'page')
     revalidatePath('/courses')
+    // Dashboard stats, resume target, and progress bars depend on
+    // lesson completion — bust its Router Cache so a same-tab nav
+    // back to /dashboard reflects the change immediately.
+    revalidatePath('/dashboard')
 
     return {
       ok: true,
@@ -109,9 +113,13 @@ export async function submitQuizAttemptAction(
     )
 
     if (result.passed) {
-      // Only need a path revalidate when completion changed something.
-      // The quiz UI itself stays mounted with local result state.
+      // Passing auto-completes the lesson — invalidate the same
+      // surfaces as setLessonCompleteAction so progress/stats/resume
+      // stay fresh. Lesson page itself stays mounted with local
+      // result state, so we deliberately don't revalidate it.
+      revalidatePath('/courses/[slug]', 'page')
       revalidatePath('/courses')
+      revalidatePath('/dashboard')
     }
 
     return {

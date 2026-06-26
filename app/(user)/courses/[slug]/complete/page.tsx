@@ -11,8 +11,10 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { CertificateDownloadButton } from '@/components/member/certificate-download-button'
 import { requireActiveUser } from '@/lib/auth'
 import { memberCourseService } from '@/lib/services/member-course-service'
+import { htmlToPlainText } from '@/lib/utils'
 
 interface CompletionPageProps {
   params: Promise<{ slug: string }>
@@ -111,10 +113,15 @@ export default async function CourseCompletePage({
                 {suggestion.title}
               </p>
               {suggestion.description ? (
-                <p
-                  className="line-clamp-2 text-sm text-muted-foreground [&_a]:text-primary [&_a]:underline"
-                  dangerouslySetInnerHTML={{ __html: suggestion.description }}
-                />
+                // Strip HTML to plain text — same rationale as commit
+                // 731e189 on the dashboard CourseCard. A `<p>` from
+                // dangerouslySetInnerHTML inside this `<p>` wrapper
+                // causes a hydration mismatch (browsers auto-close
+                // the outer `<p>` on the nested one), and a line-
+                // clamped preview has no use for rich formatting.
+                <p className="line-clamp-2 text-sm text-muted-foreground">
+                  {htmlToPlainText(suggestion.description)}
+                </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
                   {suggestion.reason === 'sameCategory'
@@ -132,6 +139,21 @@ export default async function CourseCompletePage({
               <ArrowRight />
             </Button>
           </div>
+        </Card>
+      ) : null}
+
+      {course.certificateEnabled && course.enrollment ? (
+        <Card variant="raised" className="flex flex-col gap-3 border-success/30 bg-success/[0.04] p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-semibold">Your certificate is ready</p>
+            <p className="text-xs text-muted-foreground">
+              Personalised PDF — name, completion date, and certificate ID stamped on your template.
+            </p>
+          </div>
+          <CertificateDownloadButton
+            enrollmentId={course.enrollment.id}
+            className="sm:shrink-0"
+          />
         </Card>
       ) : null}
 

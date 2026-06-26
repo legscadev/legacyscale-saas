@@ -237,6 +237,7 @@ export async function createCourseAction(
     audience: (formData.get('audience') as string) || 'MEMBERS',
     thumbnailUrl: imageResolve.thumbnailUrl,
     coverImageUrl: imageResolve.coverImageUrl,
+    certificateEnabled: formData.get('certificateEnabled') === '1',
     categoryIds: parseCategoryIds(formData),
   })
 
@@ -385,6 +386,9 @@ export async function updateCourseAction(
   }
   if (formData.has('audience')) {
     input.audience = formData.get('audience')
+  }
+  if (formData.has('certificateEnabled')) {
+    input.certificateEnabled = formData.get('certificateEnabled') === '1'
   }
   if (formData.has('categoryIds')) {
     input.categoryIds = parseCategoryIds(formData)

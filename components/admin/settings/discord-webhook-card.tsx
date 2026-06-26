@@ -25,20 +25,44 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  type DiscordWebhookSetting,
-  revealDiscordWebhookAction,
-  testDiscordWebhookAction,
-  updateDiscordWebhookAction,
+import type {
+  DiscordWebhookSetting,
+  SimpleResult,
 } from '@/app/(admin)/admin/settings/actions'
+
+type RevealResult = { ok: true; url: string } | { ok: false; error: string }
 
 interface DiscordWebhookCardProps {
   initialSetting: DiscordWebhookSetting
+  /** Card heading. */
+  title: string
+  /** One-line description shown under the title. */
+  description: string
+  /** Unique <input> id (needed when more than one card renders on a page). */
+  inputId: string
+  /** Footer text shown when no webhook is configured. */
+  notConfiguredHint: string
+  /** Confirmation dialog copy when the admin clears the webhook. */
+  clearAlert: { title: string; description: string }
+  /** Server actions specific to this webhook (announcements vs achievements). */
+  actions: {
+    reveal: () => Promise<RevealResult>
+    update: (fd: FormData) => Promise<SimpleResult>
+    test: (fd: FormData) => Promise<SimpleResult>
+  }
 }
 
 type Mode = 'view' | 'edit'
 
-export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) {
+export function DiscordWebhookCard({
+  initialSetting,
+  title,
+  description,
+  inputId,
+  notConfiguredHint,
+  clearAlert,
+  actions,
+}: DiscordWebhookCardProps) {
   const [setting, setSetting] = useState(initialSetting)
   const [mode, setMode] = useState<Mode>('view')
   // Candidate URL while editing — never persisted until Save.
@@ -69,7 +93,7 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
       return
     }
     startRevealing(async () => {
-      const result = await revealDiscordWebhookAction()
+      const result = await actions.reveal()
       if (!result.ok) {
         toast.error(result.error ?? 'Could not reveal webhook URL')
         return
@@ -86,7 +110,7 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
     startSaving(async () => {
       const fd = new FormData()
       fd.set('webhookUrl', candidate)
-      const result = await updateDiscordWebhookAction(fd)
+      const result = await actions.update(fd)
       if (!result.ok) {
         toast.error(result.error ?? 'Could not save webhook URL')
         return
@@ -106,7 +130,7 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
     startClearing(async () => {
       const fd = new FormData()
       fd.set('webhookUrl', '')
-      const result = await updateDiscordWebhookAction(fd)
+      const result = await actions.update(fd)
       if (!result.ok) {
         toast.error(result.error ?? 'Could not clear webhook URL')
         return
@@ -124,7 +148,7 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
       if (mode === 'edit' && candidate.trim() !== '') {
         fd.set('webhookUrl', candidate)
       }
-      const result = await testDiscordWebhookAction(fd)
+      const result = await actions.test(fd)
       if (result.ok) {
         toast.success('Test message sent — check the Discord channel')
       } else {
@@ -139,13 +163,10 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          Discord webhook
+          {title}
           <SourceBadge configured={setting.configured} />
         </CardTitle>
-        <CardDescription>
-          Used to crosspost announcements to your Discord channel.
-          Get a URL from Discord → Channel Settings → Integrations → Webhooks.
-        </CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {mode === 'view' ? (
@@ -154,9 +175,11 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
             revealed={revealed}
             isRevealing={isRevealing}
             onReveal={handleReveal}
+            notConfiguredHint={notConfiguredHint}
           />
         ) : (
           <EditMode
+            inputId={inputId}
             candidate={candidate}
             onChange={setCandidate}
             disabled={busy}
@@ -235,12 +258,8 @@ export function DiscordWebhookCard({ initialSetting }: DiscordWebhookCardProps) 
       <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear Discord webhook?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Announcement crossposts to Discord will stop working
-              until a new webhook URL is set. Existing posts in the
-              channel are not affected.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{clearAlert.title}</AlertDialogTitle>
+            <AlertDialogDescription>{clearAlert.description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isClearing}>Cancel</AlertDialogCancel>
@@ -273,9 +292,16 @@ interface ViewModeProps {
   revealed: string
   isRevealing: boolean
   onReveal: () => void
+  notConfiguredHint: string
 }
 
-function ViewMode({ setting, revealed, isRevealing, onReveal }: ViewModeProps) {
+function ViewMode({
+  setting,
+  revealed,
+  isRevealing,
+  onReveal,
+  notConfiguredHint,
+}: ViewModeProps) {
   return (
     <div className="space-y-2">
       <Label>Webhook URL</Label>
@@ -312,26 +338,25 @@ function ViewMode({ setting, revealed, isRevealing, onReveal }: ViewModeProps) {
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        {setting.configured
-          ? `Masked: ${setting.masked}`
-          : 'No webhook configured. The "Crosspost to Discord" option in announcements will be disabled.'}
+        {setting.configured ? `Masked: ${setting.masked}` : notConfiguredHint}
       </p>
     </div>
   )
 }
 
 interface EditModeProps {
+  inputId: string
   candidate: string
   onChange: (v: string) => void
   disabled: boolean
 }
 
-function EditMode({ candidate, onChange, disabled }: EditModeProps) {
+function EditMode({ inputId, candidate, onChange, disabled }: EditModeProps) {
   return (
     <div className="space-y-2">
-      <Label htmlFor="discordWebhookUrl">Webhook URL</Label>
+      <Label htmlFor={inputId}>Webhook URL</Label>
       <Input
-        id="discordWebhookUrl"
+        id={inputId}
         type="url"
         autoComplete="off"
         spellCheck={false}

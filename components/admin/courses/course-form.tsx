@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Image as ImageIcon, Save, Tag, Trash2, Upload } from 'lucide-react'
+import { Award, Check, Image as ImageIcon, Save, Tag, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CourseAudience, CourseStatus } from '@prisma/client'
 
@@ -54,6 +54,7 @@ export interface CourseFormDefaults {
   description?: string | null
   thumbnailUrl?: string | null
   coverImageUrl?: string | null
+  certificateEnabled?: boolean
   status?: CourseStatus
   accessDays?: number | null
   isFree?: boolean
@@ -140,6 +141,9 @@ export function CourseForm({
   const coverPicker = useImagePicker({
     existingUrl: defaults?.coverImageUrl,
   })
+  const [certificateEnabled, setCertificateEnabled] = useState<boolean>(
+    defaults?.certificateEnabled ?? false,
+  )
 
   const [submitting, setSubmitting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -221,6 +225,7 @@ export function CourseForm({
       if (coverPicker.cleared && !coverPicker.file) {
         formData.set('clearCoverImage', '1')
       }
+      formData.set('certificateEnabled', certificateEnabled ? '1' : '0')
       // Always send the categories key — even empty — so the server
       // treats this as a full replace (clearing on edit when the
       // admin removes every chip).
@@ -404,6 +409,30 @@ export function CourseForm({
             error={fieldErrors.coverImage?.[0]}
           />
         </div>
+      </FormSection>
+
+      <FormSection
+        title="Completion certificate"
+        description="When enabled, members who complete this course can download a Kondense-branded PDF certificate (name, course title, completion date, length, and a verification ID)."
+      >
+        <label className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
+          <Checkbox
+            checked={certificateEnabled}
+            onCheckedChange={(c) => setCertificateEnabled(Boolean(c))}
+            disabled={submitting}
+            className="mt-0.5"
+          />
+          <div className="space-y-0.5">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <Award className="size-3.5 text-muted-foreground" />
+              Award a certificate on completion
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Off by default. Turn on for graded courses where finishing
+              earns a certificate worth sharing.
+            </p>
+          </div>
+        </label>
       </FormSection>
 
       <FormSection
@@ -908,3 +937,7 @@ function ImagePicker({
     </div>
   )
 }
+
+// (Certificate template picker removed — superseded by the from-scratch
+// generator in lib/services/certificate-service.ts. Admins now toggle
+// `certificateEnabled` per course instead of uploading a template.)

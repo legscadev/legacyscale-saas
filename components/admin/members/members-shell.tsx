@@ -44,14 +44,21 @@ export const DEFAULT_QUERY_STATE: MembersQueryState = {
 
 const PAGE_SIZE = 10
 
+export interface MemberCategoryOption {
+  id: string
+  name: string
+}
+
 interface MembersShellProps {
   currentUserId: string
   initialData: MembersData
+  categories: MemberCategoryOption[]
 }
 
 export function MembersShell({
   currentUserId,
   initialData,
+  categories,
 }: MembersShellProps) {
   const [query, setQuery] = useState<MembersQueryState>(DEFAULT_QUERY_STATE)
   const [data, setData] = useState<MembersData>(initialData)
@@ -159,8 +166,9 @@ export function MembersShell({
   const refetch = useCallback(() => setRefetchKey((k) => k + 1), [])
 
   const columns = useMemo(
-    () => getMemberColumns(currentUserId, refetch, data.sparklines),
-    [currentUserId, refetch, data.sparklines],
+    () =>
+      getMemberColumns(currentUserId, refetch, data.sparklines, categories),
+    [currentUserId, refetch, data.sparklines, categories],
   )
 
   const selectedIds = Object.keys(rowSelection)
@@ -251,6 +259,7 @@ export function MembersShell({
       <MemberCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
+        categories={categories}
         onCreated={refetch}
       />
     </div>
