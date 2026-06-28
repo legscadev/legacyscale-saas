@@ -636,3 +636,31 @@ model AnnouncementAuditLog {
   @@index([userId])
   @@map("announcement_audit_logs")
 }
+
+/**
+ * Fixed-window per-IP rate limit counter. Each row tracks the number
+ * of times a given IP hit a given action within a specific window
+ * (window_start = floor(now / window_seconds) * window_seconds).
+ * Caller composes the key + window size; this table only stores the
+ * counter. Old rows are not auto-deleted — a periodic cron should
+ * prune entries where window_start < now() - 1 day.
+ *
+ * Primary use: brute-force protection on auth flows (sign-in, sign-
+ * up, password reset, onboarding password-set).
+ */
+model RateLimit {
+  id          String   @id @default(uuid())
+  /** The originating IP. From x-forwarded-for header on Vercel. */
+  ip          String
+  /** Action key — e.g. "auth:sign-in", "auth:reset-password". */
+  action      String
+  /** UTC start of the bucket window this row counts requests in. */
+  windowStart DateTime @map("window_start")
+  count       Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([ip, action, windowStart])
+  @@index([windowStart])
+  @@map("rate_limits")
+}

@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
@@ -12,6 +13,20 @@ import {
 import { completeOnboardingSchema } from '@/lib/validations/onboarding'
 
 export async function POST(request: NextRequest) {
+  // 10 onboarding password-set attempts per 15 minutes per IP —
+  // bounds token-guessing on the invite link.
+  const rl = await checkRateLimit({
+    action: 'auth:onboarding',
+    windowSec: 900,
+    max: 10,
+  })
+  if (!rl.ok) {
+    return errorResponse(
+      `Too many attempts. Try again in ${Math.ceil(rl.retryAfter / 60)} minutes.`,
+      429,
+    )
+  }
+
   const validation = await validateBody(request, completeOnboardingSchema)
   if (validation.error) return validation.error
 

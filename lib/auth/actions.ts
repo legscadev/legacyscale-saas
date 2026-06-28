@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { prisma } from '@/lib/prisma'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { sendPasswordResetEmail } from '@/lib/resend'
 import { syncUserToDatabase } from './sync-user'
 
@@ -16,12 +17,36 @@ export type AuthActionState =
   | { success: true }
   | undefined
 
+/**
+ * Build a user-facing rate-limit error message. We deliberately don't
+ * leak the exact remaining counter — that would help an attacker tune
+ * their attack just below the threshold.
+ */
+function rateLimitMessage(retryAfter: number): string {
+  if (retryAfter < 60) {
+    return `Too many attempts. Try again in ${retryAfter} seconds.`
+  }
+  const minutes = Math.ceil(retryAfter / 60)
+  return `Too many attempts. Try again in ${minutes} minute${
+    minutes === 1 ? '' : 's'
+  }.`
+}
+
 export async function signIn(
   _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
   const email = String(formData.get('email') ?? '')
   const password = String(formData.get('password') ?? '')
+
+  // 10 attempts per 5 minutes per IP. Tighter than signup because
+  // sign-in is the primary brute-force surface.
+  const rl = await checkRateLimit({
+    action: 'auth:sign-in',
+    windowSec: 300,
+    max: 10,
+  })
+  if (!rl.ok) return { error: rateLimitMessage(rl.retryAfter) }
 
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -48,6 +73,15 @@ export async function signUp(
   const email = String(formData.get('email') ?? '')
   const password = String(formData.get('password') ?? '')
   const name = String(formData.get('name') ?? '')
+
+  // 5 sign-ups per 15 minutes per IP — abuse vector is account
+  // creation spam + email delivery cost.
+  const rl = await checkRateLimit({
+    action: 'auth:sign-up',
+    windowSec: 900,
+    max: 5,
+  })
+  if (!rl.ok) return { error: rateLimitMessage(rl.retryAfter) }
 
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signUp({
@@ -78,6 +112,15 @@ export async function resetPassword(
   formData: FormData
 ): Promise<AuthActionState> {
   const email = String(formData.get('email') ?? '').toLowerCase().trim()
+
+  // 5 reset requests per 15 minutes per IP — limits email-enumeration
+  // scanners and protects send-rate cost on Resend.
+  const rl = await checkRateLimit({
+    action: 'auth:reset-password',
+    windowSec: 900,
+    max: 5,
+  })
+  if (!rl.ok) return { error: rateLimitMessage(rl.retryAfter) }
 
   // Mint the recovery token via the admin API, then build a link to our
   // own domain so the email never exposes the Supabase project URL. The
@@ -132,6 +175,15 @@ export async function updatePassword(
   formData: FormData
 ): Promise<AuthActionState> {
   const password = String(formData.get('password') ?? '')
+
+  // 10 password-set attempts per 15 minutes per IP — bounds token-
+  // guessing if the recovery cookie is somehow exposed.
+  const rl = await checkRateLimit({
+    action: 'auth:update-password',
+    windowSec: 900,
+    max: 10,
+  })
+  if (!rl.ok) return { error: rateLimitMessage(rl.retryAfter) }
 
   const cookieStore = await cookies()
   const tokenHash = cookieStore.get(PW_RESET_COOKIE)?.value

@@ -11,5 +11,6 @@ export {
   getUser,
   requireUser,
   requireAdmin,
+  requireAdminApi,
   requireActiveUser,
 } from './get-user'
