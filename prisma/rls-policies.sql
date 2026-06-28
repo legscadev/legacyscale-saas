@@ -392,15 +392,240 @@ CREATE POLICY "announcement_reads_admin_all"
 
 
 -- ============================================================
+-- SPRINT 7.1 — COMPLETE COVERAGE FOR REMAINING TABLES
+-- ============================================================
+-- The original block above covers the 12 tables that existed when
+-- this file was first authored. The 9 tables below were added in
+-- later sprints (announcements comments/reactions/audit, lesson
+-- resources, invites, login events, app settings, categories
+-- junction). Adding RLS now closes the defense-in-depth gap so
+-- any future client-side query path stays safe.
+-- ============================================================
+
+ALTER TABLE announcement_comments    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE announcement_reactions   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE announcement_audit_logs  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lesson_resources         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invites                  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE login_events             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_settings             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_categories        ENABLE ROW LEVEL SECURITY;
+
+
+-- ============================================================
+-- ANNOUNCEMENT_COMMENTS
+-- Visibility tracks the parent announcement (PUBLISHED & not
+-- deleted). Members can create + delete their own comments.
+-- ============================================================
+DROP POLICY IF EXISTS "announcement_comments_select_published" ON announcement_comments;
+DROP POLICY IF EXISTS "announcement_comments_insert_own"       ON announcement_comments;
+DROP POLICY IF EXISTS "announcement_comments_delete_own"       ON announcement_comments;
+DROP POLICY IF EXISTS "announcement_comments_admin_all"        ON announcement_comments;
+
+CREATE POLICY "announcement_comments_select_published"
+  ON announcement_comments FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM announcements a
+      WHERE a.id = announcement_comments.announcement_id
+        AND a.status = 'PUBLISHED'
+        AND a.deleted_at IS NULL
+    )
+    OR is_admin()
+  );
+
+CREATE POLICY "announcement_comments_insert_own"
+  ON announcement_comments FOR INSERT
+  WITH CHECK (user_id = public.current_user_id());
+
+CREATE POLICY "announcement_comments_delete_own"
+  ON announcement_comments FOR DELETE
+  USING (user_id = public.current_user_id());
+
+CREATE POLICY "announcement_comments_admin_all"
+  ON announcement_comments FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- ANNOUNCEMENT_REACTIONS
+-- Same visibility model as comments; (user_id, announcement_id,
+-- emoji) is unique so members can only toggle their own row.
+-- ============================================================
+DROP POLICY IF EXISTS "announcement_reactions_select_published" ON announcement_reactions;
+DROP POLICY IF EXISTS "announcement_reactions_insert_own"       ON announcement_reactions;
+DROP POLICY IF EXISTS "announcement_reactions_delete_own"       ON announcement_reactions;
+DROP POLICY IF EXISTS "announcement_reactions_admin_all"        ON announcement_reactions;
+
+CREATE POLICY "announcement_reactions_select_published"
+  ON announcement_reactions FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM announcements a
+      WHERE a.id = announcement_reactions.announcement_id
+        AND a.status = 'PUBLISHED'
+        AND a.deleted_at IS NULL
+    )
+    OR is_admin()
+  );
+
+CREATE POLICY "announcement_reactions_insert_own"
+  ON announcement_reactions FOR INSERT
+  WITH CHECK (user_id = public.current_user_id());
+
+CREATE POLICY "announcement_reactions_delete_own"
+  ON announcement_reactions FOR DELETE
+  USING (user_id = public.current_user_id());
+
+CREATE POLICY "announcement_reactions_admin_all"
+  ON announcement_reactions FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- ANNOUNCEMENT_AUDIT_LOGS — admin-only.
+-- Audit rows are sensitive (who-did-what); members never read.
+-- ============================================================
+DROP POLICY IF EXISTS "announcement_audit_logs_admin_all" ON announcement_audit_logs;
+
+CREATE POLICY "announcement_audit_logs_admin_all"
+  ON announcement_audit_logs FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- LESSON_RESOURCES — gated by visibility of the parent lesson.
+-- Mirrors the lessons policy: READY status, course PUBLISHED,
+-- not soft-deleted. Admins see all.
+-- ============================================================
+DROP POLICY IF EXISTS "lesson_resources_select_ready" ON lesson_resources;
+DROP POLICY IF EXISTS "lesson_resources_admin_all"    ON lesson_resources;
+
+CREATE POLICY "lesson_resources_select_ready"
+  ON lesson_resources FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM lessons l
+      JOIN chapters ch ON ch.id = l.chapter_id
+      JOIN courses c ON c.id = ch.course_id
+      WHERE l.id = lesson_resources.lesson_id
+        AND l.status = 'READY'
+        AND l.deleted_at IS NULL
+        AND c.status = 'PUBLISHED'
+        AND c.deleted_at IS NULL
+    )
+    OR is_admin()
+  );
+
+CREATE POLICY "lesson_resources_admin_all"
+  ON lesson_resources FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- INVITES — admin reads all; user reads only their own.
+-- The onboarding flow runs through Prisma (RLS bypassed), so the
+-- "user reads own" branch is defense-in-depth for any future
+-- client-side claim path. Inserts and updates only via admin /
+-- service role — no member should ever write invites.
+-- ============================================================
+DROP POLICY IF EXISTS "invites_select_own"   ON invites;
+DROP POLICY IF EXISTS "invites_admin_all"    ON invites;
+
+CREATE POLICY "invites_select_own"
+  ON invites FOR SELECT
+  USING (user_id = public.current_user_id());
+
+CREATE POLICY "invites_admin_all"
+  ON invites FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- LOGIN_EVENTS — user reads own; admin reads all. Inserts always
+-- via Prisma at sign-in time (service role / postgres) so no
+-- INSERT policy is needed for authenticated users.
+-- ============================================================
+DROP POLICY IF EXISTS "login_events_select_own"   ON login_events;
+DROP POLICY IF EXISTS "login_events_admin_all"    ON login_events;
+
+CREATE POLICY "login_events_select_own"
+  ON login_events FOR SELECT
+  USING (user_id = public.current_user_id());
+
+CREATE POLICY "login_events_admin_all"
+  ON login_events FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- APP_SETTINGS — admin-only. Holds Discord webhooks, signing
+-- secrets, and other platform config. Members never read or write.
+-- Default-deny: no permissive policy for non-admins.
+-- ============================================================
+DROP POLICY IF EXISTS "app_settings_admin_all" ON app_settings;
+
+CREATE POLICY "app_settings_admin_all"
+  ON app_settings FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- CATEGORIES — public read (low-sensitivity taxonomy); admin write.
+-- Members need this to render the category selector + filter
+-- catalogues. There is no per-user scope.
+-- ============================================================
+DROP POLICY IF EXISTS "categories_select_all" ON categories;
+DROP POLICY IF EXISTS "categories_admin_all"  ON categories;
+
+CREATE POLICY "categories_select_all"
+  ON categories FOR SELECT
+  USING (true);
+
+CREATE POLICY "categories_admin_all"
+  ON categories FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- COURSE_CATEGORIES — public read (visible to anyone who can
+-- already see the course); admin-only write.
+-- ============================================================
+DROP POLICY IF EXISTS "course_categories_select_all" ON course_categories;
+DROP POLICY IF EXISTS "course_categories_admin_all"  ON course_categories;
+
+CREATE POLICY "course_categories_select_all"
+  ON course_categories FOR SELECT
+  USING (true);
+
+CREATE POLICY "course_categories_admin_all"
+  ON course_categories FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
 -- VERIFICATION
 -- ============================================================
--- Confirm RLS is enabled on every table:
+-- Confirm RLS is enabled on every table (now 21):
 --   SELECT relname, relrowsecurity
 --   FROM pg_class
 --   WHERE relname IN (
 --     'users','courses','modules','chapters','lessons','quiz_questions',
 --     'quiz_attempts','enrollments','lesson_progress','notes',
---     'announcements','announcement_reads'
+--     'announcements','announcement_reads','announcement_comments',
+--     'announcement_reactions','announcement_audit_logs','lesson_resources',
+--     'invites','login_events','app_settings','categories','course_categories'
 --   );
 --
 -- List all policies:
