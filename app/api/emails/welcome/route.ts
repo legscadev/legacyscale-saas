@@ -1,13 +1,11 @@
 import { type NextRequest } from 'next/server'
 import { z } from 'zod'
 import {
-  forbiddenResponse,
   successResponse,
-  unauthorizedResponse,
   validateBody,
   withErrorHandling,
 } from '@/lib/api'
-import { getUser } from '@/lib/auth'
+import { requireAdminApi } from '@/lib/auth'
 import { sendWelcomeEmail } from '@/lib/resend'
 
 const sendWelcomeSchema = z.object({
@@ -19,9 +17,7 @@ const sendWelcomeSchema = z.object({
 // Auto-sending on signup is wired in `lib/auth/sync-user.ts`; this route
 // is for manual re-sends from the admin UI later.
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const user = await getUser()
-  if (!user) return unauthorizedResponse()
-  if (user.role !== 'ADMIN') return forbiddenResponse()
+  await requireAdminApi()
 
   const validation = await validateBody(request, sendWelcomeSchema)
   if (validation.error) return validation.error
