@@ -75,3 +75,8 @@ ehthumbs.db
 # Playwright MCP test output
 .playwright-mcp/
 .test-video.mp4
+
+# Playwright auth state — local sessions, never commit
+.auth/
+test-results/
+playwright-report/
