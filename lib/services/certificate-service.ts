@@ -1,24 +1,25 @@
-// Course completion certificate.
+// Per-module completion certificates.
 //
-// Uses Kondense's design-team PDF template (public/cert-template.pdf)
-// as the visual base and stamps three pieces of dynamic content on
-// top of the empty layout regions:
+// Certificates are scoped to a Module (the top-level grouping above
+// chapters). When a member finishes the last lesson of the last
+// chapter of a module — and the course has certificateEnabled — a
+// row is written to certificate_issuances. That row is the source
+// of truth; the PDF itself is rendered lazily on first download and
+// cached in the `course-certificates` Storage bucket under
+// `<issuance-id>.pdf`.
 //
-//   1. RECIPIENT NAME — between "HAS BEEN AWARDED TO" and
-//      "for successfully completing".
-//   2. COURSE TITLE — between "for successfully completing" and
-//      the "next module of the program" line.
-//   3. CERT ID — small, bottom-left corner, for support lookups.
+// Three external entry points:
+//   1. issueModuleCertificateIfEligible — called from the lesson
+//      progress hook after every "mark complete". Idempotent via
+//      the (user_id, module_id) unique constraint.
+//   2. listUserCertificates — powers /certificates. Also runs a
+//      cheap backfill so modules completed before this feature
+//      shipped still get a certificate the moment a member visits.
+//   3. getCertificateDownload — signs a short-lived URL for an
+//      issuance, generating + uploading the PDF on first call.
 //
-// First-request flow:
-//   1. Authz: enrollment belongs to user, has completedAt, and
-//      course.certificateEnabled is true.
-//   2. Render the stamped PDF (template + overlay).
-//   3. Cache at course-certificates/<enrollmentId>.pdf.
-//   4. Return a short-lived signed download URL.
-//
-// Subsequent requests skip render and just re-sign the cached PDF.
-// Cert ID = enrollment UUID (already unique, no counter needed).
+// The PDF stamps the module title only — the course is shown for
+// context inside /certificates but doesn't ride on the artifact.
 
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -41,14 +42,14 @@ const TEMPLATE_PATH = path.join(
 
 // Calibrated to the template's existing layout. Y is in PDF points
 // from the bottom of the page (A4 landscape ≈ 842 × 595).
-// Visual reference inside the template:
 //   ~y=380  "HAS BEEN AWARDED TO"
 //   ~y=295  "for successfully completing"
 //   ~y=218  "and has fulfilled all requirements necessary"
-// Name sits in the gap above 295; course title in the gap below it.
+// Name sits in the gap above 295; course/module title in the gap
+// below it, centred between the two labels.
 const NAME_CENTER_Y = 338
 const NAME_FONT_SIZE = 36
-const COURSE_CENTER_Y = 257
+const COURSE_CENTER_Y = 252
 const COURSE_FONT_SIZE = 22
 const COURSE_MAX_WIDTH = 600
 const COURSE_MAX_LINES = 2
@@ -56,88 +57,245 @@ const CERT_ID_X = 36
 const CERT_ID_Y = 18
 const CERT_ID_FONT_SIZE = 8
 
-// Color tokens. Template background is dark with red accents.
-// Recipient name + course title use Kondense red to echo the
+// Recipient name + module title use Kondense red to echo the
 // template's brand accent. Cert ID stays muted white so it doesn't
 // fight with the design.
-const KONDENSE_RED = rgb(0.819, 0.102, 0.102) // #d11a1a
+const KONDENSE_RED = rgb(0.819, 0.102, 0.102)
 const MUTED_WHITE = rgb(0.78, 0.78, 0.82)
 
-interface CertificateContext {
-  enrollmentId: string
+// Random base32 — Crockford alphabet, no I/L/O/U so support reads
+// over the phone don't get mistakes. 8 chars gives ~10^12 space,
+// which combined with the unique constraint + retry is plenty.
+const SHORT_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+const SHORT_CODE_LENGTH = 8
+const SHORT_CODE_MAX_ATTEMPTS = 5
+
+interface RenderContext {
   memberName: string
-  courseTitle: string
-  completedAt: Date
+  moduleTitle: string
+  shortCode: string
 }
 
-export interface CertificateResult {
+export interface CertificateListItem {
+  id: string
+  shortCode: string
+  courseTitle: string
+  moduleTitle: string
+  issuedAt: Date
+}
+
+export interface CertificateDownloadResult {
   ok: true
   url: string
   filename: string
 }
 
-export interface CertificateError {
+export interface CertificateDownloadError {
   ok: false
   error: string
 }
 
+// ============================================================
+// PUBLIC API
+// ============================================================
+
 /**
- * Look up an enrollment + its course, gate on completion + cert
- * enabled, then return a signed download URL for the cert. Generates
- * the PDF on the first request and caches it in storage.
+ * Called from the lesson-progress hook after every successful
+ * "mark complete". Checks whether the lesson's module is now fully
+ * complete AND the course allows certificates, and writes an issuance
+ * row if so. The (user, module) unique constraint makes duplicate
+ * calls a no-op, so the hook can fire on every completion without
+ * extra coordination.
  */
-export async function generateOrFetchCertificate(
+export async function issueModuleCertificateIfEligible(
   userId: string,
-  enrollmentId: string,
-): Promise<CertificateResult | CertificateError> {
-  const enrollment = await prisma.enrollment.findFirst({
-    where: { id: enrollmentId, userId },
+  lessonId: string,
+): Promise<{ issued: boolean; issuanceId?: string }> {
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, deletedAt: null },
     select: {
-      id: true,
-      completedAt: true,
-      course: {
+      chapter: {
         select: {
-          id: true,
-          title: true,
-          certificateEnabled: true,
+          moduleId: true,
+          course: { select: { id: true, certificateEnabled: true } },
         },
-      },
-      user: {
-        select: { name: true, email: true },
       },
     },
   })
-  if (!enrollment) {
-    return { ok: false, error: 'Enrollment not found' }
+
+  const moduleId = lesson?.chapter.moduleId
+  const course = lesson?.chapter.course
+  if (!moduleId || !course || !course.certificateEnabled) {
+    return { issued: false }
   }
-  if (!enrollment.completedAt) {
-    return { ok: false, error: 'Course not yet completed' }
-  }
-  if (!enrollment.course.certificateEnabled) {
-    return {
-      ok: false,
-      error: 'Certificates are not enabled for this course',
-    }
-  }
+
+  const eligible = await isModuleFullyComplete(userId, moduleId)
+  if (!eligible) return { issued: false }
+
+  return ensureIssuance(userId, moduleId, course.id)
+}
+
+/**
+ * Powers /certificates. Runs a cheap backfill sweep so members who
+ * completed modules before this feature shipped (or before
+ * certificateEnabled was flipped on) still see a certificate the
+ * moment they open the tab.
+ */
+export async function listUserCertificates(
+  userId: string,
+): Promise<CertificateListItem[]> {
+  await backfillEligibleIssuances(userId)
+
+  const rows = await prisma.certificateIssuance.findMany({
+    where: { userId },
+    orderBy: { issuedAt: 'desc' },
+    select: {
+      id: true,
+      shortCode: true,
+      issuedAt: true,
+      module: { select: { title: true } },
+      course: { select: { title: true } },
+    },
+  })
+
+  return rows.map((r) => ({
+    id: r.id,
+    shortCode: r.shortCode,
+    courseTitle: r.course.title,
+    moduleTitle: r.module.title,
+    issuedAt: r.issuedAt,
+  }))
+}
+
+/**
+ * Authz + signed-URL minting for one certificate. Generates and
+ * uploads the PDF the first time it's requested.
+ */
+export async function getCertificateDownload(
+  userId: string,
+  issuanceId: string,
+): Promise<CertificateDownloadResult | CertificateDownloadError> {
+  const issuance = await prisma.certificateIssuance.findFirst({
+    where: { id: issuanceId, userId },
+    select: {
+      id: true,
+      shortCode: true,
+      user: { select: { name: true, email: true } },
+      module: { select: { title: true } },
+      course: { select: { title: true } },
+    },
+  })
+  if (!issuance) return { ok: false, error: 'Certificate not found' }
 
   const memberName =
-    enrollment.user.name?.trim() ||
-    enrollment.user.email.split('@')[0] ||
+    issuance.user.name?.trim() ||
+    issuance.user.email.split('@')[0] ||
     'Member'
 
-  return ensureAndSignCertificate({
-    enrollmentId: enrollment.id,
+  return ensureAndSignPdf({
+    issuanceId: issuance.id,
     memberName,
-    courseTitle: enrollment.course.title,
-    completedAt: enrollment.completedAt,
+    moduleTitle: issuance.module.title,
+    shortCode: issuance.shortCode,
   })
 }
 
-async function ensureAndSignCertificate(
-  ctx: CertificateContext,
-): Promise<CertificateResult | CertificateError> {
+// ============================================================
+// INTERNALS
+// ============================================================
+
+async function isModuleFullyComplete(
+  userId: string,
+  moduleId: string,
+): Promise<boolean> {
+  const [total, done] = await Promise.all([
+    prisma.lesson.count({
+      where: { chapter: { moduleId }, deletedAt: null },
+    }),
+    prisma.lessonProgress.count({
+      where: {
+        userId,
+        completed: true,
+        lesson: { chapter: { moduleId }, deletedAt: null },
+      },
+    }),
+  ])
+  return total > 0 && done >= total
+}
+
+async function ensureIssuance(
+  userId: string,
+  moduleId: string,
+  courseId: string,
+): Promise<{ issued: boolean; issuanceId: string }> {
+  // Fast path: someone already has the row.
+  const existing = await prisma.certificateIssuance.findUnique({
+    where: { userId_moduleId: { userId, moduleId } },
+    select: { id: true },
+  })
+  if (existing) return { issued: false, issuanceId: existing.id }
+
+  // Retry on the rare short-code collision; (user_id, module_id)
+  // unique handles the racing-completion case.
+  for (let attempt = 0; attempt < SHORT_CODE_MAX_ATTEMPTS; attempt++) {
+    try {
+      const created = await prisma.certificateIssuance.create({
+        data: {
+          userId,
+          moduleId,
+          courseId,
+          shortCode: generateShortCode(),
+        },
+        select: { id: true },
+      })
+      return { issued: true, issuanceId: created.id }
+    } catch (err) {
+      if (isUniqueViolation(err, 'short_code')) continue
+      if (isUniqueViolation(err, 'user_id') || isRacedIssuance(err)) {
+        const row = await prisma.certificateIssuance.findUnique({
+          where: { userId_moduleId: { userId, moduleId } },
+          select: { id: true },
+        })
+        if (row) return { issued: false, issuanceId: row.id }
+      }
+      throw err
+    }
+  }
+  throw new Error('Could not allocate certificate short code')
+}
+
+/**
+ * One-shot sweep: for every module the member has fully completed in
+ * a certificateEnabled course, ensure an issuance exists. Cheap
+ * because we only fan out across modules tied to the member's
+ * enrollments.
+ */
+async function backfillEligibleIssuances(userId: string): Promise<void> {
+  const enrollments = await prisma.enrollment.findMany({
+    where: { userId, course: { certificateEnabled: true, deletedAt: null } },
+    select: {
+      courseId: true,
+      course: {
+        select: {
+          modules: { select: { id: true } },
+        },
+      },
+    },
+  })
+
+  for (const e of enrollments) {
+    for (const m of e.course.modules) {
+      if (!(await isModuleFullyComplete(userId, m.id))) continue
+      await ensureIssuance(userId, m.id, e.courseId)
+    }
+  }
+}
+
+async function ensureAndSignPdf(
+  ctx: RenderContext & { issuanceId: string },
+): Promise<CertificateDownloadResult | CertificateDownloadError> {
   const supabase = createAdminClient()
-  const certPath = `${ctx.enrollmentId}.pdf`
+  const certPath = `${ctx.issuanceId}.pdf`
 
   const { data: existing } = await supabase.storage
     .from(CERTIFICATE_BUCKET)
@@ -158,29 +316,24 @@ async function ensureAndSignCertificate(
     }
   }
 
+  const filename = certificateFilename(ctx.moduleTitle)
   const { data: signed, error: signErr } = await supabase.storage
     .from(CERTIFICATE_BUCKET)
-    .createSignedUrl(certPath, SIGNED_URL_TTL_SEC, {
-      download: certificateFilename(ctx),
-    })
+    .createSignedUrl(certPath, SIGNED_URL_TTL_SEC, { download: filename })
   if (signErr || !signed) {
     console.error('Certificate signed URL failed:', signErr)
     return { ok: false, error: 'Could not generate download link' }
   }
 
-  return {
-    ok: true,
-    url: signed.signedUrl,
-    filename: certificateFilename(ctx),
-  }
+  return { ok: true, url: signed.signedUrl, filename }
 }
 
 async function renderCertificatePdf(
-  ctx: CertificateContext,
+  ctx: RenderContext,
 ): Promise<Uint8Array> {
   const templateBytes = await readFile(TEMPLATE_PATH)
   const pdf = await PDFDocument.load(templateBytes)
-  pdf.setTitle(`${ctx.courseTitle} — Certificate`)
+  pdf.setTitle(`${ctx.moduleTitle} — Certificate`)
   pdf.setAuthor('Kondense')
   pdf.setCreator('Kondense')
 
@@ -190,8 +343,6 @@ async function renderCertificatePdf(
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold)
   const helv = await pdf.embedFont(StandardFonts.Helvetica)
 
-  // 1. Recipient name — large, centered, between "HAS BEEN AWARDED TO"
-  //    and "for successfully completing".
   drawCentredText(page, ctx.memberName, {
     cx: pageWidth / 2,
     y: NAME_CENTER_Y,
@@ -200,8 +351,7 @@ async function renderCertificatePdf(
     color: KONDENSE_RED,
   })
 
-  // 2. Course title — medium, centered, wraps to 2 lines if long.
-  const titleLines = wrapText(ctx.courseTitle, {
+  const titleLines = wrapText(ctx.moduleTitle, {
     font: helvBold,
     size: COURSE_FONT_SIZE,
     maxWidth: COURSE_MAX_WIDTH,
@@ -220,12 +370,7 @@ async function renderCertificatePdf(
     })
   })
 
-  // 3. Cert ID — small, bottom-left corner. Last 8 chars of the
-  //    enrollment UUID is plenty for a support lookup; full ID
-  //    stays unique by virtue of how we cache the file.
-  const shortId =
-    ctx.enrollmentId.split('-').pop()?.slice(-8) ?? ctx.enrollmentId
-  page.drawText(`CERT # ${shortId.toUpperCase()}`, {
+  page.drawText(`CERT # ${ctx.shortCode}`, {
     x: CERT_ID_X,
     y: CERT_ID_Y,
     size: CERT_ID_FONT_SIZE,
@@ -234,6 +379,38 @@ async function renderCertificatePdf(
   })
 
   return pdf.save()
+}
+
+function certificateFilename(title: string): string {
+  const safe = title.replace(/[^a-zA-Z0-9 -]+/g, '').trim() || 'Certificate'
+  return `${safe} — Certificate.pdf`
+}
+
+function generateShortCode(): string {
+  let out = ''
+  for (let i = 0; i < SHORT_CODE_LENGTH; i++) {
+    out += SHORT_CODE_ALPHABET[
+      Math.floor(Math.random() * SHORT_CODE_ALPHABET.length)
+    ]
+  }
+  return out
+}
+
+function isUniqueViolation(err: unknown, fieldHint: string): boolean {
+  if (!err || typeof err !== 'object') return false
+  const code = (err as { code?: string }).code
+  const meta = (err as { meta?: { target?: string | string[] } }).meta
+  if (code !== 'P2002') return false
+  const target = Array.isArray(meta?.target) ? meta!.target.join(',') : meta?.target
+  return target?.includes(fieldHint) ?? false
+}
+
+function isRacedIssuance(err: unknown): boolean {
+  return (
+    !!err &&
+    typeof err === 'object' &&
+    (err as { code?: string }).code === 'P2002'
+  )
 }
 
 interface CentredTextOptions {
@@ -300,10 +477,4 @@ function wrapText(text: string, opts: WrapOptions): string[] {
     return truncated
   }
   return lines
-}
-
-function certificateFilename(ctx: CertificateContext): string {
-  const safeTitle =
-    ctx.courseTitle.replace(/[^a-zA-Z0-9 ]+/g, '').trim() || 'Course'
-  return `${safeTitle} — Certificate.pdf`
 }
