@@ -56,10 +56,11 @@ const CERT_ID_X = 36
 const CERT_ID_Y = 18
 const CERT_ID_FONT_SIZE = 8
 
-// Color tokens. Template background is dark with red accents, so
-// overlays use white for the main fields and a muted gray for the
-// quiet cert ID footer.
-const WHITE = rgb(1, 1, 1)
+// Color tokens. Template background is dark with red accents.
+// Recipient name + course title use Kondense red to echo the
+// template's brand accent. Cert ID stays muted white so it doesn't
+// fight with the design.
+const KONDENSE_RED = rgb(0.819, 0.102, 0.102) // #d11a1a
 const MUTED_WHITE = rgb(0.78, 0.78, 0.82)
 
 interface CertificateContext {
@@ -196,7 +197,7 @@ async function renderCertificatePdf(
     y: NAME_CENTER_Y,
     font: helvBold,
     size: NAME_FONT_SIZE,
-    color: WHITE,
+    color: KONDENSE_RED,
   })
 
   // 2. Course title — medium, centered, wraps to 2 lines if long.
@@ -215,7 +216,7 @@ async function renderCertificatePdf(
       y: titleTopY - i * lineGap,
       font: helvBold,
       size: COURSE_FONT_SIZE,
-      color: WHITE,
+      color: KONDENSE_RED,
     })
   })
 
