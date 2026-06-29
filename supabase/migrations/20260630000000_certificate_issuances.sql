@@ -11,12 +11,17 @@
 -- Idempotency: (user_id, module_id) is unique, so the lesson-progress
 -- hook can fire issueIfEligible on every "mark complete" without
 -- worrying about duplicates.
+--
+-- Types: all id columns are `text` to match the rest of the schema.
+-- Prisma's `String @id @default(uuid())` maps to `text`, not `uuid`,
+-- so FKs to users/modules/courses must also be text or the FK
+-- constraint fails with "incompatible types: uuid and text".
 
 create table if not exists public.certificate_issuances (
-  id          uuid primary key default gen_random_uuid(),
-  user_id     uuid not null references public.users(id)    on delete cascade,
-  module_id   uuid not null references public.modules(id)  on delete cascade,
-  course_id   uuid not null references public.courses(id)  on delete cascade,
+  id          text primary key default (gen_random_uuid())::text,
+  user_id     text not null references public.users(id)    on delete cascade,
+  module_id   text not null references public.modules(id)  on delete cascade,
+  course_id   text not null references public.courses(id)  on delete cascade,
   short_code  text not null,
   issued_at   timestamptz not null default now(),
   created_at  timestamptz not null default now(),
