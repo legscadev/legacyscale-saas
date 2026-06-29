@@ -45,6 +45,7 @@ ALTER TABLE quiz_attempts      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE enrollments        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lesson_progress    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notes              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE certificate_issuances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE announcements      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE announcement_reads ENABLE ROW LEVEL SECURITY;
 
@@ -310,6 +311,26 @@ CREATE POLICY "lesson_progress_update_own"
 
 CREATE POLICY "lesson_progress_admin_all"
   ON lesson_progress FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- CERTIFICATE ISSUANCES  (members: read-only own; service-role writes)
+-- ============================================================
+-- Writes always come from the server (auto-issue hook after lesson
+-- completion uses the service-role admin client), so we don't grant
+-- INSERT/UPDATE to members. SELECT is scoped to the row's user_id
+-- so the Certificates tab can list them under anon/authenticated.
+DROP POLICY IF EXISTS "certificate_issuances_select_own" ON certificate_issuances;
+DROP POLICY IF EXISTS "certificate_issuances_admin_all"  ON certificate_issuances;
+
+CREATE POLICY "certificate_issuances_select_own"
+  ON certificate_issuances FOR SELECT
+  USING (user_id = public.current_user_id());
+
+CREATE POLICY "certificate_issuances_admin_all"
+  ON certificate_issuances FOR ALL
   USING (is_admin())
   WITH CHECK (is_admin());
 

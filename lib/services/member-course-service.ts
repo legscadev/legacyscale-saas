@@ -5,6 +5,7 @@ import type { CourseAudience, Prisma, Role } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { postCompletionToDiscord } from '@/lib/discord'
 import { sendCourseCompleteEmail } from '@/lib/resend'
+import { issueModuleCertificateIfEligible } from '@/lib/services/certificate-service'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { visibleAudiencesFor } from '@/lib/auth/permissions'
 import {
@@ -612,6 +613,19 @@ export async function markLessonProgress(
       completedAt: completed ? new Date() : null,
     },
   })
+
+  // Per-module certificate. Issued the moment a member finishes the
+  // last lesson of the module's last chapter (and the course has
+  // certificateEnabled). Idempotent via a (user, module) unique
+  // constraint — safe to call on every mark-complete.
+  if (completed) {
+    try {
+      await issueModuleCertificateIfEligible(userId, lessonId)
+    } catch (err) {
+      // A cert failure must never block the progress write.
+      console.error('Certificate issuance failed:', err)
+    }
+  }
 
   // Recompute overall % for this course.
   const [lessonsTotal, completedCount] = await Promise.all([

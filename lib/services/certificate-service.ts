@@ -1,22 +1,28 @@
-// Course completion certificate (Ticket 6.2).
+// Per-module completion certificates.
 //
-// Generates a Kondense-branded PDF from scratch when a completed
-// member clicks Download. No template upload — we own the design here
-// so it stays consistent across courses and we don't have to tune
-// stamp coordinates. Layout is inspired by DataCamp's Statement of
-// Accomplishment (two-column, dark brand panel on the left, content
-// on the right).
+// Certificates are scoped to a Module (the top-level grouping above
+// chapters). When a member finishes the last lesson of the last
+// chapter of a module — and the course has certificateEnabled — a
+// row is written to certificate_issuances. That row is the source
+// of truth; the PDF itself is rendered lazily on first download and
+// cached in the `course-certificates` Storage bucket under
+// `<issuance-id>.pdf`.
 //
-// First-request flow:
-//   1. Authz: enrollment must belong to user, have completedAt, and
-//      course.certificateEnabled must be true.
-//   2. Pull course duration (sum of lesson durationSeconds).
-//   3. Generate the PDF with pdf-lib using standard fonts.
-//   4. Cache at course-certificates/<enrollmentId>.pdf.
-//   5. Return a short-lived signed download URL.
+// Three external entry points:
+//   1. issueModuleCertificateIfEligible — called from the lesson
+//      progress hook after every "mark complete". Idempotent via
+//      the (user_id, module_id) unique constraint.
+//   2. listUserCertificates — powers /certificates. Also runs a
+//      cheap backfill so modules completed before this feature
+//      shipped still get a certificate the moment a member visits.
+//   3. getCertificateDownload — signs a short-lived URL for an
+//      issuance, generating + uploading the PDF on first call.
 //
-// Subsequent requests skip step 3 and just re-sign the cached PDF.
-// Cert ID is the enrollment UUID — already unique, no counter needed.
+// The PDF stamps the module title only — the course is shown for
+// context inside /certificates but doesn't ride on the artifact.
+
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
@@ -26,119 +32,270 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const CERTIFICATE_BUCKET = 'course-certificates'
 const SIGNED_URL_TTL_SEC = 60 * 10 // 10 min — plenty for click-to-download
 
-// Hardcoded signer; ticketed in 6.2 as a v1 simplification.
-const SIGNER_NAME = 'Keanu Vasquez'
-const SIGNER_TITLE = 'Founder'
+// Template path. Bundled via public/ so process.cwd() resolves it
+// at runtime on both local dev and Vercel.
+const TEMPLATE_PATH = path.join(
+  process.cwd(),
+  'public',
+  'cert-template.pdf',
+)
 
-// Brand palette. Kondense red on the left panel, cream content area,
-// near-black for body, muted slate for eyebrow labels.
-const KONDENSE_RED = rgb(0.819, 0.102, 0.102) // #d11a1a
-const CREAM = rgb(0.984, 0.976, 0.961)
-const NEAR_BLACK = rgb(0.039, 0.039, 0.043)
-const MUTED = rgb(0.42, 0.42, 0.45)
-const RULE_GREY = rgb(0.78, 0.78, 0.8)
+// Calibrated to the template's existing layout. Y is in PDF points
+// from the bottom of the page (A4 landscape ≈ 842 × 595).
+//   ~y=380  "HAS BEEN AWARDED TO"
+//   ~y=295  "for successfully completing"
+//   ~y=218  "and has fulfilled all requirements necessary"
+// Name sits in the gap above 295; course/module title in the gap
+// below it, centred between the two labels.
+const NAME_CENTER_Y = 338
+const NAME_FONT_SIZE = 36
+const COURSE_CENTER_Y = 252
+const COURSE_FONT_SIZE = 22
+const COURSE_MAX_WIDTH = 600
+const COURSE_MAX_LINES = 2
+const CERT_ID_X = 36
+const CERT_ID_Y = 18
+const CERT_ID_FONT_SIZE = 8
 
-// A4 landscape in PDF points (72pt = 1in). Used as a fixed canvas
-// so layout positions stay deterministic across courses.
-const PAGE_WIDTH = 842
-const PAGE_HEIGHT = 595
-const LEFT_PANEL_WIDTH = 200
-const CONTENT_LEFT = LEFT_PANEL_WIDTH + 56
-const CONTENT_RIGHT = PAGE_WIDTH - 56
+// Recipient name + module title use Kondense red to echo the
+// template's brand accent. Cert ID stays muted white so it doesn't
+// fight with the design.
+const KONDENSE_RED = rgb(0.819, 0.102, 0.102)
+const MUTED_WHITE = rgb(0.78, 0.78, 0.82)
 
-const DATE_FMT = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: '2-digit',
-  year: 'numeric',
-})
+// Random base32 — Crockford alphabet, no I/L/O/U so support reads
+// over the phone don't get mistakes. 8 chars gives ~10^12 space,
+// which combined with the unique constraint + retry is plenty.
+const SHORT_CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+const SHORT_CODE_LENGTH = 8
+const SHORT_CODE_MAX_ATTEMPTS = 5
 
-interface CertificateContext {
-  enrollmentId: string
+interface RenderContext {
   memberName: string
-  courseTitle: string
-  completedAt: Date
-  /** Total content duration across READY lessons, in seconds. */
-  totalSeconds: number
+  moduleTitle: string
+  shortCode: string
 }
 
-export interface CertificateResult {
+export interface CertificateListItem {
+  id: string
+  shortCode: string
+  courseTitle: string
+  moduleTitle: string
+  issuedAt: Date
+}
+
+export interface CertificateDownloadResult {
   ok: true
   url: string
   filename: string
 }
 
-export interface CertificateError {
+export interface CertificateDownloadError {
   ok: false
   error: string
 }
 
+// ============================================================
+// PUBLIC API
+// ============================================================
+
 /**
- * Look up an enrollment + its course, gate on completion + cert
- * enabled, then return a signed download URL for the cert. Generates
- * the PDF on the first request and caches it in storage.
+ * Called from the lesson-progress hook after every successful
+ * "mark complete". Checks whether the lesson's module is now fully
+ * complete AND the course allows certificates, and writes an issuance
+ * row if so. The (user, module) unique constraint makes duplicate
+ * calls a no-op, so the hook can fire on every completion without
+ * extra coordination.
  */
-export async function generateOrFetchCertificate(
+export async function issueModuleCertificateIfEligible(
   userId: string,
-  enrollmentId: string,
-): Promise<CertificateResult | CertificateError> {
-  const enrollment = await prisma.enrollment.findFirst({
-    where: { id: enrollmentId, userId },
+  lessonId: string,
+): Promise<{ issued: boolean; issuanceId?: string }> {
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, deletedAt: null },
     select: {
-      id: true,
-      completedAt: true,
-      course: {
+      chapter: {
         select: {
-          id: true,
-          title: true,
-          certificateEnabled: true,
-          chapters: {
-            where: { deletedAt: null },
-            select: {
-              lessons: {
-                where: { deletedAt: null, status: 'READY' },
-                select: { durationSeconds: true },
-              },
-            },
-          },
+          moduleId: true,
+          course: { select: { id: true, certificateEnabled: true } },
         },
-      },
-      user: {
-        select: { name: true, email: true },
       },
     },
   })
-  if (!enrollment) {
-    return { ok: false, error: 'Enrollment not found' }
+
+  const moduleId = lesson?.chapter.moduleId
+  const course = lesson?.chapter.course
+  if (!moduleId || !course || !course.certificateEnabled) {
+    return { issued: false }
   }
-  if (!enrollment.completedAt) {
-    return { ok: false, error: 'Course not yet completed' }
-  }
-  if (!enrollment.course.certificateEnabled) {
-    return { ok: false, error: 'Certificates are not enabled for this course' }
-  }
+
+  const eligible = await isModuleFullyComplete(userId, moduleId)
+  if (!eligible) return { issued: false }
+
+  return ensureIssuance(userId, moduleId, course.id)
+}
+
+/**
+ * Powers /certificates. Runs a cheap backfill sweep so members who
+ * completed modules before this feature shipped (or before
+ * certificateEnabled was flipped on) still see a certificate the
+ * moment they open the tab.
+ */
+export async function listUserCertificates(
+  userId: string,
+): Promise<CertificateListItem[]> {
+  await backfillEligibleIssuances(userId)
+
+  const rows = await prisma.certificateIssuance.findMany({
+    where: { userId },
+    orderBy: { issuedAt: 'desc' },
+    select: {
+      id: true,
+      shortCode: true,
+      issuedAt: true,
+      module: { select: { title: true } },
+      course: { select: { title: true } },
+    },
+  })
+
+  return rows.map((r) => ({
+    id: r.id,
+    shortCode: r.shortCode,
+    courseTitle: r.course.title,
+    moduleTitle: r.module.title,
+    issuedAt: r.issuedAt,
+  }))
+}
+
+/**
+ * Authz + signed-URL minting for one certificate. Generates and
+ * uploads the PDF the first time it's requested.
+ */
+export async function getCertificateDownload(
+  userId: string,
+  issuanceId: string,
+): Promise<CertificateDownloadResult | CertificateDownloadError> {
+  const issuance = await prisma.certificateIssuance.findFirst({
+    where: { id: issuanceId, userId },
+    select: {
+      id: true,
+      shortCode: true,
+      user: { select: { name: true, email: true } },
+      module: { select: { title: true } },
+      course: { select: { title: true } },
+    },
+  })
+  if (!issuance) return { ok: false, error: 'Certificate not found' }
 
   const memberName =
-    enrollment.user.name?.trim() || enrollment.user.email.split('@')[0] || 'Member'
-  const totalSeconds = enrollment.course.chapters.reduce(
-    (sum, ch) =>
-      sum + ch.lessons.reduce((s, l) => s + (l.durationSeconds ?? 0), 0),
-    0,
-  )
+    issuance.user.name?.trim() ||
+    issuance.user.email.split('@')[0] ||
+    'Member'
 
-  return ensureAndSignCertificate({
-    enrollmentId: enrollment.id,
+  return ensureAndSignPdf({
+    issuanceId: issuance.id,
     memberName,
-    courseTitle: enrollment.course.title,
-    completedAt: enrollment.completedAt,
-    totalSeconds,
+    moduleTitle: issuance.module.title,
+    shortCode: issuance.shortCode,
   })
 }
 
-async function ensureAndSignCertificate(
-  ctx: CertificateContext,
-): Promise<CertificateResult | CertificateError> {
+// ============================================================
+// INTERNALS
+// ============================================================
+
+async function isModuleFullyComplete(
+  userId: string,
+  moduleId: string,
+): Promise<boolean> {
+  const [total, done] = await Promise.all([
+    prisma.lesson.count({
+      where: { chapter: { moduleId }, deletedAt: null },
+    }),
+    prisma.lessonProgress.count({
+      where: {
+        userId,
+        completed: true,
+        lesson: { chapter: { moduleId }, deletedAt: null },
+      },
+    }),
+  ])
+  return total > 0 && done >= total
+}
+
+async function ensureIssuance(
+  userId: string,
+  moduleId: string,
+  courseId: string,
+): Promise<{ issued: boolean; issuanceId: string }> {
+  // Fast path: someone already has the row.
+  const existing = await prisma.certificateIssuance.findUnique({
+    where: { userId_moduleId: { userId, moduleId } },
+    select: { id: true },
+  })
+  if (existing) return { issued: false, issuanceId: existing.id }
+
+  // Retry on the rare short-code collision; (user_id, module_id)
+  // unique handles the racing-completion case.
+  for (let attempt = 0; attempt < SHORT_CODE_MAX_ATTEMPTS; attempt++) {
+    try {
+      const created = await prisma.certificateIssuance.create({
+        data: {
+          userId,
+          moduleId,
+          courseId,
+          shortCode: generateShortCode(),
+        },
+        select: { id: true },
+      })
+      return { issued: true, issuanceId: created.id }
+    } catch (err) {
+      if (isUniqueViolation(err, 'short_code')) continue
+      if (isUniqueViolation(err, 'user_id') || isRacedIssuance(err)) {
+        const row = await prisma.certificateIssuance.findUnique({
+          where: { userId_moduleId: { userId, moduleId } },
+          select: { id: true },
+        })
+        if (row) return { issued: false, issuanceId: row.id }
+      }
+      throw err
+    }
+  }
+  throw new Error('Could not allocate certificate short code')
+}
+
+/**
+ * One-shot sweep: for every module the member has fully completed in
+ * a certificateEnabled course, ensure an issuance exists. Cheap
+ * because we only fan out across modules tied to the member's
+ * enrollments.
+ */
+async function backfillEligibleIssuances(userId: string): Promise<void> {
+  const enrollments = await prisma.enrollment.findMany({
+    where: { userId, course: { certificateEnabled: true, deletedAt: null } },
+    select: {
+      courseId: true,
+      course: {
+        select: {
+          modules: { select: { id: true } },
+        },
+      },
+    },
+  })
+
+  for (const e of enrollments) {
+    for (const m of e.course.modules) {
+      if (!(await isModuleFullyComplete(userId, m.id))) continue
+      await ensureIssuance(userId, m.id, e.courseId)
+    }
+  }
+}
+
+async function ensureAndSignPdf(
+  ctx: RenderContext & { issuanceId: string },
+): Promise<CertificateDownloadResult | CertificateDownloadError> {
   const supabase = createAdminClient()
-  const certPath = `${ctx.enrollmentId}.pdf`
+  const certPath = `${ctx.issuanceId}.pdf`
 
   const { data: existing } = await supabase.storage
     .from(CERTIFICATE_BUCKET)
@@ -159,245 +316,104 @@ async function ensureAndSignCertificate(
     }
   }
 
+  const filename = certificateFilename(ctx.moduleTitle)
   const { data: signed, error: signErr } = await supabase.storage
     .from(CERTIFICATE_BUCKET)
-    .createSignedUrl(certPath, SIGNED_URL_TTL_SEC, {
-      download: certificateFilename(ctx),
-    })
+    .createSignedUrl(certPath, SIGNED_URL_TTL_SEC, { download: filename })
   if (signErr || !signed) {
     console.error('Certificate signed URL failed:', signErr)
     return { ok: false, error: 'Could not generate download link' }
   }
 
-  return {
-    ok: true,
-    url: signed.signedUrl,
-    filename: certificateFilename(ctx),
-  }
+  return { ok: true, url: signed.signedUrl, filename }
 }
 
-async function renderCertificatePdf(ctx: CertificateContext): Promise<Uint8Array> {
-  const pdf = await PDFDocument.create()
-  pdf.setTitle(`${ctx.courseTitle} — Certificate`)
+async function renderCertificatePdf(
+  ctx: RenderContext,
+): Promise<Uint8Array> {
+  const templateBytes = await readFile(TEMPLATE_PATH)
+  const pdf = await PDFDocument.load(templateBytes)
+  pdf.setTitle(`${ctx.moduleTitle} — Certificate`)
   pdf.setAuthor('Kondense')
   pdf.setCreator('Kondense')
 
-  const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+  const page = pdf.getPage(0)
+  const { width: pageWidth } = page.getSize()
+
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold)
   const helv = await pdf.embedFont(StandardFonts.Helvetica)
-  const mono = await pdf.embedFont(StandardFonts.Courier)
 
-  // ── Background ────────────────────────────────────────────────
-  // Cream content area (full page), then a Kondense-red panel on the
-  // left. Layering this way means any subtle accents (gold border,
-  // future watermark) can sit on top of the cream without leaking
-  // into the brand panel.
-  page.drawRectangle({
-    x: 0,
-    y: 0,
-    width: PAGE_WIDTH,
-    height: PAGE_HEIGHT,
-    color: CREAM,
-  })
-  page.drawRectangle({
-    x: 0,
-    y: 0,
-    width: LEFT_PANEL_WIDTH,
-    height: PAGE_HEIGHT,
+  drawCentredText(page, ctx.memberName, {
+    cx: pageWidth / 2,
+    y: NAME_CENTER_Y,
+    font: helvBold,
+    size: NAME_FONT_SIZE,
     color: KONDENSE_RED,
   })
 
-  // ── Left panel: Kondense wordmark ─────────────────────────────
-  // No image asset yet — render the wordmark as a centred big bold
-  // word. Easy to swap for an embedded logo later (embedPng / embedJpg).
-  drawCentredIn(
-    page,
-    'Kondense',
-    {
-      cx: LEFT_PANEL_WIDTH / 2,
-      y: PAGE_HEIGHT / 2,
+  const titleLines = wrapText(ctx.moduleTitle, {
+    font: helvBold,
+    size: COURSE_FONT_SIZE,
+    maxWidth: COURSE_MAX_WIDTH,
+    maxLines: COURSE_MAX_LINES,
+  })
+  const lineGap = COURSE_FONT_SIZE * 1.2
+  const titleTopY =
+    COURSE_CENTER_Y + ((titleLines.length - 1) * lineGap) / 2
+  titleLines.forEach((line, i) => {
+    drawCentredText(page, line, {
+      cx: pageWidth / 2,
+      y: titleTopY - i * lineGap,
       font: helvBold,
-      size: 32,
-      color: rgb(1, 1, 1),
-    },
-  )
-
-  // ── Right panel content ───────────────────────────────────────
-  // Walk top → bottom, tracking the running Y cursor so future
-  // adjustments only need to retune the deltas. Top Y is offset
-  // further down than 70pt so the content block sits closer to the
-  // vertical centre and the signer block doesn't float in white space.
-  let y = PAGE_HEIGHT - 130
-
-  // Heading
-  drawText(page, 'CERTIFICATE OF COMPLETION', {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 26,
-    color: NEAR_BLACK,
-  })
-  y -= 22
-
-  // Cert ID — last 8 chars of the enrollment UUID, prefixed with #.
-  // Keeps it verifiable (a support agent can look up by the suffix)
-  // without the visual clutter of a full UUID, and the small caps
-  // serif style sits more comfortably under the heading than Courier.
-  const shortId = ctx.enrollmentId.split('-').pop()?.slice(-8) ?? ctx.enrollmentId
-  drawText(page, `# ${shortId.toUpperCase()}`, {
-    x: CONTENT_LEFT,
-    y,
-    font: helv,
-    size: 10,
-    color: MUTED,
-    spacing: 1,
-  })
-  y -= 50
-
-  // Awarded-to eyebrow + name
-  drawText(page, 'HAS BEEN AWARDED TO', {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 9,
-    color: KONDENSE_RED,
-    spacing: 2,
-  })
-  y -= 28
-  drawText(page, ctx.memberName, {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 28,
-    color: NEAR_BLACK,
-  })
-  y -= 44
-
-  // Course-completion eyebrow + course title
-  drawText(page, 'FOR SUCCESSFULLY COMPLETING', {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 9,
-    color: KONDENSE_RED,
-    spacing: 2,
-  })
-  y -= 26
-  // Course title can wrap to a second line if it's long. Wrap at the
-  // content right edge; clamp to 2 lines so the rest of the layout
-  // doesn't shift.
-  const titleLines = wrapText(ctx.courseTitle, {
-    font: helvBold,
-    size: 22,
-    maxWidth: CONTENT_RIGHT - CONTENT_LEFT,
-    maxLines: 2,
-  })
-  for (const line of titleLines) {
-    drawText(page, line, {
-      x: CONTENT_LEFT,
-      y,
-      font: helvBold,
-      size: 22,
-      color: NEAR_BLACK,
+      size: COURSE_FONT_SIZE,
+      color: KONDENSE_RED,
     })
-    y -= 28
-  }
-  y -= 10
-
-  // Length + completion date sit side-by-side
-  const colTwoX = CONTENT_LEFT + 220
-
-  drawText(page, 'LENGTH', {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 9,
-    color: KONDENSE_RED,
-    spacing: 2,
-  })
-  drawText(page, 'COMPLETED ON', {
-    x: colTwoX,
-    y,
-    font: helvBold,
-    size: 9,
-    color: KONDENSE_RED,
-    spacing: 2,
-  })
-  y -= 20
-  drawText(page, formatDuration(ctx.totalSeconds), {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 16,
-    color: NEAR_BLACK,
-  })
-  drawText(page, DATE_FMT.format(ctx.completedAt).toUpperCase(), {
-    x: colTwoX,
-    y,
-    font: helvBold,
-    size: 16,
-    color: NEAR_BLACK,
   })
 
-  // ── Bottom-right signer block ────────────────────────────────
-  // Rule + signer name + title. Keeps the layout grounded without
-  // needing an actual signature image asset. Lifted from y=70 to
-  // y=110 so the block sits closer to the content above instead of
-  // hugging the bottom edge.
-  const signerRight = CONTENT_RIGHT
-  const signerLeft = signerRight - 180
-  const signerY = 110
-
-  page.drawLine({
-    start: { x: signerLeft, y: signerY + 22 },
-    end: { x: signerRight, y: signerY + 22 },
-    thickness: 0.5,
-    color: RULE_GREY,
-  })
-  drawText(page, SIGNER_NAME, {
-    x: signerLeft,
-    y: signerY + 8,
-    font: helvBold,
-    size: 11,
-    color: NEAR_BLACK,
-  })
-  drawText(page, SIGNER_TITLE.toUpperCase(), {
-    x: signerLeft,
-    y: signerY - 6,
+  page.drawText(`CERT # ${ctx.shortCode}`, {
+    x: CERT_ID_X,
+    y: CERT_ID_Y,
+    size: CERT_ID_FONT_SIZE,
     font: helv,
-    size: 8,
-    color: MUTED,
-    spacing: 1.5,
+    color: MUTED_WHITE,
   })
 
   return pdf.save()
 }
 
-interface DrawTextOptions {
-  x: number
-  y: number
-  font: Awaited<ReturnType<PDFDocument['embedFont']>>
-  size: number
-  color: ReturnType<typeof rgb>
-  spacing?: number // letter-spacing for eyebrow labels
+function certificateFilename(title: string): string {
+  const safe = title.replace(/[^a-zA-Z0-9 -]+/g, '').trim() || 'Certificate'
+  return `${safe} — Certificate.pdf`
 }
 
-function drawText(
-  page: ReturnType<PDFDocument['addPage']>,
-  text: string,
-  opts: DrawTextOptions,
-): void {
-  page.drawText(text, {
-    x: opts.x,
-    y: opts.y,
-    size: opts.size,
-    font: opts.font,
-    color: opts.color,
-    ...(opts.spacing != null ? { characterSpacing: opts.spacing } : {}),
-  })
+function generateShortCode(): string {
+  let out = ''
+  for (let i = 0; i < SHORT_CODE_LENGTH; i++) {
+    out += SHORT_CODE_ALPHABET[
+      Math.floor(Math.random() * SHORT_CODE_ALPHABET.length)
+    ]
+  }
+  return out
 }
 
-interface CentredOptions {
+function isUniqueViolation(err: unknown, fieldHint: string): boolean {
+  if (!err || typeof err !== 'object') return false
+  const code = (err as { code?: string }).code
+  const meta = (err as { meta?: { target?: string | string[] } }).meta
+  if (code !== 'P2002') return false
+  const target = Array.isArray(meta?.target) ? meta!.target.join(',') : meta?.target
+  return target?.includes(fieldHint) ?? false
+}
+
+function isRacedIssuance(err: unknown): boolean {
+  return (
+    !!err &&
+    typeof err === 'object' &&
+    (err as { code?: string }).code === 'P2002'
+  )
+}
+
+interface CentredTextOptions {
   cx: number
   y: number
   font: Awaited<ReturnType<PDFDocument['embedFont']>>
@@ -405,10 +421,10 @@ interface CentredOptions {
   color: ReturnType<typeof rgb>
 }
 
-function drawCentredIn(
-  page: ReturnType<PDFDocument['addPage']>,
+function drawCentredText(
+  page: ReturnType<PDFDocument['getPage']>,
   text: string,
-  opts: CentredOptions,
+  opts: CentredTextOptions,
 ): void {
   const w = opts.font.widthOfTextAtSize(text, opts.size)
   page.drawText(text, {
@@ -428,9 +444,9 @@ interface WrapOptions {
 }
 
 /**
- * Greedy word-wrap that respects the embedded font's metrics. Last
- * line is hard-truncated with an ellipsis if the text overflows
- * maxLines so the layout stays predictable.
+ * Greedy word-wrap using the embedded font's metrics. Last line is
+ * hard-truncated with an ellipsis if the text overflows maxLines so
+ * the stamp layout stays predictable.
  */
 function wrapText(text: string, opts: WrapOptions): string[] {
   const words = text.split(/\s+/).filter(Boolean)
@@ -449,7 +465,6 @@ function wrapText(text: string, opts: WrapOptions): string[] {
   if (current && lines.length < opts.maxLines) lines.push(current)
 
   if (lines.length > opts.maxLines) {
-    // Truncate + ellipsis on the last allowed line.
     const truncated = lines.slice(0, opts.maxLines)
     let last = truncated[opts.maxLines - 1]!
     while (
@@ -462,25 +477,4 @@ function wrapText(text: string, opts: WrapOptions): string[] {
     return truncated
   }
   return lines
-}
-
-/**
- * Human-readable course length. Mirrors the formatTotalDuration helper
- * on the completion page so the cert and on-screen recap agree.
- *   3600 → "1 HOUR", 7200 → "2 HOURS", 1800 → "30 MIN"
- */
-function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return '—'
-  const totalMin = Math.round(seconds / 60)
-  if (totalMin < 60) return `${totalMin} MIN`
-  const hr = Math.floor(totalMin / 60)
-  const min = totalMin % 60
-  if (min === 0) return `${hr} HOUR${hr === 1 ? '' : 'S'}`
-  return `${hr} HR ${min} MIN`
-}
-
-function certificateFilename(ctx: CertificateContext): string {
-  const safeTitle =
-    ctx.courseTitle.replace(/[^a-zA-Z0-9 ]+/g, '').trim() || 'Course'
-  return `${safeTitle} — Certificate.pdf`
 }

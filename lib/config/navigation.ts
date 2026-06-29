@@ -1,4 +1,5 @@
 import {
+  Award,
   Bell,
   BookOpen,
   GraduationCap,
@@ -68,6 +69,9 @@ export const memberNav: NavSection[] = [
   },
   {
     label: 'Account',
-    items: [{ label: 'Profile', href: '/profile', icon: User }],
+    items: [
+      { label: 'Certificates', href: '/certificates', icon: Award },
+      { label: 'Profile', href: '/profile', icon: User },
+    ],
   },
 ]

@@ -11,7 +11,6 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { CertificateDownloadButton } from '@/components/member/certificate-download-button'
 import { requireActiveUser } from '@/lib/auth'
 import { memberCourseService } from '@/lib/services/member-course-service'
 import { htmlToPlainText } from '@/lib/utils'
@@ -142,18 +141,21 @@ export default async function CourseCompletePage({
         </Card>
       ) : null}
 
-      {course.certificateEnabled && course.enrollment ? (
+      {course.certificateEnabled ? (
         <Card variant="raised" className="flex flex-col gap-3 border-success/30 bg-success/[0.04] p-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-0.5">
-            <p className="text-sm font-semibold">Your certificate is ready</p>
+            <p className="text-sm font-semibold">Your certificates are ready</p>
             <p className="text-xs text-muted-foreground">
-              Personalised PDF — name, completion date, and certificate ID stamped on your template.
+              One personalised PDF per module — download them from the Certificates tab.
             </p>
           </div>
-          <CertificateDownloadButton
-            enrollmentId={course.enrollment.id}
+          <Button
+            variant="outline"
             className="sm:shrink-0"
-          />
+            render={<Link href="/certificates" />}
+          >
+            View certificates
+          </Button>
         </Card>
       ) : null}
 

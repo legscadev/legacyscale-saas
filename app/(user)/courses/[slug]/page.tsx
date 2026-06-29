@@ -17,7 +17,6 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/shared'
-import { CertificateDownloadButton } from '@/components/member/certificate-download-button'
 import { CurriculumOutline } from '@/components/member/curriculum-outline'
 import { UpNextCard } from '@/components/member/up-next-card'
 import { requireActiveUser } from '@/lib/auth'
@@ -202,11 +201,10 @@ export default async function CourseDetailPage({
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:shrink-0 sm:flex-row">
-            {course.certificateEnabled && course.enrollment ? (
-              <CertificateDownloadButton
-                enrollmentId={course.enrollment.id}
-                variant="outline"
-              />
+            {course.certificateEnabled ? (
+              <Button variant="outline" render={<Link href="/certificates" />}>
+                View certificates
+              </Button>
             ) : null}
             <Button
               render={<Link href={`/courses/${course.slug}/complete`} />}

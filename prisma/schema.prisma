@@ -140,6 +140,7 @@ model User {
   invites           Invite[]
   loginEvents       LoginEvent[]
   appSettingsUpdated AppSetting[] @relation("AppSettingUpdater")
+  certificateIssuances CertificateIssuance[]
 
   @@index([role])
   @@index([isActive])
@@ -255,10 +256,11 @@ model Course {
   deletedAt    DateTime?    @map("deleted_at")
 
   // Relations
-  chapters    Chapter[]
-  modules     Module[]
-  enrollments Enrollment[]
-  categories  CourseCategory[]
+  chapters             Chapter[]
+  modules              Module[]
+  enrollments          Enrollment[]
+  categories           CourseCategory[]
+  certificateIssuances CertificateIssuance[]
 
   @@index([status])
   @@index([deletedAt])
@@ -315,8 +317,9 @@ model Module {
   deletedAt   DateTime? @map("deleted_at")
 
   // Relations
-  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  chapters Chapter[]
+  course               Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapters             Chapter[]
+  certificateIssuances CertificateIssuance[]
 
   @@index([courseId, orderIndex])
   @@index([deletedAt])
@@ -494,6 +497,37 @@ model LessonProgress {
   @@unique([userId, lessonId])
   @@index([userId, completed])
   @@map("lesson_progress")
+}
+
+// ============================================
+// CERTIFICATES
+// ============================================
+
+/// One row per (user, module) once the member has completed every
+/// lesson in that module. The presence of a row IS the eligibility
+/// signal — the PDF itself is rendered lazily on first download and
+/// cached in the `course-certificates` Storage bucket under the
+/// issuance id. shortCode is the public-facing identifier shown on
+/// the PDF (random base32, retried on collision).
+model CertificateIssuance {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  moduleId  String   @map("module_id")
+  /// Denormalised so listing a member's certificates can join straight
+  /// to the course without traversing module → course.
+  courseId  String   @map("course_id")
+  shortCode String   @unique @map("short_code")
+  issuedAt  DateTime @default(now()) @map("issued_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+  @@index([userId, issuedAt])
+  @@index([courseId])
+  @@map("certificate_issuances")
 }
 
 // ============================================
