@@ -1,22 +1,27 @@
-// Course completion certificate (Ticket 6.2).
+// Course completion certificate.
 //
-// Generates a Kondense-branded PDF from scratch when a completed
-// member clicks Download. No template upload — we own the design here
-// so it stays consistent across courses and we don't have to tune
-// stamp coordinates. Layout is inspired by DataCamp's Statement of
-// Accomplishment (two-column, dark brand panel on the left, content
-// on the right).
+// Uses Kondense's design-team PDF template (public/cert-template.pdf)
+// as the visual base and stamps three pieces of dynamic content on
+// top of the empty layout regions:
+//
+//   1. RECIPIENT NAME — between "HAS BEEN AWARDED TO" and
+//      "for successfully completing".
+//   2. COURSE TITLE — between "for successfully completing" and
+//      the "next module of the program" line.
+//   3. CERT ID — small, bottom-left corner, for support lookups.
 //
 // First-request flow:
-//   1. Authz: enrollment must belong to user, have completedAt, and
-//      course.certificateEnabled must be true.
-//   2. Pull course duration (sum of lesson durationSeconds).
-//   3. Generate the PDF with pdf-lib using standard fonts.
-//   4. Cache at course-certificates/<enrollmentId>.pdf.
-//   5. Return a short-lived signed download URL.
+//   1. Authz: enrollment belongs to user, has completedAt, and
+//      course.certificateEnabled is true.
+//   2. Render the stamped PDF (template + overlay).
+//   3. Cache at course-certificates/<enrollmentId>.pdf.
+//   4. Return a short-lived signed download URL.
 //
-// Subsequent requests skip step 3 and just re-sign the cached PDF.
-// Cert ID is the enrollment UUID — already unique, no counter needed.
+// Subsequent requests skip render and just re-sign the cached PDF.
+// Cert ID = enrollment UUID (already unique, no counter needed).
+
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
@@ -26,39 +31,42 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const CERTIFICATE_BUCKET = 'course-certificates'
 const SIGNED_URL_TTL_SEC = 60 * 10 // 10 min — plenty for click-to-download
 
-// Hardcoded signer; ticketed in 6.2 as a v1 simplification.
-const SIGNER_NAME = 'Keanu Vasquez'
-const SIGNER_TITLE = 'Founder'
+// Template path. Bundled via public/ so process.cwd() resolves it
+// at runtime on both local dev and Vercel.
+const TEMPLATE_PATH = path.join(
+  process.cwd(),
+  'public',
+  'cert-template.pdf',
+)
 
-// Brand palette. Kondense red on the left panel, cream content area,
-// near-black for body, muted slate for eyebrow labels.
-const KONDENSE_RED = rgb(0.819, 0.102, 0.102) // #d11a1a
-const CREAM = rgb(0.984, 0.976, 0.961)
-const NEAR_BLACK = rgb(0.039, 0.039, 0.043)
-const MUTED = rgb(0.42, 0.42, 0.45)
-const RULE_GREY = rgb(0.78, 0.78, 0.8)
+// Calibrated to the template's existing layout. Y is in PDF points
+// from the bottom of the page (A4 landscape ≈ 842 × 595).
+// Visual reference inside the template:
+//   ~y=380  "HAS BEEN AWARDED TO"
+//   ~y=295  "for successfully completing"
+//   ~y=218  "and has fulfilled all requirements necessary"
+// Name sits in the gap above 295; course title in the gap below it.
+const NAME_CENTER_Y = 338
+const NAME_FONT_SIZE = 36
+const COURSE_CENTER_Y = 257
+const COURSE_FONT_SIZE = 22
+const COURSE_MAX_WIDTH = 600
+const COURSE_MAX_LINES = 2
+const CERT_ID_X = 36
+const CERT_ID_Y = 18
+const CERT_ID_FONT_SIZE = 8
 
-// A4 landscape in PDF points (72pt = 1in). Used as a fixed canvas
-// so layout positions stay deterministic across courses.
-const PAGE_WIDTH = 842
-const PAGE_HEIGHT = 595
-const LEFT_PANEL_WIDTH = 200
-const CONTENT_LEFT = LEFT_PANEL_WIDTH + 56
-const CONTENT_RIGHT = PAGE_WIDTH - 56
-
-const DATE_FMT = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: '2-digit',
-  year: 'numeric',
-})
+// Color tokens. Template background is dark with red accents, so
+// overlays use white for the main fields and a muted gray for the
+// quiet cert ID footer.
+const WHITE = rgb(1, 1, 1)
+const MUTED_WHITE = rgb(0.78, 0.78, 0.82)
 
 interface CertificateContext {
   enrollmentId: string
   memberName: string
   courseTitle: string
   completedAt: Date
-  /** Total content duration across READY lessons, in seconds. */
-  totalSeconds: number
 }
 
 export interface CertificateResult {
@@ -91,15 +99,6 @@ export async function generateOrFetchCertificate(
           id: true,
           title: true,
           certificateEnabled: true,
-          chapters: {
-            where: { deletedAt: null },
-            select: {
-              lessons: {
-                where: { deletedAt: null, status: 'READY' },
-                select: { durationSeconds: true },
-              },
-            },
-          },
         },
       },
       user: {
@@ -114,23 +113,22 @@ export async function generateOrFetchCertificate(
     return { ok: false, error: 'Course not yet completed' }
   }
   if (!enrollment.course.certificateEnabled) {
-    return { ok: false, error: 'Certificates are not enabled for this course' }
+    return {
+      ok: false,
+      error: 'Certificates are not enabled for this course',
+    }
   }
 
   const memberName =
-    enrollment.user.name?.trim() || enrollment.user.email.split('@')[0] || 'Member'
-  const totalSeconds = enrollment.course.chapters.reduce(
-    (sum, ch) =>
-      sum + ch.lessons.reduce((s, l) => s + (l.durationSeconds ?? 0), 0),
-    0,
-  )
+    enrollment.user.name?.trim() ||
+    enrollment.user.email.split('@')[0] ||
+    'Member'
 
   return ensureAndSignCertificate({
     enrollmentId: enrollment.id,
     memberName,
     courseTitle: enrollment.course.title,
     completedAt: enrollment.completedAt,
-    totalSeconds,
   })
 }
 
@@ -176,228 +174,68 @@ async function ensureAndSignCertificate(
   }
 }
 
-async function renderCertificatePdf(ctx: CertificateContext): Promise<Uint8Array> {
-  const pdf = await PDFDocument.create()
+async function renderCertificatePdf(
+  ctx: CertificateContext,
+): Promise<Uint8Array> {
+  const templateBytes = await readFile(TEMPLATE_PATH)
+  const pdf = await PDFDocument.load(templateBytes)
   pdf.setTitle(`${ctx.courseTitle} — Certificate`)
   pdf.setAuthor('Kondense')
   pdf.setCreator('Kondense')
 
-  const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+  const page = pdf.getPage(0)
+  const { width: pageWidth } = page.getSize()
+
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold)
   const helv = await pdf.embedFont(StandardFonts.Helvetica)
-  const mono = await pdf.embedFont(StandardFonts.Courier)
 
-  // ── Background ────────────────────────────────────────────────
-  // Cream content area (full page), then a Kondense-red panel on the
-  // left. Layering this way means any subtle accents (gold border,
-  // future watermark) can sit on top of the cream without leaking
-  // into the brand panel.
-  page.drawRectangle({
-    x: 0,
-    y: 0,
-    width: PAGE_WIDTH,
-    height: PAGE_HEIGHT,
-    color: CREAM,
-  })
-  page.drawRectangle({
-    x: 0,
-    y: 0,
-    width: LEFT_PANEL_WIDTH,
-    height: PAGE_HEIGHT,
-    color: KONDENSE_RED,
-  })
-
-  // ── Left panel: Kondense wordmark ─────────────────────────────
-  // No image asset yet — render the wordmark as a centred big bold
-  // word. Easy to swap for an embedded logo later (embedPng / embedJpg).
-  drawCentredIn(
-    page,
-    'Kondense',
-    {
-      cx: LEFT_PANEL_WIDTH / 2,
-      y: PAGE_HEIGHT / 2,
-      font: helvBold,
-      size: 32,
-      color: rgb(1, 1, 1),
-    },
-  )
-
-  // ── Right panel content ───────────────────────────────────────
-  // Walk top → bottom, tracking the running Y cursor so future
-  // adjustments only need to retune the deltas. Top Y is offset
-  // further down than 70pt so the content block sits closer to the
-  // vertical centre and the signer block doesn't float in white space.
-  let y = PAGE_HEIGHT - 130
-
-  // Heading
-  drawText(page, 'CERTIFICATE OF COMPLETION', {
-    x: CONTENT_LEFT,
-    y,
+  // 1. Recipient name — large, centered, between "HAS BEEN AWARDED TO"
+  //    and "for successfully completing".
+  drawCentredText(page, ctx.memberName, {
+    cx: pageWidth / 2,
+    y: NAME_CENTER_Y,
     font: helvBold,
-    size: 26,
-    color: NEAR_BLACK,
+    size: NAME_FONT_SIZE,
+    color: WHITE,
   })
-  y -= 22
 
-  // Cert ID — last 8 chars of the enrollment UUID, prefixed with #.
-  // Keeps it verifiable (a support agent can look up by the suffix)
-  // without the visual clutter of a full UUID, and the small caps
-  // serif style sits more comfortably under the heading than Courier.
-  const shortId = ctx.enrollmentId.split('-').pop()?.slice(-8) ?? ctx.enrollmentId
-  drawText(page, `# ${shortId.toUpperCase()}`, {
-    x: CONTENT_LEFT,
-    y,
-    font: helv,
-    size: 10,
-    color: MUTED,
-    spacing: 1,
-  })
-  y -= 50
-
-  // Awarded-to eyebrow + name
-  drawText(page, 'HAS BEEN AWARDED TO', {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 9,
-    color: KONDENSE_RED,
-    spacing: 2,
-  })
-  y -= 28
-  drawText(page, ctx.memberName, {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 28,
-    color: NEAR_BLACK,
-  })
-  y -= 44
-
-  // Course-completion eyebrow + course title
-  drawText(page, 'FOR SUCCESSFULLY COMPLETING', {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 9,
-    color: KONDENSE_RED,
-    spacing: 2,
-  })
-  y -= 26
-  // Course title can wrap to a second line if it's long. Wrap at the
-  // content right edge; clamp to 2 lines so the rest of the layout
-  // doesn't shift.
+  // 2. Course title — medium, centered, wraps to 2 lines if long.
   const titleLines = wrapText(ctx.courseTitle, {
     font: helvBold,
-    size: 22,
-    maxWidth: CONTENT_RIGHT - CONTENT_LEFT,
-    maxLines: 2,
+    size: COURSE_FONT_SIZE,
+    maxWidth: COURSE_MAX_WIDTH,
+    maxLines: COURSE_MAX_LINES,
   })
-  for (const line of titleLines) {
-    drawText(page, line, {
-      x: CONTENT_LEFT,
-      y,
+  const lineGap = COURSE_FONT_SIZE * 1.2
+  const titleTopY =
+    COURSE_CENTER_Y + ((titleLines.length - 1) * lineGap) / 2
+  titleLines.forEach((line, i) => {
+    drawCentredText(page, line, {
+      cx: pageWidth / 2,
+      y: titleTopY - i * lineGap,
       font: helvBold,
-      size: 22,
-      color: NEAR_BLACK,
+      size: COURSE_FONT_SIZE,
+      color: WHITE,
     })
-    y -= 28
-  }
-  y -= 10
-
-  // Length + completion date sit side-by-side
-  const colTwoX = CONTENT_LEFT + 220
-
-  drawText(page, 'LENGTH', {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 9,
-    color: KONDENSE_RED,
-    spacing: 2,
-  })
-  drawText(page, 'COMPLETED ON', {
-    x: colTwoX,
-    y,
-    font: helvBold,
-    size: 9,
-    color: KONDENSE_RED,
-    spacing: 2,
-  })
-  y -= 20
-  drawText(page, formatDuration(ctx.totalSeconds), {
-    x: CONTENT_LEFT,
-    y,
-    font: helvBold,
-    size: 16,
-    color: NEAR_BLACK,
-  })
-  drawText(page, DATE_FMT.format(ctx.completedAt).toUpperCase(), {
-    x: colTwoX,
-    y,
-    font: helvBold,
-    size: 16,
-    color: NEAR_BLACK,
   })
 
-  // ── Bottom-right signer block ────────────────────────────────
-  // Rule + signer name + title. Keeps the layout grounded without
-  // needing an actual signature image asset. Lifted from y=70 to
-  // y=110 so the block sits closer to the content above instead of
-  // hugging the bottom edge.
-  const signerRight = CONTENT_RIGHT
-  const signerLeft = signerRight - 180
-  const signerY = 110
-
-  page.drawLine({
-    start: { x: signerLeft, y: signerY + 22 },
-    end: { x: signerRight, y: signerY + 22 },
-    thickness: 0.5,
-    color: RULE_GREY,
-  })
-  drawText(page, SIGNER_NAME, {
-    x: signerLeft,
-    y: signerY + 8,
-    font: helvBold,
-    size: 11,
-    color: NEAR_BLACK,
-  })
-  drawText(page, SIGNER_TITLE.toUpperCase(), {
-    x: signerLeft,
-    y: signerY - 6,
+  // 3. Cert ID — small, bottom-left corner. Last 8 chars of the
+  //    enrollment UUID is plenty for a support lookup; full ID
+  //    stays unique by virtue of how we cache the file.
+  const shortId =
+    ctx.enrollmentId.split('-').pop()?.slice(-8) ?? ctx.enrollmentId
+  page.drawText(`CERT # ${shortId.toUpperCase()}`, {
+    x: CERT_ID_X,
+    y: CERT_ID_Y,
+    size: CERT_ID_FONT_SIZE,
     font: helv,
-    size: 8,
-    color: MUTED,
-    spacing: 1.5,
+    color: MUTED_WHITE,
   })
 
   return pdf.save()
 }
 
-interface DrawTextOptions {
-  x: number
-  y: number
-  font: Awaited<ReturnType<PDFDocument['embedFont']>>
-  size: number
-  color: ReturnType<typeof rgb>
-  spacing?: number // letter-spacing for eyebrow labels
-}
-
-function drawText(
-  page: ReturnType<PDFDocument['addPage']>,
-  text: string,
-  opts: DrawTextOptions,
-): void {
-  page.drawText(text, {
-    x: opts.x,
-    y: opts.y,
-    size: opts.size,
-    font: opts.font,
-    color: opts.color,
-    ...(opts.spacing != null ? { characterSpacing: opts.spacing } : {}),
-  })
-}
-
-interface CentredOptions {
+interface CentredTextOptions {
   cx: number
   y: number
   font: Awaited<ReturnType<PDFDocument['embedFont']>>
@@ -405,10 +243,10 @@ interface CentredOptions {
   color: ReturnType<typeof rgb>
 }
 
-function drawCentredIn(
-  page: ReturnType<PDFDocument['addPage']>,
+function drawCentredText(
+  page: ReturnType<PDFDocument['getPage']>,
   text: string,
-  opts: CentredOptions,
+  opts: CentredTextOptions,
 ): void {
   const w = opts.font.widthOfTextAtSize(text, opts.size)
   page.drawText(text, {
@@ -428,9 +266,9 @@ interface WrapOptions {
 }
 
 /**
- * Greedy word-wrap that respects the embedded font's metrics. Last
- * line is hard-truncated with an ellipsis if the text overflows
- * maxLines so the layout stays predictable.
+ * Greedy word-wrap using the embedded font's metrics. Last line is
+ * hard-truncated with an ellipsis if the text overflows maxLines so
+ * the stamp layout stays predictable.
  */
 function wrapText(text: string, opts: WrapOptions): string[] {
   const words = text.split(/\s+/).filter(Boolean)
@@ -449,7 +287,6 @@ function wrapText(text: string, opts: WrapOptions): string[] {
   if (current && lines.length < opts.maxLines) lines.push(current)
 
   if (lines.length > opts.maxLines) {
-    // Truncate + ellipsis on the last allowed line.
     const truncated = lines.slice(0, opts.maxLines)
     let last = truncated[opts.maxLines - 1]!
     while (
@@ -462,21 +299,6 @@ function wrapText(text: string, opts: WrapOptions): string[] {
     return truncated
   }
   return lines
-}
-
-/**
- * Human-readable course length. Mirrors the formatTotalDuration helper
- * on the completion page so the cert and on-screen recap agree.
- *   3600 → "1 HOUR", 7200 → "2 HOURS", 1800 → "30 MIN"
- */
-function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return '—'
-  const totalMin = Math.round(seconds / 60)
-  if (totalMin < 60) return `${totalMin} MIN`
-  const hr = Math.floor(totalMin / 60)
-  const min = totalMin % 60
-  if (min === 0) return `${hr} HOUR${hr === 1 ? '' : 'S'}`
-  return `${hr} HR ${min} MIN`
 }
 
 function certificateFilename(ctx: CertificateContext): string {
