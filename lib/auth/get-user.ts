@@ -62,3 +62,20 @@ export async function requireAdmin(): Promise<User> {
 
   return user
 }
+
+/**
+ * API-route variant of requireAdmin. Instead of redirecting (which
+ * breaks JSON consumers), throws an Error with a string token that
+ * `withErrorHandling` maps to the right HTTP response:
+ *   - "unauthorized"        → 401
+ *   - "forbidden: ..."      → 403
+ *
+ * Use inside `withErrorHandling(...)` wrappers in app/api routes.
+ */
+export async function requireAdminApi(): Promise<User> {
+  const user = await getUser()
+  if (!user) throw new Error('unauthorized')
+  if (!user.isActive) throw new Error('forbidden: account paused')
+  if (user.role !== 'ADMIN') throw new Error('forbidden: admin only')
+  return user
+}

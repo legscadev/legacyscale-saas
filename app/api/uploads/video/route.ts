@@ -1,13 +1,11 @@
 import { type NextRequest } from 'next/server'
 import { z } from 'zod'
 import {
-  forbiddenResponse,
   successResponse,
-  unauthorizedResponse,
   validateBody,
   withErrorHandling,
 } from '@/lib/api'
-import { getUser } from '@/lib/auth'
+import { requireAdminApi } from '@/lib/auth'
 import { createDirectUpload } from '@/lib/mux'
 
 const createUploadSchema = z.object({
@@ -19,9 +17,7 @@ const createUploadSchema = z.object({
 // Admin-only. The lesson id is passed as Mux `passthrough` so the webhook
 // can wire the resulting asset back to the lesson.
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const user = await getUser()
-  if (!user) return unauthorizedResponse()
-  if (user.role !== 'ADMIN') return forbiddenResponse()
+  await requireAdminApi()
 
   const validation = await validateBody(request, createUploadSchema)
   if (validation.error) return validation.error
