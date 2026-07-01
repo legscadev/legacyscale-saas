@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   Archive,
   ArchiveRestore,
+  Bell,
   Edit3,
   Mail,
   MoreHorizontal,
@@ -30,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MemberEditDialog } from './member-edit-dialog'
+import { NudgeDialog } from './nudge-dialog'
 import type { MemberCategoryOption } from './members-shell'
 
 interface MemberActionsMenuProps {
@@ -60,6 +62,7 @@ export function MemberActionsMenu({
   const [confirmingSuspend, setConfirmingSuspend] = useState(false)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [nudging, setNudging] = useState(false)
   const [pending, setPending] = useState(false)
   const [resending, setResending] = useState(false)
   const [archiving, setArchiving] = useState(false)
@@ -200,6 +203,12 @@ export function MemberActionsMenu({
                   Resend welcome email
                 </DropdownMenuItem>
               )}
+              {!isSelf && isActive && (
+                <DropdownMenuItem onClick={() => setNudging(true)}>
+                  <Bell />
+                  Send nudge
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               {isSelf ? (
                 <DropdownMenuItem disabled>You</DropdownMenuItem>
@@ -306,6 +315,13 @@ export function MemberActionsMenu({
         categories={categories}
         canChangeRole={!isSelf}
         onSaved={onRefetch}
+      />
+
+      <NudgeDialog
+        open={nudging}
+        onOpenChange={setNudging}
+        memberId={memberId}
+        memberName={memberName}
       />
     </>
   )

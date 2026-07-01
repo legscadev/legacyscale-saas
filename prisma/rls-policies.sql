@@ -46,6 +46,7 @@ ALTER TABLE enrollments        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lesson_progress    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notes              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE certificate_issuances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nudges                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE announcements      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE announcement_reads ENABLE ROW LEVEL SECURITY;
 
@@ -331,6 +332,32 @@ CREATE POLICY "certificate_issuances_select_own"
 
 CREATE POLICY "certificate_issuances_admin_all"
   ON certificate_issuances FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- NUDGES  (members: read + dismiss own; admins: full)
+-- ============================================================
+-- Members need to (a) see their own active nudges to render the
+-- banner, and (b) UPDATE their own row to stamp dismissedAt when
+-- they click Dismiss. Creation always happens server-side under the
+-- admin/service role, so we don't grant INSERT to members.
+DROP POLICY IF EXISTS "nudges_select_own" ON nudges;
+DROP POLICY IF EXISTS "nudges_update_own_dismiss" ON nudges;
+DROP POLICY IF EXISTS "nudges_admin_all" ON nudges;
+
+CREATE POLICY "nudges_select_own"
+  ON nudges FOR SELECT
+  USING (user_id = public.current_user_id());
+
+CREATE POLICY "nudges_update_own_dismiss"
+  ON nudges FOR UPDATE
+  USING (user_id = public.current_user_id())
+  WITH CHECK (user_id = public.current_user_id());
+
+CREATE POLICY "nudges_admin_all"
+  ON nudges FOR ALL
   USING (is_admin())
   WITH CHECK (is_admin());
 
