@@ -39,6 +39,15 @@ function getFromAddress(purpose: EmailPurpose): string {
   return `${FROM_NAME} <${email}>`
 }
 
+interface EmailAttachment {
+  /** Filename shown in the recipient's mail client. */
+  filename: string
+  /** Raw bytes of the attachment. Resend base64-encodes internally. */
+  content: Buffer
+  /** e.g. 'application/pdf'. Optional — Resend infers from extension. */
+  contentType?: string
+}
+
 interface SendEmailOptions {
   to: string | string[]
   subject: string
@@ -46,6 +55,8 @@ interface SendEmailOptions {
   purpose: EmailPurpose
   /** Override default reply-to (RESEND_REPLY_TO env var). */
   replyTo?: string
+  /** File attachments. Used by the admin "email cert" flow. */
+  attachments?: EmailAttachment[]
 }
 
 export async function sendEmail({
@@ -54,6 +65,7 @@ export async function sendEmail({
   react,
   purpose,
   replyTo,
+  attachments,
 }: SendEmailOptions): Promise<{ id: string | undefined }> {
   const resend = getResend()
   const { data, error } = await resend.emails.send({
@@ -62,6 +74,11 @@ export async function sendEmail({
     subject,
     react,
     replyTo: replyTo ?? process.env.RESEND_REPLY_TO,
+    attachments: attachments?.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+    })),
   })
 
   if (error) {

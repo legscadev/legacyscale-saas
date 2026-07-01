@@ -37,6 +37,7 @@ export const adminNav: NavSection[] = [
       { label: 'Courses', href: '/admin/courses', icon: GraduationCap },
       { label: 'Categories', href: '/admin/categories', icon: Tag },
       { label: 'Announcements', href: '/admin/announcements', icon: Megaphone },
+      { label: 'Certificates', href: '/admin/certificates', icon: Award },
     ],
   },
   {
