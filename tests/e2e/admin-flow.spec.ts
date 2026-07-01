@@ -59,6 +59,77 @@ test.describe('Admin flow', () => {
   })
 
   /**
+   * Smoke of /admin/certificates. Ensures the page renders + the
+   * Issue-certificate dialog opens. Doesn't actually issue a cert —
+   * write-side is exercised at the service layer, and issuing here
+   * would leave a real row + PDF for the E2E admin.
+   */
+  test('admin certificates page + issue dialog opens', async ({ page }) => {
+    await page.goto('/admin/certificates')
+    await expect(page).toHaveURL(/\/admin\/certificates$/)
+    await expect(
+      page.getByRole('heading', { name: 'Certificates', level: 1 }),
+    ).toBeVisible()
+
+    // Filter + search controls exist.
+    await expect(page.getByPlaceholder(/search by member/i)).toBeVisible()
+
+    // Issue-cert dialog opens with both pickers.
+    await page.getByRole('button', { name: /issue certificate/i }).click()
+    const dialog = page.getByRole('dialog', { name: /issue certificate/i })
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.getByText(/search member/i, { exact: false }).first(),
+    ).toBeVisible()
+    await expect(
+      dialog.getByText(/^module$/i).first(),
+    ).toBeVisible()
+
+    // Close without submitting.
+    await dialog.getByRole('button', { name: /cancel/i }).click()
+    await expect(dialog).toBeHidden()
+  })
+
+  /**
+   * Smoke of the Send-nudge trigger on the member row's actions
+   * menu. Verifies the dialog opens with a target-course picker +
+   * message field, then cancels without sending. Sending a real
+   * nudge would fire a Resend email to a live member address.
+   */
+  test('admin members page → send nudge dialog opens', async ({ page }) => {
+    await page.goto('/admin/members')
+    await expect(
+      page.getByRole('heading', { name: 'Members', level: 1 }),
+    ).toBeVisible()
+
+    // Open the first non-self member's actions menu. The menu
+    // trigger has an aria-label the DropdownMenuTrigger stamps on
+    // the render'd button — matches "Open actions" or "More".
+    const openActions = page
+      .getByRole('button', { name: /open actions|more/i })
+      .first()
+    await expect(openActions).toBeVisible({ timeout: 10_000 })
+    await openActions.click()
+
+    // "Send nudge" item is present + clickable for an active member.
+    const nudgeItem = page.getByRole('menuitem', { name: /send nudge/i })
+    await expect(nudgeItem).toBeVisible({ timeout: 5_000 })
+    await nudgeItem.click()
+
+    const dialog = page.getByRole('dialog', { name: /send a nudge/i })
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.getByText(/target course/i).first(),
+    ).toBeVisible()
+    await expect(
+      dialog.getByRole('button', { name: /send nudge/i }),
+    ).toBeVisible()
+
+    await dialog.getByRole('button', { name: /cancel/i }).click()
+    await expect(dialog).toBeHidden()
+  })
+
+  /**
    * Best-effort cleanup. Opens a fresh admin context (auth from
    * storageState) and archives every course whose title starts
    * with the E2E prefix. Failures never fail the suite — orphan
