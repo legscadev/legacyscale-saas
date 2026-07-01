@@ -2,8 +2,10 @@ import { cookies } from 'next/headers'
 
 import { AppShell } from '@/components/layout'
 import { SIDEBAR_COOKIE } from '@/components/layout/sidebar-cookie'
+import { NudgeBanner } from '@/components/member/nudge-banner'
 import { requireActiveUser } from '@/lib/auth'
 import { announcementService } from '@/lib/services/announcement-service'
+import { listActiveNudgesForUser } from '@/lib/services/nudge-service'
 
 export default async function UserLayout({
   children,
@@ -23,6 +25,15 @@ export default async function UserLayout({
     console.error('getUnreadCount (member layout) failed:', err)
   }
 
+  // Admin-authored re-engagement banners. Best-effort — never block
+  // the shell if the query fails.
+  let nudges: Awaited<ReturnType<typeof listActiveNudgesForUser>> = []
+  try {
+    nudges = await listActiveNudgesForUser(user.id)
+  } catch (err) {
+    console.error('listActiveNudgesForUser failed:', err)
+  }
+
   return (
     <AppShell
       role="member"
@@ -35,7 +46,10 @@ export default async function UserLayout({
         role: user.role,
       }}
     >
-      <div className="mx-auto w-full max-w-7xl">{children}</div>
+      <div className="mx-auto w-full max-w-7xl space-y-4">
+        {nudges.length > 0 ? <NudgeBanner nudges={nudges} /> : null}
+        {children}
+      </div>
     </AppShell>
   )
 }

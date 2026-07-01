@@ -143,6 +143,8 @@ model User {
   certificateIssuances     CertificateIssuance[]
   certsManuallyIssued      CertificateIssuance[] @relation("CertsManuallyIssued")
   certsRevoked             CertificateIssuance[] @relation("CertsRevoked")
+  nudgesReceived           Nudge[]               @relation("NudgeRecipient")
+  nudgesAuthored           Nudge[]               @relation("NudgeAuthor")
 
   @@index([role])
   @@index([isActive])
@@ -263,6 +265,7 @@ model Course {
   enrollments          Enrollment[]
   categories           CourseCategory[]
   certificateIssuances CertificateIssuance[]
+  nudges               Nudge[]
 
   @@index([status])
   @@index([deletedAt])
@@ -545,6 +548,41 @@ model CertificateIssuance {
   @@index([courseId])
   @@index([revokedAt])
   @@map("certificate_issuances")
+}
+
+// ============================================
+// NUDGES
+// ============================================
+
+/// Admin-authored re-engagement message aimed at a specific member.
+/// Delivered as a Resend email at create time AND rendered as a
+/// dismissible banner on the member's next dashboard visit. Dismissal
+/// stamps dismissedAt so the banner disappears; the row itself
+/// persists as an audit trail (admin can see "was this nudge shown").
+model Nudge {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  /// Optional target course — if set, the email + banner CTAs deep-
+  /// link there ("Resume <course>"). Null means a generic nudge back
+  /// to the dashboard.
+  courseId    String?  @map("course_id")
+  message     String
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  /// Populated when Resend confirms the send. Null = email queue
+  /// failed; the banner still shows so the nudge isn't wasted.
+  emailSentAt DateTime? @map("email_sent_at")
+  /// Set when the member clicks Dismiss on the banner. Also cleared
+  /// implicitly when the member finishes the target course.
+  dismissedAt DateTime? @map("dismissed_at")
+
+  user      User    @relation("NudgeRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  course    Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdBy User    @relation("NudgeAuthor",   fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([userId, dismissedAt])
+  @@index([createdAt])
+  @@map("nudges")
 }
 
 // ============================================
