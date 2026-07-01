@@ -28,7 +28,7 @@ export function MemberCourseCard({ course, index = 0 }: MemberCourseCardProps) {
 
   return (
     <Card
-      className="group gap-0 overflow-hidden p-0 transition-all hover:-translate-y-1 hover:ring-primary/30 hover:shadow-lg motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-500"
+      className="group h-full gap-0 overflow-hidden p-0 transition-all hover:-translate-y-1 hover:ring-primary/30 hover:shadow-lg motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-500"
       style={{
         animationDelay: `${index * 80}ms`,
         animationFillMode: 'backwards',
@@ -100,13 +100,16 @@ export function MemberCourseCard({ course, index = 0 }: MemberCourseCardProps) {
           </div>
         ) : null}
 
-        <Button
-          className={cn('mt-4 w-full')}
-          render={<Link href={href} />}
-        >
-          {started ? 'Continue' : 'Start course'}
-          <ArrowRight />
-        </Button>
+        {/* Wrapper pins the CTA to the bottom of the flex column so
+            cards with different-length descriptions still line up.
+            pt-4 preserves the visual gap above the button; mt-auto
+            fills the remaining vertical space in the card. */}
+        <div className="mt-auto pt-4">
+          <Button className={cn('w-full')} render={<Link href={href} />}>
+            {started ? 'Continue' : 'Start course'}
+            <ArrowRight />
+          </Button>
+        </div>
       </div>
     </Card>
   )
