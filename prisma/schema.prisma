@@ -140,7 +140,9 @@ model User {
   invites           Invite[]
   loginEvents       LoginEvent[]
   appSettingsUpdated AppSetting[] @relation("AppSettingUpdater")
-  certificateIssuances CertificateIssuance[]
+  certificateIssuances     CertificateIssuance[]
+  certsManuallyIssued      CertificateIssuance[] @relation("CertsManuallyIssued")
+  certsRevoked             CertificateIssuance[] @relation("CertsRevoked")
 
   @@index([role])
   @@index([isActive])
@@ -520,13 +522,28 @@ model CertificateIssuance {
   issuedAt  DateTime @default(now()) @map("issued_at")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// Admin who bypassed the module-completion gate to hand-issue this
+  /// certificate. Null for auto-issued rows (the default path).
+  manuallyIssuedById String? @map("manually_issued_by_id")
+
+  /// Revocation trio. Set together by an admin action; presence of
+  /// revokedAt is the "is revoked" signal. Member-side list + download
+  /// filter these out; the auto-issue hook also treats a revoked row
+  /// as "already handled" so a re-completion doesn't silently re-issue.
+  revokedAt     DateTime? @map("revoked_at")
+  revokedById   String?   @map("revoked_by_id")
+  revokedReason String?   @map("revoked_reason")
+
+  user           User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module         Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  course         Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  manuallyIssuedBy User? @relation("CertsManuallyIssued", fields: [manuallyIssuedById], references: [id], onDelete: SetNull)
+  revokedBy      User? @relation("CertsRevoked", fields: [revokedById], references: [id], onDelete: SetNull)
 
   @@unique([userId, moduleId])
   @@index([userId, issuedAt])
   @@index([courseId])
+  @@index([revokedAt])
   @@map("certificate_issuances")
 }
 

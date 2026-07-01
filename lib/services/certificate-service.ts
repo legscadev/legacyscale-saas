@@ -147,7 +147,8 @@ export async function listUserCertificates(
   await backfillEligibleIssuances(userId)
 
   const rows = await prisma.certificateIssuance.findMany({
-    where: { userId },
+    // Revoked rows disappear from the member's view entirely.
+    where: { userId, revokedAt: null },
     orderBy: { issuedAt: 'desc' },
     select: {
       id: true,
@@ -168,6 +169,65 @@ export async function listUserCertificates(
 }
 
 /**
+ * Fetch the raw PDF bytes for an issuance. Used by admin flows that
+ * need the file inline (email attachment). Renders + uploads on first
+ * call, otherwise pulls the cached copy from Storage.
+ *
+ * NOT authz-gated — callers must check permissions before invoking.
+ */
+export async function getCertificatePdfBytes(
+  issuanceId: string,
+): Promise<Uint8Array | null> {
+  const issuance = await prisma.certificateIssuance.findUnique({
+    where: { id: issuanceId },
+    select: {
+      id: true,
+      shortCode: true,
+      user: { select: { name: true, email: true } },
+      module: { select: { title: true } },
+    },
+  })
+  if (!issuance) return null
+
+  const supabase = createAdminClient()
+  const certPath = `${issuance.id}.pdf`
+
+  const { data: existing } = await supabase.storage
+    .from(CERTIFICATE_BUCKET)
+    .list('', { search: certPath, limit: 1 })
+  const alreadyGenerated = existing?.some((f) => f.name === certPath)
+
+  if (alreadyGenerated) {
+    const { data, error } = await supabase.storage
+      .from(CERTIFICATE_BUCKET)
+      .download(certPath)
+    if (error || !data) {
+      console.error('Certificate download from storage failed:', error)
+      return null
+    }
+    return new Uint8Array(await data.arrayBuffer())
+  }
+
+  const memberName =
+    issuance.user.name?.trim() ||
+    issuance.user.email.split('@')[0] ||
+    'Member'
+  const bytes = await renderCertificatePdf({
+    memberName,
+    moduleTitle: issuance.module.title,
+    shortCode: issuance.shortCode,
+  })
+  const { error: uploadErr } = await supabase.storage
+    .from(CERTIFICATE_BUCKET)
+    .upload(certPath, bytes, {
+      contentType: 'application/pdf',
+      upsert: true,
+    })
+  if (uploadErr) console.error('Certificate upload failed:', uploadErr)
+  return bytes
+}
+
+/**
  * Authz + signed-URL minting for one certificate. Generates and
  * uploads the PDF the first time it's requested.
  */
@@ -176,7 +236,8 @@ export async function getCertificateDownload(
   issuanceId: string,
 ): Promise<CertificateDownloadResult | CertificateDownloadError> {
   const issuance = await prisma.certificateIssuance.findFirst({
-    where: { id: issuanceId, userId },
+    // Revoked rows are inaccessible to the owner.
+    where: { id: issuanceId, userId, revokedAt: null },
     select: {
       id: true,
       shortCode: true,
