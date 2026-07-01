@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Bell, HelpCircle, Menu, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  Bell,
+  HelpCircle,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -136,6 +144,45 @@ export function TopBar({
         </Button>
 
         <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+          {/* Role swap. Admins can jump from the admin shell into
+              their own member experience (and back) so they can see
+              courses/announcements the way a member does without
+              signing out or spinning up a second account. Only
+              rendered when the swap is meaningful — TEAM users get
+              it on admin pages too, since they see admin routes. */}
+          {(user.role === 'ADMIN' || user.role === 'TEAM') ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={
+                      role === 'admin'
+                        ? 'View as member'
+                        : 'Back to admin view'
+                    }
+                    render={
+                      <Link
+                        href={role === 'admin' ? '/dashboard' : '/admin/dashboard'}
+                      />
+                    }
+                  >
+                    <ArrowLeftRight className="size-4" />
+                    <span className="hidden sm:inline">
+                      {role === 'admin' ? 'View as member' : 'Back to admin'}
+                    </span>
+                  </Button>
+                }
+              />
+              <TooltipContent side="bottom">
+                {role === 'admin'
+                  ? 'Open the app the way a member sees it'
+                  : 'Return to the admin surface'}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
           <Tooltip>
             <TooltipTrigger
               render={

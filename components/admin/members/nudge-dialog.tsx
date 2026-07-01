@@ -37,30 +37,23 @@ interface NudgeDialogProps {
   memberName: string
 }
 
-export function NudgeDialog(props: NudgeDialogProps) {
-  // Force a fresh child instance on every open so state resets to
-  // its initial values — cleaner than useEffect-based resets and
-  // sidesteps the "no setState in an effect" rule.
-  return (
-    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <NudgeDialogBody key={props.open ? `${props.memberId}` : 'closed'} {...props} />
-    </Dialog>
-  )
-}
-
-function NudgeDialogBody({
+export function NudgeDialog({
+  open,
   onOpenChange,
   memberId,
   memberName,
 }: NudgeDialogProps) {
   const [courses, setCourses] = useState<NudgeCoursePickerOption[]>([])
   const [courseId, setCourseId] = useState<string>(NO_COURSE)
-  const [message, setMessage] = useState(defaultMessage(memberName))
+  const [message, setMessage] = useState('')
   const [pending, startTransition] = useTransition()
 
-  // Load enrolled courses once on mount. setState fires from a
-  // promise callback (async) — allowed by set-state-in-effect.
+  // Load the member's enrolled courses when the dialog opens. Guarded
+  // by `open` so we don't fire for every closed instance sitting in
+  // the DOM. setState fires from a promise callback (async), which the
+  // set-state-in-effect rule allows.
   useEffect(() => {
+    if (!open) return
     let cancelled = false
     listEnrolledCoursesForNudge(memberId)
       .then((rows) => {
@@ -72,7 +65,31 @@ function NudgeDialogBody({
     return () => {
       cancelled = true
     }
-  }, [memberId])
+  }, [open, memberId])
+
+  function resetForm() {
+    setCourseId(NO_COURSE)
+    setMessage(defaultMessage(memberName))
+  }
+
+  function handleOpenChange(next: boolean) {
+    // Reset on close so the next open starts fresh. Matches the
+    // codebase's other dialogs (see MemberCreateDialog).
+    if (!next) resetForm()
+    onOpenChange(next)
+  }
+
+  // Prime the message + courseId on transition to open. Runs during
+  // render (before the mounted useEffect above) via a cheap ref check.
+  const [primedFor, setPrimedFor] = useState<string | null>(null)
+  if (open && primedFor !== memberId) {
+    setPrimedFor(memberId)
+    setMessage(defaultMessage(memberName))
+    setCourseId(NO_COURSE)
+  }
+  if (!open && primedFor !== null) {
+    setPrimedFor(null)
+  }
 
   function handleSubmit() {
     const trimmed = message.trim()
@@ -97,12 +114,12 @@ function NudgeDialogBody({
           'Nudge saved — email delivery failed, banner will still show on next login',
         )
       }
-      onOpenChange(false)
+      handleOpenChange(false)
     })
   }
 
   return (
-    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Send a nudge</DialogTitle>
@@ -159,7 +176,7 @@ function NudgeDialogBody({
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
             disabled={pending}
           >
             Cancel
@@ -169,7 +186,7 @@ function NudgeDialogBody({
           </Button>
         </DialogFooter>
       </DialogContent>
-    </>
+    </Dialog>
   )
 }
 
