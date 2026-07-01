@@ -130,6 +130,27 @@ test.describe('Admin flow', () => {
   })
 
   /**
+   * Role-swap top-bar button. Admin should see "View as member" on
+   * admin routes → clicking it lands on the member dashboard, where
+   * the mirror "Back to admin" button appears.
+   */
+  test('admin ↔ member view swap in the top bar', async ({ page }) => {
+    // The swap button is a <Button render={<Link />}>: renders as an
+    // <a> tag but Base UI stamps role="button" explicitly, so
+    // getByRole must ask for 'button'.
+    await page.goto('/admin/dashboard')
+    const toMember = page.getByRole('button', { name: /view as member/i })
+    await expect(toMember).toBeVisible({ timeout: 5_000 })
+    await toMember.click()
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 10_000 })
+
+    const backToAdmin = page.getByRole('button', { name: /back to admin/i })
+    await expect(backToAdmin).toBeVisible({ timeout: 5_000 })
+    await backToAdmin.click()
+    await expect(page).toHaveURL(/\/admin\/dashboard$/, { timeout: 10_000 })
+  })
+
+  /**
    * Best-effort cleanup. Opens a fresh admin context (auth from
    * storageState) and archives every course whose title starts
    * with the E2E prefix. Failures never fail the suite — orphan
