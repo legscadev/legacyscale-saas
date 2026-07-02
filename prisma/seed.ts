@@ -3,6 +3,8 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import pg from 'pg'
 import { config } from 'dotenv'
 
+import { seedOnboarding } from './seed-onboarding'
+
 config({ path: '.env.local' })
 
 const pool = new pg.Pool({
@@ -165,6 +167,8 @@ async function main() {
     },
   })
   console.log('✅ Sample announcement created:', announcement.title)
+
+  await seedOnboarding(prisma)
 
   console.log('🌱 Seed completed!')
 }

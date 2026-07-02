@@ -10,6 +10,7 @@ import {
   Tag,
   TrendingUp,
   User,
+  UserPlus,
   Users,
 } from 'lucide-react'
 
@@ -52,6 +53,12 @@ export const adminNav: NavSection[] = [
         href: '/admin/progress',
         icon: TrendingUp,
       },
+    ],
+  },
+  {
+    label: 'Internal',
+    items: [
+      { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus },
     ],
   },
   {

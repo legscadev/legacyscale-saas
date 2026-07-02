@@ -1,0 +1,2066 @@
+{
+  "template": {
+    "slug": "standard",
+    "name": "Standard Onboarding",
+    "description": "Default checklist covering platform access, agreements, tests, and internal tooling.",
+    "isDefault": true,
+    "items": [
+      {
+        "slug": "company-email",
+        "label": "Company Email",
+        "orderIndex": 0
+      },
+      {
+        "slug": "agreement-forms",
+        "label": "Agreement Forms",
+        "orderIndex": 1
+      },
+      {
+        "slug": "gdrive",
+        "label": "Gdrive",
+        "orderIndex": 2
+      },
+      {
+        "slug": "onboarding-checksheet",
+        "label": "Onboarding Checksheet",
+        "orderIndex": 3
+      },
+      {
+        "slug": "production-sheet",
+        "label": "Production Sheet",
+        "orderIndex": 4
+      },
+      {
+        "slug": "calendar",
+        "label": "Calendar",
+        "orderIndex": 5
+      },
+      {
+        "slug": "top-leads",
+        "label": "Top Leads",
+        "orderIndex": 6
+      },
+      {
+        "slug": "slack",
+        "label": "Slack",
+        "orderIndex": 7
+      },
+      {
+        "slug": "messenger",
+        "label": "Messenger",
+        "orderIndex": 8
+      },
+      {
+        "slug": "skool",
+        "label": "Skool",
+        "orderIndex": 9
+      },
+      {
+        "slug": "whop-trainings",
+        "label": "WHOP (trainings)",
+        "orderIndex": 10
+      },
+      {
+        "slug": "whop-map",
+        "label": "WHOP (MAP)",
+        "orderIndex": 11
+      },
+      {
+        "slug": "vt",
+        "label": "VT",
+        "orderIndex": 12
+      },
+      {
+        "slug": "personality-test",
+        "label": "Personality Test",
+        "orderIndex": 13
+      },
+      {
+        "slug": "iq-test",
+        "label": "IQ Test",
+        "orderIndex": 14
+      },
+      {
+        "slug": "aptitude-test",
+        "label": "Aptitude Test",
+        "orderIndex": 15
+      },
+      {
+        "slug": "makh-stats",
+        "label": "MAKH Stats",
+        "orderIndex": 16
+      },
+      {
+        "slug": "call-recordings",
+        "label": "Call Recordings",
+        "orderIndex": 17
+      }
+    ]
+  },
+  "employees": [
+    {
+      "name": "Keanu Vasquez",
+      "roleTitle": "CEO",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-01-28",
+      "dateStarted": "2026-01-28",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "ATTENTION"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "ATTENTION"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "ATTENTION"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Gillian Daclan",
+      "roleTitle": "Executive Assistant",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-02-12",
+      "dateStarted": "2026-02-12",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Ruby Jane Alonzo",
+      "roleTitle": "Production Director",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-03-12",
+      "dateStarted": "2026-03-12",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Ruel Cabaluna Jr",
+      "roleTitle": "SaaS Developer",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-05-23",
+      "dateStarted": "2026-05-25",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Kyle Hen",
+      "roleTitle": "SaaS Supervisor",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-04-28",
+      "dateStarted": "2026-06-05",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "ATTENTION"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Martin Urroz",
+      "roleTitle": "Marketing Director",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-01-28",
+      "dateStarted": "2026-01-28",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Jadon Tafolla",
+      "roleTitle": "Videographer",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-03-22",
+      "dateStarted": "2026-06-05",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "ATTENTION"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "OK"
+        }
+      ]
+    },
+    {
+      "name": "Ian Odtojan",
+      "roleTitle": "Graphic Designer",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-01-28",
+      "dateStarted": "2026-01-28",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "JE Narisma",
+      "roleTitle": "Video Editor",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-01-28",
+      "dateStarted": "2026-01-28",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Jeanne Velasco",
+      "roleTitle": "Graphic Designer",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-03-30",
+      "dateStarted": "2026-04-01",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Adil Mehmood",
+      "roleTitle": "Ads Editor",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-04-26",
+      "dateStarted": "2026-04-26",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Michael Chacon",
+      "roleTitle": "DM/Appointment/Closer",
+      "status": "ACTIVE",
+      "onboardingDate": "2026-01-28",
+      "dateStarted": "2026-02-02",
+      "offboardingDate": null,
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "personality-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "iq-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "aptitude-test",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "OK"
+        }
+      ]
+    },
+    {
+      "name": "Joslyn",
+      "roleTitle": "Affliate",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-01",
+      "dateStarted": null,
+      "offboardingDate": "2026-03-05",
+      "statuses": []
+    },
+    {
+      "name": "Donavin",
+      "roleTitle": "DM Setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-01-28",
+      "dateStarted": "2026-01-29",
+      "offboardingDate": "2026-03-12",
+      "statuses": []
+    },
+    {
+      "name": "Glaiza",
+      "roleTitle": "Graphic Designer",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-23",
+      "dateStarted": null,
+      "offboardingDate": "2026-03-24",
+      "statuses": []
+    },
+    {
+      "name": "Christopher",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-20",
+      "dateStarted": null,
+      "offboardingDate": "2026-03-25",
+      "statuses": []
+    },
+    {
+      "name": "Stacy",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-01-28",
+      "dateStarted": "2026-01-28",
+      "offboardingDate": "2026-03-26",
+      "statuses": []
+    },
+    {
+      "name": "Lavish",
+      "roleTitle": "DM Setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-20",
+      "dateStarted": "2026-03-20",
+      "offboardingDate": "2026-03-30",
+      "statuses": []
+    },
+    {
+      "name": "Esteban Castillo",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-27",
+      "dateStarted": "2026-04-03",
+      "offboardingDate": "2026-04-07",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Joseph Rutkowski",
+      "roleTitle": "DM Setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-31",
+      "dateStarted": null,
+      "offboardingDate": "2026-04-08",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "CC Ndokwu",
+      "roleTitle": "DM Setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-30",
+      "dateStarted": "2026-04-03",
+      "offboardingDate": "2026-04-08",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "James Royce Edwards",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-13",
+      "dateStarted": "2026-04-16",
+      "offboardingDate": "2026-04-17",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Ellione Williams",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-09",
+      "dateStarted": "2026-03-18",
+      "offboardingDate": "2026-04-17",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Peyton Anderson",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-20",
+      "dateStarted": null,
+      "offboardingDate": "2026-04-23",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Joseph Malott",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-06",
+      "dateStarted": "2026-04-13",
+      "offboardingDate": "2026-05-01",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Benjo Ponce",
+      "roleTitle": "CRM Expert",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-28",
+      "dateStarted": "2026-04-28",
+      "offboardingDate": "2026-05-01",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Ghiane Russel San Pedro",
+      "roleTitle": "CRM Expert",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-05-01",
+      "dateStarted": "2026-05-01",
+      "offboardingDate": "2026-05-26",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Missy Genolos",
+      "roleTitle": "Video Editor",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-07",
+      "dateStarted": "2026-04-07",
+      "offboardingDate": "2026-05-26",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Robert Luna",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-30",
+      "dateStarted": "2026-05-04",
+      "offboardingDate": "2026-05-27",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Odalis Garcia",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-30",
+      "dateStarted": "2026-05-26",
+      "offboardingDate": "2026-06-05",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Hector Hernandez",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-03",
+      "dateStarted": "2026-04-14",
+      "offboardingDate": "2026-06-05",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "OK"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Likhon Malakar",
+      "roleTitle": "Video Editor",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-01-28",
+      "dateStarted": "2026-01-28",
+      "offboardingDate": "2026-06-05",
+      "statuses": [
+        {
+          "itemSlug": "company-email",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "agreement-forms",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "gdrive",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "onboarding-checksheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "production-sheet",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "calendar",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "top-leads",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "slack",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "messenger",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "skool",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-trainings",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "whop-map",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "vt",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "makh-stats",
+          "status": "PENDING"
+        },
+        {
+          "itemSlug": "call-recordings",
+          "status": "PENDING"
+        }
+      ]
+    },
+    {
+      "name": "Kyle Hen",
+      "roleTitle": "DM Setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-04-28",
+      "dateStarted": "2026-05-04",
+      "offboardingDate": "2026-06-05",
+      "statuses": []
+    },
+    {
+      "name": "Jadon Tafolla",
+      "roleTitle": "Appointment setter",
+      "status": "OFFBOARDED",
+      "onboardingDate": "2026-03-22",
+      "dateStarted": "2026-03-25",
+      "offboardingDate": "2026-06-05",
+      "statuses": []
+    }
+  ]
+}
