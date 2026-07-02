@@ -154,7 +154,14 @@ export function getMemberColumns(
               </p>
               {(() => {
                 const invite = m.invites?.[0]
-                if (!invite || invite.usedAt) return null
+                // Clear the badge for any member who's actually
+                // signed in — the wizard's "Finish" click is the
+                // only thing that stamps invite.usedAt, and users
+                // who bounce before that step (or hit a network
+                // flake on the /complete POST) leave usedAt null
+                // forever. lastLoginAt is a truer "onboarded"
+                // signal than usedAt is.
+                if (!invite || invite.usedAt || m.lastLoginAt) return null
                 const label = invite.passwordSetAt
                   ? 'Onboarding'
                   : new Date(invite.expiresAt) < new Date()
