@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Copy,
   Loader2,
-  Pencil,
   Plus,
   Star,
   Trash2,
@@ -662,25 +661,25 @@ function ItemRow({
   const [editing, setEditing] = useState(false)
 
   return (
-    <li className="flex items-center gap-2 px-3 py-2">
+    <li className="group flex items-center gap-1.5 px-2 py-1 hover:bg-muted/30">
       <div className="flex flex-col">
         <button
           type="button"
-          className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+          className="grid size-4 place-items-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-20"
           onClick={onUp}
           disabled={!canUp || disabled}
           aria-label="Move up"
         >
-          <ArrowUp className="size-3" />
+          <ArrowUp className="size-2.5" />
         </button>
         <button
           type="button"
-          className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+          className="grid size-4 place-items-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-20"
           onClick={onDown}
           disabled={!canDown || disabled}
           aria-label="Move down"
         >
-          <ArrowDown className="size-3" />
+          <ArrowDown className="size-2.5" />
         </button>
       </div>
       {editing ? (
@@ -700,43 +699,36 @@ function ItemRow({
               setEditing(false)
             }
           }}
-          className="h-8"
+          className="h-7 text-sm"
         />
       ) : (
         <button
           type="button"
           className="flex-1 truncate text-left text-sm hover:text-primary"
           onClick={() => setEditing(true)}
+          title="Click to rename"
         >
           {item.label}
           {item.statusCount > 0 ? (
-            <span className="ml-2 text-xs text-muted-foreground">
-              · {item.statusCount} status
-              {item.statusCount === 1 ? '' : 'es'}
+            <span className="ml-1.5 text-[10px] text-muted-foreground">
+              · {item.statusCount}
             </span>
           ) : null}
         </button>
       )}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-7"
-        onClick={() => setEditing(true)}
-        disabled={disabled}
-        aria-label="Rename"
-      >
-        <Pencil className="size-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-7 text-muted-foreground hover:text-destructive"
+      <button
+        type="button"
+        className={cn(
+          'grid size-6 place-items-center rounded text-muted-foreground/60 transition-colors',
+          'hover:bg-muted hover:text-destructive',
+          'opacity-0 group-hover:opacity-100 disabled:opacity-30',
+        )}
         onClick={onDelete}
         disabled={disabled}
         aria-label="Delete"
       >
-        <Trash2 className="size-3.5" />
-      </Button>
+        <Trash2 className="size-3" />
+      </button>
     </li>
   )
 }

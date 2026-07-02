@@ -10,6 +10,7 @@ import {
   Check,
   CircleDashed,
   Loader2,
+  MessageSquare,
   MinusCircle,
   MoreHorizontal,
   RotateCcw,
@@ -314,17 +315,20 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
       </div>
 
       <div className="rounded-xl border bg-card">
-        <div className="flex items-center justify-between border-b px-5 py-3">
-          <div>
-            <h2 className="text-sm font-semibold">Checklist</h2>
-            <p className="text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold leading-tight">Checklist</h2>
+            <p className="truncate text-xs text-muted-foreground">
               {template
-                ? `Template: ${template.name}`
+                ? template.name
                 : 'No checklist template assigned'}
             </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Click a status pill to cycle Pending → Done → Attention → N/A
+          <p
+            className="hidden text-xs text-muted-foreground/80 sm:block"
+            title="Click a status pill to cycle Pending → Done → Attention → N/A"
+          >
+            Click pill to cycle
           </p>
         </div>
         {template && template.items.length > 0 ? (
@@ -342,7 +346,7 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
             ))}
           </ul>
         ) : (
-          <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
             No checklist items available.
           </p>
         )}
@@ -457,13 +461,13 @@ function MetaCard({
   subtitle?: string
 }) {
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+    <div className="rounded-xl border bg-card p-3">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className="mt-1.5 text-lg font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 text-base font-semibold tabular-nums">{value}</p>
       {subtitle ? (
-        <p className="mt-0.5 text-xs text-amber-600">{subtitle}</p>
+        <p className="mt-0.5 text-[10px] text-amber-600">{subtitle}</p>
       ) : null}
     </div>
   )
@@ -486,56 +490,69 @@ function ChecklistRow({
 }) {
   const [noteDraft, setNoteDraft] = useState(item.note ?? '')
   const [noteOpen, setNoteOpen] = useState(false)
+  const hasNote = Boolean(item.note && item.note.trim())
 
   return (
-    <li className="grid grid-cols-1 items-start gap-3 px-5 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{item.label}</span>
-          {item.completedAt ? (
-            <span className="text-xs text-muted-foreground">
-              · Done {format(new Date(item.completedAt), 'MMM d')}
-            </span>
-          ) : null}
-        </div>
-        {item.description ? (
-          <p className="text-xs text-muted-foreground">{item.description}</p>
+    <li className="group px-3 py-1.5 hover:bg-muted/20">
+      <div className="flex items-center gap-2">
+        <span
+          className="flex-1 truncate text-sm font-medium"
+          title={item.description ?? undefined}
+        >
+          {item.label}
+        </span>
+        {item.completedAt ? (
+          <span className="hidden text-[10px] text-muted-foreground sm:inline">
+            {format(new Date(item.completedAt), 'MMM d')}
+          </span>
         ) : null}
-        {noteOpen || item.note ? (
-          <Textarea
-            className="mt-2 text-xs"
-            rows={2}
-            placeholder="Add a note…"
-            value={noteDraft}
-            disabled={disabled}
-            onFocus={() => setNoteOpen(true)}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            onBlur={() => onNoteBlur(noteDraft.trim(), item.note ?? '')}
-          />
-        ) : (
-          <button
-            type="button"
-            className="mt-1 text-xs text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
-            onClick={() => setNoteOpen(true)}
-          >
-            Add note
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setNoteOpen((v) => !v)}
+          className={cn(
+            'grid size-6 place-items-center rounded text-muted-foreground/60 transition-colors',
+            'hover:bg-muted hover:text-foreground',
+            hasNote ? 'text-amber-500' : 'opacity-0 group-hover:opacity-100',
+            noteOpen && 'bg-muted text-foreground opacity-100',
+          )}
+          aria-label={hasNote ? 'Edit note' : 'Add note'}
+          title={hasNote ? item.note ?? undefined : 'Add note'}
+        >
+          <MessageSquare className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          className={cn(
+            'rounded-full transition-transform',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+            'hover:scale-[1.03] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50',
+          )}
+          aria-label={`Cycle status for ${item.label}`}
+        >
+          <StatusPill status={item.status} />
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={disabled}
-        className={cn(
-          'justify-self-start rounded-full transition-transform',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          'hover:scale-[1.03] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50',
-          'sm:justify-self-end',
-        )}
-        aria-label={`Cycle status for ${item.label}`}
-      >
-        <StatusPill status={item.status} />
-      </button>
+      {noteOpen ? (
+        <Textarea
+          autoFocus
+          className="mt-1.5 text-xs"
+          rows={2}
+          placeholder="Add a note…"
+          value={noteDraft}
+          disabled={disabled}
+          onChange={(e) => setNoteDraft(e.target.value)}
+          onBlur={() => {
+            onNoteBlur(noteDraft.trim(), item.note ?? '')
+            if (!noteDraft.trim()) setNoteOpen(false)
+          }}
+        />
+      ) : hasNote ? (
+        <p className="mt-0.5 truncate pl-0 text-xs text-muted-foreground">
+          {item.note}
+        </p>
+      ) : null}
     </li>
   )
 }
