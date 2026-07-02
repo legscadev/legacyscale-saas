@@ -278,7 +278,7 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
       />
 
       {/* Header edit form */}
-      <div className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-2">
+      <div className="space-y-4 rounded-xl border bg-card p-4">
         <div className="space-y-1.5">
           <Label htmlFor="tpl-edit-name">Name</Label>
           <Input
@@ -288,7 +288,7 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
             onBlur={saveHeader}
           />
         </div>
-        <div className="space-y-1.5 sm:row-span-2">
+        <div className="space-y-1.5">
           <Label htmlFor="tpl-edit-desc">Description</Label>
           <Textarea
             id="tpl-edit-desc"
@@ -312,7 +312,7 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
           Default template for new employees
         </label>
         {savingHeader ? (
-          <p className="text-xs text-muted-foreground sm:col-span-2">Saving…</p>
+          <p className="text-xs text-muted-foreground">Saving…</p>
         ) : null}
       </div>
 
