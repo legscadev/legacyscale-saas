@@ -158,6 +158,54 @@ export interface ManualIssueInput {
   moduleId: string
 }
 
+export interface BulkIssueOutcome {
+  moduleId: string
+  status: 'issued' | 'already-active' | 'revoked-exists' | 'module-missing'
+  issuanceId?: string
+}
+
+/**
+ * Bulk variant of manuallyIssueCertificate. Iterates the module list
+ * and issues each one, returning per-module outcomes so the UI can
+ * tell the admin which ones succeeded, which already existed, and
+ * which need reinstating.
+ */
+export async function manuallyIssueBulkCertificates(
+  adminId: string,
+  userId: string,
+  moduleIds: string[],
+): Promise<
+  | { ok: true; results: BulkIssueOutcome[]; issuedCount: number }
+  | { ok: false; error: string }
+> {
+  if (moduleIds.length === 0) {
+    return { ok: false, error: 'Pick at least one module' }
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  })
+  if (!user) return { ok: false, error: 'Member not found' }
+
+  const results: BulkIssueOutcome[] = []
+  let issuedCount = 0
+  for (const moduleId of moduleIds) {
+    const result = await manuallyIssueCertificate(adminId, { userId, moduleId })
+    if (result.ok) {
+      results.push({ moduleId, status: 'issued', issuanceId: result.issuanceId })
+      issuedCount++
+    } else if (/already exists/.test(result.error)) {
+      results.push({ moduleId, status: 'already-active' })
+    } else if (/revoked/.test(result.error)) {
+      results.push({ moduleId, status: 'revoked-exists' })
+    } else {
+      results.push({ moduleId, status: 'module-missing' })
+    }
+  }
+  return { ok: true, results, issuedCount }
+}
+
 export async function manuallyIssueCertificate(
   adminId: string,
   input: ManualIssueInput,

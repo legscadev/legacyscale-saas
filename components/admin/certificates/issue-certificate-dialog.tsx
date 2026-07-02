@@ -1,9 +1,11 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
+import { AlertCircle, Award, Search } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -17,23 +19,23 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { issueCertificateAction } from '@/app/(admin)/admin/certificates/actions'
-import type {
-  MemberPickerOption,
-  ModulePickerOption,
+import {
+  issueCertificatesBulkAction,
+  listModulesByCourseForCertPicker,
+  type CoursePickerOption,
+  type MemberPickerOption,
+  type ModulePickerRow,
 } from '@/app/(admin)/admin/certificates/actions'
 
 interface IssueCertificateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   members: MemberPickerOption[]
-  modules: ModulePickerOption[]
+  courses: CoursePickerOption[]
   onIssued: () => void
 }
 
@@ -41,14 +43,33 @@ export function IssueCertificateDialog({
   open,
   onOpenChange,
   members,
-  modules,
+  courses,
   onIssued,
 }: IssueCertificateDialogProps) {
   const [memberQuery, setMemberQuery] = useState('')
   const [memberId, setMemberId] = useState('')
-  const [moduleId, setModuleId] = useState('')
+  const [courseId, setCourseId] = useState('')
+  const [modules, setModules] = useState<ModulePickerRow[]>([])
+  const [selectedModuleIds, setSelectedModuleIds] = useState<Set<string>>(
+    () => new Set(),
+  )
+  const [loadingModules, setLoadingModules] = useState(false)
   const [pending, startTransition] = useTransition()
 
+  // Reset all state whenever the dialog closes so re-opening is fresh.
+  function handleOpenChange(next: boolean) {
+    if (!next) {
+      setMemberQuery('')
+      setMemberId('')
+      setCourseId('')
+      setModules([])
+      setSelectedModuleIds(new Set())
+    }
+    onOpenChange(next)
+  }
+
+  // Filtered member list for the picker. Cap to 50 so the dropdown
+  // stays snappy even with hundreds of members.
   const filteredMembers = useMemo(() => {
     const q = memberQuery.trim().toLowerCase()
     if (!q) return members.slice(0, 50)
@@ -61,63 +82,152 @@ export function IssueCertificateDialog({
       .slice(0, 50)
   }, [memberQuery, members])
 
-  const groupedModules = useMemo(() => {
-    const map = new Map<string, { courseTitle: string; items: ModulePickerOption[] }>()
-    for (const m of modules) {
-      const entry = map.get(m.courseId) ?? { courseTitle: m.courseTitle, items: [] }
-      entry.items.push(m)
-      map.set(m.courseId, entry)
+  function handleCourseChange(v: string) {
+    setCourseId(v)
+    // Reset module list eagerly on course change so the previous
+    // course's modules never flash inside the wrong context.
+    setModules([])
+    setSelectedModuleIds(new Set())
+  }
+
+  // Load modules for the picked course. Also refetches on member
+  // change so the alreadyIssued flags reflect that member's
+  // issuances. All setState calls fire from a promise callback (not
+  // sync in the effect body), which the set-state-in-effect rule
+  // allows.
+  useEffect(() => {
+    if (!open || !courseId) return
+    let cancelled = false
+    // Defer the loading flag out of the effect body via a microtask
+    // so setState never fires synchronously during render — required
+    // by react-hooks/set-state-in-effect. Same trick for the promise
+    // callbacks, which the rule already allows.
+    queueMicrotask(() => {
+      if (!cancelled) setLoadingModules(true)
+    })
+    listModulesByCourseForCertPicker(courseId, memberId || undefined)
+      .then((rows) => {
+        if (cancelled) return
+        setModules(rows)
+        // Preselect every module the member doesn't already have an
+        // active cert for — usually what Ruby wants.
+        setSelectedModuleIds(
+          new Set(rows.filter((r) => !r.alreadyIssued).map((r) => r.id)),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setModules([])
+          setSelectedModuleIds(new Set())
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingModules(false)
+      })
+    return () => {
+      cancelled = true
     }
-    return Array.from(map.values())
-  }, [modules])
+  }, [open, courseId, memberId])
+
+  function toggleModule(id: string) {
+    setSelectedModuleIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const eligibleModuleIds = modules
+    .filter((m) => !m.alreadyIssued)
+    .map((m) => m.id)
+  const allEligibleSelected =
+    eligibleModuleIds.length > 0 &&
+    eligibleModuleIds.every((id) => selectedModuleIds.has(id))
+
+  function toggleAll() {
+    if (allEligibleSelected) {
+      setSelectedModuleIds(new Set())
+    } else {
+      setSelectedModuleIds(new Set(eligibleModuleIds))
+    }
+  }
 
   function handleSubmit() {
-    if (!memberId || !moduleId) {
-      toast.error('Pick a member and a module')
+    if (!memberId) {
+      toast.error('Pick a member')
+      return
+    }
+    if (selectedModuleIds.size === 0) {
+      toast.error('Pick at least one module')
       return
     }
     startTransition(async () => {
-      const result = await issueCertificateAction(memberId, moduleId)
+      const result = await issueCertificatesBulkAction(
+        memberId,
+        [...selectedModuleIds],
+      )
       if (!result.ok) {
         toast.error(result.error)
         return
       }
-      toast.success('Certificate issued')
+      const skipped = result.results.length - result.issuedCount
+      if (result.issuedCount === 0) {
+        toast.warning('Nothing issued — all selected modules already have certs')
+        return
+      }
+      toast.success(
+        skipped > 0
+          ? `${result.issuedCount} certificate${result.issuedCount === 1 ? '' : 's'} issued · ${skipped} skipped`
+          : `${result.issuedCount} certificate${result.issuedCount === 1 ? '' : 's'} issued`,
+      )
       onIssued()
-      onOpenChange(false)
-      setMemberId('')
-      setModuleId('')
-      setMemberQuery('')
+      handleOpenChange(false)
     })
   }
 
+  const selectedCourse = courses.find((c) => c.id === courseId)
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Issue certificate</DialogTitle>
+          <DialogTitle>Issue certificates</DialogTitle>
           <DialogDescription>
-            Hand-issue a certificate to a member for a specific module. This
-            bypasses the module-completion check — use for support edge cases
-            only. The recipient will see it in their Certificates tab and can
-            download it immediately.
+            Hand-issue certificates for a member. Pick a course, then tick
+            the modules you want to cover. Bypasses the module-completion
+            gate — use for support edge cases only.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* MEMBER */}
           <div className="space-y-2">
-            <Label>Search member</Label>
-            <Input
-              value={memberQuery}
-              onChange={(e) => setMemberQuery(e.target.value)}
-              placeholder="Name or email…"
-            />
+            <Label>Member</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={memberQuery}
+                onChange={(e) => setMemberQuery(e.target.value)}
+                placeholder="Search by name or email…"
+                className="pl-9"
+              />
+            </div>
             <Select
               value={memberId}
               onValueChange={(v) => setMemberId(v ?? '')}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Choose a member" />
+                <SelectValue placeholder="Choose a member">
+                  {(v: string) => {
+                    if (!v) return 'Choose a member'
+                    const m = members.find((x) => x.id === v)
+                    if (!m) return 'Choose a member'
+                    return m.name?.trim()
+                      ? `${m.name} — ${m.email}`
+                      : m.email
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {filteredMembers.length === 0 ? (
@@ -127,12 +237,16 @@ export function IssueCertificateDialog({
                 ) : (
                   filteredMembers.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
-                      {m.name?.trim() || m.email}
-                      {m.name?.trim() ? (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {m.email}
+                      <div className="flex flex-col">
+                        <span className="text-sm">
+                          {m.name?.trim() || m.email.split('@')[0]}
                         </span>
-                      ) : null}
+                        {m.name?.trim() ? (
+                          <span className="text-xs text-muted-foreground">
+                            {m.email}
+                          </span>
+                        ) : null}
+                      </div>
                     </SelectItem>
                   ))
                 )}
@@ -140,47 +254,133 @@ export function IssueCertificateDialog({
             </Select>
           </div>
 
+          {/* COURSE */}
           <div className="space-y-2">
-            <Label>Module</Label>
+            <Label>Course</Label>
             <Select
-              value={moduleId}
-              onValueChange={(v) => setModuleId(v ?? '')}
+              value={courseId}
+              onValueChange={(v) => handleCourseChange(v ?? '')}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Choose a module" />
+                <SelectValue placeholder="Choose a course">
+                  {(v: string) => {
+                    if (!v) return 'Choose a course'
+                    const c = courses.find((x) => x.id === v)
+                    return c?.title ?? 'Choose a course'
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {groupedModules.length === 0 ? (
+                {courses.length === 0 ? (
                   <div className="px-3 py-2 text-xs text-muted-foreground">
-                    No cert-enabled courses have modules yet.
+                    No courses yet
                   </div>
                 ) : (
-                  groupedModules.map((g) => (
-                    <SelectGroup key={g.courseTitle}>
-                      <SelectLabel>{g.courseTitle}</SelectLabel>
-                      {g.items.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.title}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+                  courses.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <div className="flex flex-col">
+                        <span className="text-sm">{c.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {c.moduleCount} module{c.moduleCount === 1 ? '' : 's'}
+                          {c.certificateEnabled ? '' : ' · certs disabled'}
+                        </span>
+                      </div>
+                    </SelectItem>
                   ))
                 )}
               </SelectContent>
             </Select>
+            {selectedCourse && !selectedCourse.certificateEnabled ? (
+              <p className="flex items-start gap-1.5 text-xs text-amber-600">
+                <AlertCircle className="mt-0.5 size-3 shrink-0" />
+                This course has certificates disabled globally — a hand-issue
+                still works, but auto-issue won&apos;t fire for other members.
+              </p>
+            ) : null}
           </div>
+
+          {/* MODULES */}
+          {courseId ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Modules</Label>
+                {eligibleModuleIds.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    {allEligibleSelected ? 'Clear selection' : 'Select all'}
+                  </button>
+                ) : null}
+              </div>
+              {loadingModules ? (
+                <div className="rounded-md border bg-muted/30 p-4 text-xs text-muted-foreground">
+                  Loading modules…
+                </div>
+              ) : modules.length === 0 ? (
+                <div className="rounded-md border bg-muted/30 p-4 text-xs text-muted-foreground">
+                  This course has no modules yet.
+                </div>
+              ) : (
+                <ul className="max-h-56 overflow-y-auto rounded-md border">
+                  {modules.map((m) => {
+                    const checked = selectedModuleIds.has(m.id)
+                    const disabled = m.alreadyIssued
+                    return (
+                      <li
+                        key={m.id}
+                        className="flex items-start gap-3 border-b px-3 py-2 last:border-b-0"
+                      >
+                        <Checkbox
+                          id={`module-${m.id}`}
+                          checked={checked}
+                          disabled={disabled}
+                          onCheckedChange={() => toggleModule(m.id)}
+                          className="mt-0.5"
+                        />
+                        <label
+                          htmlFor={`module-${m.id}`}
+                          className="min-w-0 flex-1 cursor-pointer text-sm"
+                        >
+                          <div className="truncate">{m.title}</div>
+                          {m.alreadyIssued ? (
+                            <div className="flex items-center gap-1 text-xs text-success">
+                              <Award className="size-3" />
+                              Already issued
+                            </div>
+                          ) : m.hasRevokedIssuance ? (
+                            <div className="text-xs text-amber-600">
+                              Revoked — reinstate from the row menu instead
+                            </div>
+                          ) : null}
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
             disabled={pending}
           >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={pending}>
-            {pending ? 'Issuing…' : 'Issue certificate'}
+          <Button
+            onClick={handleSubmit}
+            disabled={pending || selectedModuleIds.size === 0 || !memberId}
+          >
+            {pending
+              ? 'Issuing…'
+              : selectedModuleIds.size > 1
+                ? `Issue ${selectedModuleIds.size} certificates`
+                : 'Issue certificate'}
           </Button>
         </DialogFooter>
       </DialogContent>
