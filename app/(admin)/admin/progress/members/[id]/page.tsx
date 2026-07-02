@@ -18,6 +18,7 @@ import {
   StatusBadge,
 } from '@/components/shared'
 import { MemberEnrollmentsTable } from '@/components/admin/progress/member-enrollments-table'
+import { NudgeRowAction } from '@/components/admin/progress/nudge-row-action'
 import { fmtDate, getInitials } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 
@@ -70,6 +71,15 @@ export default async function AdminProgressMemberDetailPage({
               {fmtDate(user.lastLoginAt)}
             </p>
           </div>
+          {user.isActive ? (
+            <div className="shrink-0">
+              <NudgeRowAction
+                memberId={user.id}
+                memberName={user.name ?? user.email}
+                variant="button"
+              />
+            </div>
+          ) : null}
         </div>
       </SectionCard>
 
