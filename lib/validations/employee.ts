@@ -70,3 +70,38 @@ export const updateChecklistItemSchema = z.object({
   note: z.string().max(1000).nullable().optional(),
 })
 export type UpdateChecklistItemInput = z.input<typeof updateChecklistItemSchema>
+
+// ---------------------------------------------------------------------
+// Checklist template CRUD
+// ---------------------------------------------------------------------
+
+export const createTemplateSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(80),
+  description: z.string().max(1000).nullable().optional(),
+  isDefault: z.boolean().optional(),
+})
+export type CreateTemplateInput = z.input<typeof createTemplateSchema>
+
+export const updateTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  description: z.string().max(1000).nullable().optional(),
+  isDefault: z.boolean().optional(),
+})
+export type UpdateTemplateInput = z.input<typeof updateTemplateSchema>
+
+export const addTemplateItemSchema = z.object({
+  label: z.string().trim().min(1, 'Label is required').max(120),
+  description: z.string().max(500).nullable().optional(),
+})
+export type AddTemplateItemInput = z.input<typeof addTemplateItemSchema>
+
+export const updateTemplateItemSchema = z.object({
+  label: z.string().trim().min(1).max(120).optional(),
+  description: z.string().max(500).nullable().optional(),
+})
+export type UpdateTemplateItemInput = z.input<typeof updateTemplateItemSchema>
+
+export const moveTemplateItemSchema = z.object({
+  targetIndex: z.number().int().min(0),
+})
+export type MoveTemplateItemInput = z.input<typeof moveTemplateItemSchema>

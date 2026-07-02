@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -16,25 +16,56 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import type { TemplateListItem } from '@/lib/services/checklist-template-service'
 
 import { createEmployeeAction } from '@/app/(admin)/admin/onboarding/actions'
 
 interface NewEmployeeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  templates: TemplateListItem[]
 }
 
-export function NewEmployeeDialog({ open, onOpenChange }: NewEmployeeDialogProps) {
+// Sentinel value for the "no template" option. Select values must be
+// non-empty strings, so we round-trip through this token and translate
+// back to null before hitting the action.
+const NO_TEMPLATE = '__none__'
+
+export function NewEmployeeDialog({
+  open,
+  onOpenChange,
+  templates,
+}: NewEmployeeDialogProps) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [roleTitle, setRoleTitle] = useState('')
   const [onboardingDate, setOnboardingDate] = useState('')
+  // We track only the user's *override* — the effective value is
+  // derived below. That way we don't need an effect to preselect on
+  // open (which would trip react-hooks/purity for the setState).
+  const [pickedSlug, setPickedSlug] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  const defaultSlug = useMemo(() => {
+    const preferred =
+      templates.find((t) => t.isDefault) ?? templates[0] ?? null
+    return preferred?.slug ?? NO_TEMPLATE
+  }, [templates])
+
+  const templateSlug = pickedSlug ?? defaultSlug
 
   function reset() {
     setName('')
     setRoleTitle('')
     setOnboardingDate('')
+    setPickedSlug(null)
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -46,6 +77,7 @@ export function NewEmployeeDialog({ open, onOpenChange }: NewEmployeeDialogProps
           name,
           roleTitle,
           onboardingDate: onboardingDate || null,
+          templateSlug: templateSlug === NO_TEMPLATE ? null : templateSlug,
         })
         toast.success(`Added ${employee.name}`)
         reset()
@@ -104,6 +136,34 @@ export function NewEmployeeDialog({ open, onOpenChange }: NewEmployeeDialogProps
               value={onboardingDate}
               onChange={(e) => setOnboardingDate(e.target.value)}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="employee-template">Checklist template</Label>
+            <Select
+              value={templateSlug}
+              onValueChange={(v) => setPickedSlug(v ?? NO_TEMPLATE)}
+            >
+              <SelectTrigger id="employee-template" className="h-9">
+                <SelectValue>
+                  {(v: string) => {
+                    if (v === NO_TEMPLATE) return 'No template'
+                    const t = templates.find((tt) => tt.slug === v)
+                    return t
+                      ? `${t.name}${t.isDefault ? ' · default' : ''}`
+                      : 'Select template'
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_TEMPLATE}>No template</SelectItem>
+                {templates.map((t) => (
+                  <SelectItem key={t.id} value={t.slug}>
+                    {t.name}
+                    {t.isDefault ? ' · default' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <DialogFooter>
             <Button

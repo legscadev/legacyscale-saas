@@ -26,7 +26,9 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { EmployeeListItem } from '@/lib/services/employee-service'
+import type { TemplateListItem } from '@/lib/services/checklist-template-service'
 
+import { ChecklistsTab } from './checklists-tab'
 import { NewEmployeeDialog } from './new-employee-dialog'
 
 export type EmployeeRow = Pick<
@@ -44,9 +46,10 @@ export type EmployeeRow = Pick<
 
 interface OnboardingShellProps {
   initialEmployees: EmployeeRow[]
+  initialTemplates: TemplateListItem[]
 }
 
-type TabKey = 'active' | 'offboarded'
+type TabKey = 'active' | 'offboarded' | 'checklists'
 
 function formatDate(date: Date | null | undefined) {
   if (!date) return '—'
@@ -90,12 +93,17 @@ function ChecklistBar({
   )
 }
 
-export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
+export function OnboardingShell({
+  initialEmployees,
+  initialTemplates,
+}: OnboardingShellProps) {
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>('active')
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+
+  const onEmployeeTab = tab !== 'checklists'
 
   const activeCount = useMemo(
     () => initialEmployees.filter((e) => e.status === 'ACTIVE').length,
@@ -124,12 +132,14 @@ export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
         title="Onboarding"
         description="Track hiring pipeline, checklist progress, and offboarding history for the internal team."
         actions={
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 size-4" />
-              Add employee
-            </Button>
-          </div>
+          onEmployeeTab ? (
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 size-4" />
+                Add employee
+              </Button>
+            </div>
+          ) : null
         }
       />
 
@@ -152,21 +162,29 @@ export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
                 {offboardedCount}
               </span>
             </TabsTrigger>
+            <TabsTrigger value="checklists">
+              Checklists
+              <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+                {initialTemplates.length}
+              </span>
+            </TabsTrigger>
           </TabsList>
         </Tabs>
 
-        <div className="relative w-full sm:w-72">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name or role"
-            className="pl-9"
-          />
-        </div>
+        {onEmployeeTab ? (
+          <div className="relative w-full sm:w-72">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name or role"
+              className="pl-9"
+            />
+          </div>
+        ) : null}
       </div>
 
       {isPending ? (
@@ -176,7 +194,9 @@ export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
         </div>
       ) : null}
 
-      {rows.length === 0 ? (
+      {!onEmployeeTab ? (
+        <ChecklistsTab templates={initialTemplates} />
+      ) : rows.length === 0 ? (
         <EmptyState
           icon={UserPlus}
           tone={tab === 'active' ? 'brand' : 'neutral'}
@@ -269,7 +289,7 @@ export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
         </div>
       )}
 
-      {anyAttention ? (
+      {onEmployeeTab && anyAttention ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200/70 bg-amber-50/60 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <div>
@@ -279,7 +299,11 @@ export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
         </div>
       ) : null}
 
-      <NewEmployeeDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <NewEmployeeDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        templates={initialTemplates}
+      />
     </div>
   )
 }
