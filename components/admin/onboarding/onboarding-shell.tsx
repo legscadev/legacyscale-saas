@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import {
   AlertTriangle,
@@ -93,12 +93,29 @@ function ChecklistBar({
   )
 }
 
+const VALID_TABS: readonly TabKey[] = ['active', 'offboarded', 'checklists']
+
 export function OnboardingShell({
   initialEmployees,
   initialTemplates,
 }: OnboardingShellProps) {
   const router = useRouter()
-  const [tab, setTab] = useState<TabKey>('active')
+  const searchParams = useSearchParams()
+
+  // Tab reads from ?tab= so linking back from a template editor page
+  // (or refreshing) lands on the right tab. Unknown values fall back
+  // to Active without erroring.
+  const paramTab = searchParams.get('tab') as TabKey | null
+  const tab: TabKey = paramTab && VALID_TABS.includes(paramTab) ? paramTab : 'active'
+
+  function setTab(next: TabKey) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (next === 'active') params.delete('tab')
+    else params.set('tab', next)
+    const qs = params.toString()
+    router.replace(qs ? `/admin/onboarding?${qs}` : '/admin/onboarding')
+  }
+
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
