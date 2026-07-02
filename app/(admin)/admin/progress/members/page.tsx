@@ -22,6 +22,7 @@ import { getInitials, progressTone, relativeTime } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 import type { MembersSort } from '@/lib/services/admin-progress-service'
 import { MembersListFilters } from '@/components/admin/progress/members-list-filters'
+import { NudgeRowAction } from '@/components/admin/progress/nudge-row-action'
 
 const PAGE_SIZE = 10
 
@@ -161,6 +162,7 @@ export default async function AdminProgressMembersPage({
               <div className="hidden w-28 shrink-0 text-right sm:block">
                 Last activity
               </div>
+              <div className="size-8 shrink-0" />
               <div className="size-4 shrink-0" />
             </div>
             <ul className="divide-y">
@@ -213,6 +215,11 @@ export default async function AdminProgressMembersPage({
                     <div className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground sm:block">
                       {relativeTime(m.lastActivity)}
                     </div>
+
+                    <NudgeRowAction
+                      memberId={m.id}
+                      memberName={m.name ?? m.email}
+                    />
 
                     <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   </Link>
