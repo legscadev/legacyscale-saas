@@ -203,7 +203,7 @@ export function IssueCertificateDialog({
         <div className="space-y-4">
           {/* MEMBER */}
           <div className="space-y-2">
-            <Label>Member</Label>
+            <Label htmlFor="issue-cert-member">Member</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -217,7 +217,7 @@ export function IssueCertificateDialog({
               value={memberId}
               onValueChange={(v) => setMemberId(v ?? '')}
             >
-              <SelectTrigger>
+              <SelectTrigger id="issue-cert-member">
                 <SelectValue placeholder="Choose a member">
                   {(v: string) => {
                     if (!v) return 'Choose a member'
@@ -256,12 +256,12 @@ export function IssueCertificateDialog({
 
           {/* COURSE */}
           <div className="space-y-2">
-            <Label>Course</Label>
+            <Label htmlFor="issue-cert-course">Course</Label>
             <Select
               value={courseId}
               onValueChange={(v) => handleCourseChange(v ?? '')}
             >
-              <SelectTrigger>
+              <SelectTrigger id="issue-cert-course">
                 <SelectValue placeholder="Choose a course">
                   {(v: string) => {
                     if (!v) return 'Choose a course'

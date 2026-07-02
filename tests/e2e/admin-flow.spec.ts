@@ -64,28 +64,47 @@ test.describe('Admin flow', () => {
    * write-side is exercised at the service layer, and issuing here
    * would leave a real row + PDF for the E2E admin.
    */
-  test('admin certificates page + issue dialog opens', async ({ page }) => {
+  test('admin certificates page + issue dialog: member search, course→modules, select-all', async ({
+    page,
+  }) => {
     await page.goto('/admin/certificates')
     await expect(page).toHaveURL(/\/admin\/certificates$/)
     await expect(
       page.getByRole('heading', { name: 'Certificates', level: 1 }),
     ).toBeVisible()
 
-    // Filter + search controls exist.
-    await expect(page.getByPlaceholder(/search by member/i)).toBeVisible()
+    // Row-level search is visible.
+    await expect(
+      page.getByPlaceholder(/search by member.*module.*course/i),
+    ).toBeVisible()
 
-    // Issue-cert dialog opens with both pickers.
+    // Open the Issue certificates dialog.
     await page.getByRole('button', { name: /issue certificate/i }).click()
-    const dialog = page.getByRole('dialog', { name: /issue certificate/i })
+    const dialog = page.getByRole('dialog', { name: /issue certificates/i })
     await expect(dialog).toBeVisible()
+
+    // Member section — search input + Select trigger. Base UI's
+    // SelectTrigger presents as role=combobox (the correct ARIA for
+    // a listbox-style picker). The accessible name comes from the
+    // associated Label ("Member" / "Course"), not the placeholder.
     await expect(
-      dialog.getByText(/search member/i, { exact: false }).first(),
+      dialog.getByPlaceholder(/search by name or email/i),
     ).toBeVisible()
     await expect(
-      dialog.getByText(/^module$/i).first(),
+      dialog.getByRole('combobox', { name: /^member$/i }),
     ).toBeVisible()
 
-    // Close without submitting.
+    // Course section — same combobox pattern.
+    await expect(
+      dialog.getByRole('combobox', { name: /^course$/i }),
+    ).toBeVisible()
+
+    // Nothing selected yet → submit disabled.
+    await expect(
+      dialog.getByRole('button', { name: /issue certificate/i }),
+    ).toBeDisabled()
+
+    // Close without submitting so we don't create real issuances.
     await dialog.getByRole('button', { name: /cancel/i }).click()
     await expect(dialog).toBeHidden()
   })
