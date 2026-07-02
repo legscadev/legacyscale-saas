@@ -1,10 +1,26 @@
 'use client'
 
-import { useCallback, useState, useTransition } from 'react'
+import { useCallback, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowDown,
-  ArrowUp,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
+  GripVertical,
   Loader2,
   Plus,
   Trash2,
@@ -140,16 +156,52 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
     })
   }
 
-  function moveItem(itemId: string, targetIndex: number) {
-    startTransition(async () => {
-      try {
-        await moveTemplateItemAction(itemId, { targetIndex })
-        refresh()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to move')
-      }
-    })
-  }
+  // dnd-kit sensors — Pointer for mouse/touch, Keyboard for a11y.
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      // Small distance threshold so a click-on-label doesn't kick off
+      // a drag by accident.
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  const sortableIds = useMemo(
+    () => detail.items.map((i) => i.id),
+    [detail.items],
+  )
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const oldIndex = detail.items.findIndex((i) => i.id === active.id)
+      const newIndex = detail.items.findIndex((i) => i.id === over.id)
+      if (oldIndex < 0 || newIndex < 0) return
+
+      // Optimistic reorder — the drop feels instant. On server error
+      // we snap back to the previous order so the UI matches truth.
+      const previous = detail.items
+      const nextItems = arrayMove(detail.items, oldIndex, newIndex)
+      setDetail({ ...detail, items: nextItems })
+
+      void (async () => {
+        try {
+          await moveTemplateItemAction(String(active.id), {
+            targetIndex: newIndex,
+          })
+          refresh()
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to move')
+          setDetail({ ...detail, items: previous })
+        }
+      })()
+    },
+    [detail, refresh],
+  )
 
   async function askDelete(itemId: string) {
     try {
@@ -271,7 +323,7 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
             Items ({detail.items.length})
           </h2>
           <span className="hidden text-xs text-muted-foreground sm:inline">
-            Click a label to rename · arrows reorder · trash removes
+            Drag to reorder · click label to rename · trash removes
           </span>
         </div>
         {detail.items.length === 0 ? (
@@ -279,21 +331,28 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
             No items yet. Add one below.
           </p>
         ) : (
-          <ul className="divide-y">
-            {detail.items.map((item, idx) => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                canUp={idx > 0}
-                canDown={idx < detail.items.length - 1}
-                disabled={pending}
-                onRename={(label) => renameItem(item.id, label, item.label)}
-                onUp={() => moveItem(item.id, idx - 1)}
-                onDown={() => moveItem(item.id, idx + 1)}
-                onDelete={() => askDelete(item.id)}
-              />
-            ))}
-          </ul>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={sortableIds}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul className="divide-y">
+                {detail.items.map((item) => (
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    disabled={pending}
+                    onRename={(label) => renameItem(item.id, label, item.label)}
+                    onDelete={() => askDelete(item.id)}
+                  />
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
         )}
         <form
           onSubmit={addItem}
@@ -398,48 +457,54 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
 
 function ItemRow({
   item,
-  canUp,
-  canDown,
   disabled,
   onRename,
-  onUp,
-  onDown,
   onDelete,
 }: {
   item: TemplateDetail['items'][number]
-  canUp: boolean
-  canDown: boolean
   disabled: boolean
   onRename: (label: string) => void
-  onUp: () => void
-  onDown: () => void
   onDelete: () => void
 }) {
   const [draft, setDraft] = useState(item.label)
   const [editing, setEditing] = useState(false)
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    // Slight pop while dragging so the row lifts above its neighbours.
+    zIndex: isDragging ? 10 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  }
+
   return (
-    <li className="group flex items-center gap-1.5 px-2 py-1 hover:bg-muted/30">
-      <div className="flex flex-col">
-        <button
-          type="button"
-          className="grid size-4 place-items-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-20"
-          onClick={onUp}
-          disabled={!canUp || disabled}
-          aria-label="Move up"
-        >
-          <ArrowUp className="size-2.5" />
-        </button>
-        <button
-          type="button"
-          className="grid size-4 place-items-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-20"
-          onClick={onDown}
-          disabled={!canDown || disabled}
-          aria-label="Move down"
-        >
-          <ArrowDown className="size-2.5" />
-        </button>
-      </div>
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'group flex items-center gap-1.5 bg-card px-2 py-1 hover:bg-muted/30',
+        isDragging && 'shadow-md',
+      )}
+    >
+      <button
+        type="button"
+        aria-label="Drag to reorder"
+        {...attributes}
+        {...listeners}
+        className="cursor-grab touch-none rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"
+        disabled={disabled}
+      >
+        <GripVertical className="size-3.5" />
+      </button>
       {editing ? (
         <Input
           autoFocus
