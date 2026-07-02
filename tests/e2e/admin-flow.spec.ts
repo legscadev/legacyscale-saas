@@ -83,18 +83,17 @@ test.describe('Admin flow', () => {
     const dialog = page.getByRole('dialog', { name: /issue certificates/i })
     await expect(dialog).toBeVisible()
 
-    // Member section — search input + Select trigger. Base UI's
-    // SelectTrigger presents as role=combobox (the correct ARIA for
-    // a listbox-style picker). The accessible name comes from the
-    // associated Label ("Member" / "Course"), not the placeholder.
+    // Member section: search input + always-visible listbox. We
+    // dropped the Select dropdown because focusing the search input
+    // closed it — a persistent list works reliably instead.
     await expect(
       dialog.getByPlaceholder(/search by name or email/i),
     ).toBeVisible()
     await expect(
-      dialog.getByRole('combobox', { name: /^member$/i }),
+      dialog.getByRole('listbox', { name: /members/i }),
     ).toBeVisible()
 
-    // Course section — same combobox pattern.
+    // Course still uses a Select combobox (small dropdown, no search).
     await expect(
       dialog.getByRole('combobox', { name: /^course$/i }),
     ).toBeVisible()

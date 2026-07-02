@@ -186,6 +186,7 @@ export function IssueCertificateDialog({
     })
   }
 
+  const selectedMember = members.find((m) => m.id === memberId)
   const selectedCourse = courses.find((c) => c.id === courseId)
 
   return (
@@ -201,44 +202,65 @@ export function IssueCertificateDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* MEMBER */}
+          {/* MEMBER — search input + scrollable list. Base UI Select
+              closes its popup when focus moves to another input, so a
+              combined "search + dropdown" pattern flickers. A single
+              always-visible list is simpler and works reliably. */}
           <div className="space-y-2">
-            <Label htmlFor="issue-cert-member">Member</Label>
+            <Label htmlFor="issue-cert-member-search">Member</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                id="issue-cert-member-search"
                 value={memberQuery}
                 onChange={(e) => setMemberQuery(e.target.value)}
                 placeholder="Search by name or email…"
                 className="pl-9"
               />
             </div>
-            <Select
-              value={memberId}
-              onValueChange={(v) => setMemberId(v ?? '')}
-            >
-              <SelectTrigger id="issue-cert-member">
-                <SelectValue placeholder="Choose a member">
-                  {(v: string) => {
-                    if (!v) return 'Choose a member'
-                    const m = members.find((x) => x.id === v)
-                    if (!m) return 'Choose a member'
-                    return m.name?.trim()
-                      ? `${m.name} — ${m.email}`
-                      : m.email
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {filteredMembers.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">
-                    No matches
+            {memberId ? (
+              <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">
+                    {selectedMember?.name?.trim() ||
+                      selectedMember?.email ||
+                      '—'}
                   </div>
+                  {selectedMember?.name?.trim() ? (
+                    <div className="truncate text-muted-foreground">
+                      {selectedMember.email}
+                    </div>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMemberId('')}
+                  className="text-primary hover:underline"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <ul
+                role="listbox"
+                aria-label="Members"
+                className="max-h-40 overflow-y-auto rounded-md border"
+              >
+                {filteredMembers.length === 0 ? (
+                  <li className="px-3 py-2 text-xs text-muted-foreground">
+                    No matches
+                  </li>
                 ) : (
                   filteredMembers.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      <div className="flex flex-col">
-                        <span className="text-sm">
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={memberId === m.id}
+                        onClick={() => setMemberId(m.id)}
+                        className="flex w-full flex-col items-start border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/50"
+                      >
+                        <span>
                           {m.name?.trim() || m.email.split('@')[0]}
                         </span>
                         {m.name?.trim() ? (
@@ -246,12 +268,12 @@ export function IssueCertificateDialog({
                             {m.email}
                           </span>
                         ) : null}
-                      </div>
-                    </SelectItem>
+                      </button>
+                    </li>
                   ))
                 )}
-              </SelectContent>
-            </Select>
+              </ul>
+            )}
           </div>
 
           {/* COURSE */}
@@ -261,7 +283,7 @@ export function IssueCertificateDialog({
               value={courseId}
               onValueChange={(v) => handleCourseChange(v ?? '')}
             >
-              <SelectTrigger id="issue-cert-course">
+              <SelectTrigger id="issue-cert-course" className="w-full">
                 <SelectValue placeholder="Choose a course">
                   {(v: string) => {
                     if (!v) return 'Choose a course'
