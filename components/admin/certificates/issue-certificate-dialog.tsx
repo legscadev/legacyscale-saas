@@ -258,16 +258,26 @@ export function IssueCertificateDialog({
                         role="option"
                         aria-selected={memberId === m.id}
                         onClick={() => setMemberId(m.id)}
-                        className="flex w-full flex-col items-start border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/50"
+                        className="flex w-full items-start justify-between gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/50"
                       >
-                        <span>
-                          {m.name?.trim() || m.email.split('@')[0]}
-                        </span>
-                        {m.name?.trim() ? (
-                          <span className="text-xs text-muted-foreground">
-                            {m.email}
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate">
+                            {m.name?.trim() || m.email.split('@')[0]}
                           </span>
-                        ) : null}
+                          {m.name?.trim() ? (
+                            <span className="truncate text-xs text-muted-foreground">
+                              {m.email}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span
+                          className={
+                            'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ' +
+                            roleTone(m.role)
+                          }
+                        >
+                          {roleLabel(m.role)}
+                        </span>
                       </button>
                     </li>
                   ))
@@ -408,4 +418,16 @@ export function IssueCertificateDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function roleLabel(role: 'ADMIN' | 'TEAM' | 'MEMBER'): string {
+  if (role === 'ADMIN') return 'Admin'
+  if (role === 'TEAM') return 'Team'
+  return 'Member'
+}
+
+function roleTone(role: 'ADMIN' | 'TEAM' | 'MEMBER'): string {
+  if (role === 'ADMIN') return 'bg-destructive/10 text-destructive'
+  if (role === 'TEAM') return 'bg-info/10 text-info'
+  return 'bg-muted text-muted-foreground'
 }

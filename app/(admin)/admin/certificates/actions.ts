@@ -92,6 +92,7 @@ export interface MemberPickerOption {
   id: string
   name: string | null
   email: string
+  role: 'ADMIN' | 'TEAM' | 'MEMBER'
 }
 
 export interface CoursePickerOption {
@@ -114,10 +115,13 @@ export interface ModulePickerRow {
 
 export async function listMembersForCertPicker(): Promise<MemberPickerOption[]> {
   await requireAdmin()
+  // Every active, non-deleted user regardless of role — admins +
+  // team members also take courses and sometimes need certificates
+  // hand-issued for support reasons.
   return prisma.user.findMany({
-    where: { role: 'MEMBER', isActive: true, deletedAt: null },
+    where: { isActive: true, deletedAt: null },
     orderBy: [{ name: 'asc' }, { email: 'asc' }],
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, role: true },
     take: 500,
   })
 }
