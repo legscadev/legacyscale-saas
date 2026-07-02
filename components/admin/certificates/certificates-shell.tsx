@@ -49,8 +49,8 @@ import {
 import { IssueCertificateDialog } from './issue-certificate-dialog'
 import { RevokeCertificateDialog } from './revoke-certificate-dialog'
 import type {
+  CoursePickerOption,
   MemberPickerOption,
-  ModulePickerOption,
 } from '@/app/(admin)/admin/certificates/actions'
 
 type StatusFilter = 'all' | 'active' | 'revoked'
@@ -58,13 +58,13 @@ type StatusFilter = 'all' | 'active' | 'revoked'
 interface CertificatesShellProps {
   initialRows: AdminCertificateRow[]
   members: MemberPickerOption[]
-  modules: ModulePickerOption[]
+  courses: CoursePickerOption[]
 }
 
 export function CertificatesShell({
   initialRows,
   members,
-  modules,
+  courses,
 }: CertificatesShellProps) {
   const [rows, setRows] = useState(initialRows)
   const [search, setSearch] = useState('')
@@ -184,7 +184,7 @@ export function CertificatesShell({
         open={issueOpen}
         onOpenChange={setIssueOpen}
         members={members}
-        modules={modules}
+        courses={courses}
         onIssued={refresh}
       />
       <RevokeCertificateDialog
