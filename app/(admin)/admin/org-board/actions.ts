@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { orgBoardService } from '@/lib/services/org-board-service'
-import { employeeService } from '@/lib/services/employee-service'
+import { prisma } from '@/lib/prisma'
 import {
   addPositionAssignmentSchema,
   createOrgNodeSchema,
@@ -23,16 +23,37 @@ function revalidate(nodeId?: string) {
 
 export async function searchAssignableEmployeesAction(query: string) {
   await requireAdmin()
-  // Reuse the onboarding search but reshape to the trimmer shape
-  // the org-board dialog needs. Callers don't care about the
-  // "already linked" state — an employee can hold multiple org
-  // positions if HR insists, so we surface all matches.
-  const users = await employeeService.searchLinkableUsers(query)
-  return users.map((u) => ({
-    id: u.id,
-    email: u.email,
-    name: u.name,
-    role: u.role,
+  // Search the Employee table directly. Onboarding's
+  // searchLinkableUsers returns User IDs, which look identical to
+  // Employee IDs (both UUIDs) but reference a different table —
+  // sending those back through addOrgNode would trip the
+  // org_nodes.employee_id foreign key. We only surface ACTIVE
+  // employees; offboarded ones are hidden so admins don't
+  // accidentally seat a former hire.
+  const q = query.trim()
+  if (!q) return []
+  const employees = await prisma.employee.findMany({
+    where: {
+      status: 'ACTIVE',
+      OR: [
+        { name: { contains: q, mode: 'insensitive' } },
+        { roleTitle: { contains: q, mode: 'insensitive' } },
+      ],
+    },
+    take: 8,
+    orderBy: [{ name: 'asc' }],
+    select: {
+      id: true,
+      name: true,
+      roleTitle: true,
+      user: { select: { email: true, role: true } },
+    },
+  })
+  return employees.map((e) => ({
+    id: e.id,
+    email: e.user?.email ?? '',
+    name: e.name,
+    role: (e.user?.role ?? 'TEAM') as 'ADMIN' | 'TEAM' | 'MEMBER',
   }))
 }
 
