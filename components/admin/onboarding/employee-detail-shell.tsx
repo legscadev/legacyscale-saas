@@ -66,17 +66,15 @@ interface EmployeeDetailShellProps {
   employee: EmployeeDetail
 }
 
-const STATUS_CYCLE: ChecklistItemStatusValue[] = [
+/** Order shown in the status dropdown. Kept as a runtime const so the
+ *  menu order is guaranteed (Object.keys on the label map is stable
+ *  in every modern engine, but relying on that is fragile). */
+const STATUS_OPTIONS: ChecklistItemStatusValue[] = [
   'PENDING',
   'OK',
   'ATTENTION',
   'NA',
 ]
-
-function nextStatus(current: ChecklistItemStatusValue): ChecklistItemStatusValue {
-  const idx = STATUS_CYCLE.indexOf(current)
-  return STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]!
-}
 
 function StatusPill({ status }: { status: ChecklistItemStatusValue }) {
   const cls =
@@ -128,11 +126,16 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
   const { template, checklist } = employee
   const isOffboarded = employee.status === 'OFFBOARDED'
 
-  function handleToggle(itemId: string, current: ChecklistItemStatusValue) {
+  function handleStatusChange(
+    itemId: string,
+    next: ChecklistItemStatusValue,
+    current: ChecklistItemStatusValue,
+  ) {
+    if (next === current) return
     startTransition(async () => {
       try {
         await updateChecklistItemAction(employee.id, itemId, {
-          status: nextStatus(current),
+          status: next,
         })
       } catch (err) {
         const message =
@@ -324,11 +327,8 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
                 : 'No checklist template assigned'}
             </p>
           </div>
-          <p
-            className="hidden text-xs text-muted-foreground/80 sm:block"
-            title="Click a status pill to cycle Pending → Done → Attention → N/A"
-          >
-            Click pill to cycle
+          <p className="hidden text-xs text-muted-foreground/80 sm:block">
+            Click a status to change
           </p>
         </div>
         {template && template.items.length > 0 ? (
@@ -337,7 +337,9 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
               <ChecklistRow
                 key={item.id}
                 item={item}
-                onToggle={() => handleToggle(item.id, item.status)}
+                onStatusChange={(next) =>
+                  handleStatusChange(item.id, next, item.status)
+                }
                 onNoteBlur={(note, previous) =>
                   handleNoteBlur(item.id, item.status, note, previous)
                 }
@@ -475,7 +477,7 @@ function MetaCard({
 
 function ChecklistRow({
   item,
-  onToggle,
+  onStatusChange,
   onNoteBlur,
   disabled,
 }: {
@@ -484,7 +486,7 @@ function ChecklistRow({
       ? I
       : never
     : never
-  onToggle: () => void
+  onStatusChange: (next: ChecklistItemStatusValue) => void
   onNoteBlur: (note: string, previous: string) => void
   disabled: boolean
 }) {
@@ -520,19 +522,38 @@ function ChecklistRow({
         >
           <MessageSquare className="size-3.5" />
         </button>
-        <button
-          type="button"
-          onClick={onToggle}
-          disabled={disabled}
-          className={cn(
-            'rounded-full transition-transform',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-            'hover:scale-[1.03] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50',
-          )}
-          aria-label={`Cycle status for ${item.label}`}
-        >
-          <StatusPill status={item.status} />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`Change status for ${item.label}`}
+            disabled={disabled}
+            render={
+              <button
+                type="button"
+                className={cn(
+                  'rounded-full transition-transform',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  'hover:scale-[1.03] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50',
+                )}
+              />
+            }
+          >
+            <StatusPill status={item.status} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem]">
+            {STATUS_OPTIONS.map((s) => (
+              <DropdownMenuItem
+                key={s}
+                onClick={() => onStatusChange(s)}
+                className={cn(
+                  'gap-2',
+                  s === item.status && 'bg-muted font-medium',
+                )}
+              >
+                <StatusPill status={s} />
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {noteOpen ? (
         <Textarea
