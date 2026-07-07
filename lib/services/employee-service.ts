@@ -27,6 +27,12 @@ export interface EmployeeListItem {
     pendingCount: number
     attentionCount: number
   }
+  /**
+   * Per-item status keyed by item id. Missing entries fall back to
+   * PENDING at render time — we never write PENDING rows explicitly
+   * to keep the DB sparse.
+   */
+  statusByItemId: Record<string, ChecklistItemStatus>
 }
 
 export interface EmployeeChecklistItem {
@@ -175,23 +181,32 @@ class EmployeeService {
           { createdAt: 'desc' },
         ],
         include: {
-          checklistStatuses: { select: { status: true } },
+          checklistStatuses: {
+            select: { itemId: true, status: true },
+          },
         },
       }),
       prisma.onboardingChecklistItem.count(),
     ])
 
-    return employees.map((e) => ({
-      id: e.id,
-      name: e.name,
-      roleTitle: e.roleTitle,
-      status: e.status,
-      onboardingDate: e.onboardingDate,
-      dateStarted: e.dateStarted,
-      offboardingDate: e.offboardingDate,
-      createdAt: e.createdAt,
-      checklist: summarize(totalItems, e.checklistStatuses),
-    }))
+    return employees.map((e) => {
+      const statusByItemId: Record<string, ChecklistItemStatus> = {}
+      for (const s of e.checklistStatuses) {
+        statusByItemId[s.itemId] = s.status
+      }
+      return {
+        id: e.id,
+        name: e.name,
+        roleTitle: e.roleTitle,
+        status: e.status,
+        onboardingDate: e.onboardingDate,
+        dateStarted: e.dateStarted,
+        offboardingDate: e.offboardingDate,
+        createdAt: e.createdAt,
+        checklist: summarize(totalItems, e.checklistStatuses),
+        statusByItemId,
+      }
+    })
   }
 
   async get(id: string): Promise<EmployeeDetail> {
@@ -229,6 +244,11 @@ class EmployeeService {
       }
     })
 
+    const statusByItemId: Record<string, ChecklistItemStatus> = {}
+    for (const s of employee.checklistStatuses) {
+      statusByItemId[s.itemId] = s.status
+    }
+
     return {
       id: employee.id,
       name: employee.name,
@@ -242,6 +262,7 @@ class EmployeeService {
       updatedAt: employee.updatedAt,
       items: merged,
       checklist: summarize(items.length, employee.checklistStatuses),
+      statusByItemId,
     }
   }
 

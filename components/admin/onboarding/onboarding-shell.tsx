@@ -6,49 +6,51 @@ import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import {
   AlertTriangle,
-  ChevronRight,
+  Check,
+  CircleDashed,
   ListChecks,
   Loader2,
+  MinusCircle,
   Plus,
   Search,
   UserPlus,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { PageHeader, EmptyState } from '@/components/shared'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { EmployeeListItem } from '@/lib/services/employee-service'
+import type { ChecklistItem } from '@/lib/services/checklist-service'
+import {
+  CHECKLIST_STATUS_LABELS,
+  type ChecklistItemStatusValue,
+} from '@/lib/validations/employee'
 
+import { updateChecklistItemStatusAction } from '@/app/(admin)/admin/onboarding/actions'
 import { NewEmployeeDialog } from './new-employee-dialog'
 
-export type EmployeeRow = Pick<
-  EmployeeListItem,
-  | 'id'
-  | 'name'
-  | 'roleTitle'
-  | 'status'
-  | 'onboardingDate'
-  | 'dateStarted'
-  | 'offboardingDate'
-> & {
-  checklist: EmployeeListItem['checklist']
-}
-
 interface OnboardingShellProps {
-  initialEmployees: EmployeeRow[]
+  initialEmployees: EmployeeListItem[]
+  initialItems: ChecklistItem[]
 }
 
 type TabKey = 'active' | 'offboarded'
+
+const STATUS_OPTIONS: ChecklistItemStatusValue[] = [
+  'PENDING',
+  'OK',
+  'ATTENTION',
+  'NA',
+]
 
 function formatDate(date: Date | null | undefined) {
   if (!date) return '—'
@@ -57,57 +59,57 @@ function formatDate(date: Date | null | undefined) {
   return format(d, 'MMM d, yyyy')
 }
 
-function ChecklistBar({
-  checklist,
-}: {
-  checklist: EmployeeRow['checklist']
-}) {
-  const { totalItems, okCount, pendingCount, attentionCount } = checklist
-  if (totalItems === 0) {
-    return <span className="text-xs text-muted-foreground">No items</span>
-  }
-  const okPct = (okCount / totalItems) * 100
-  const attnPct = (attentionCount / totalItems) * 100
-  const pendingPct = (pendingCount / totalItems) * 100
-  return (
-    <div className="flex min-w-[180px] items-center gap-3">
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="absolute inset-y-0 left-0 bg-emerald-500 transition-all"
-          style={{ width: `${okPct}%` }}
-        />
-        <div
-          className="absolute inset-y-0 bg-amber-500 transition-all"
-          style={{ left: `${okPct}%`, width: `${attnPct}%` }}
-        />
-        <div
-          className="absolute inset-y-0 bg-slate-300 transition-all dark:bg-slate-600"
-          style={{ left: `${okPct + attnPct}%`, width: `${pendingPct}%` }}
-        />
-      </div>
-      <span className="tabular-nums text-xs font-medium text-muted-foreground">
-        {okCount}/{totalItems}
-      </span>
-    </div>
-  )
+// Colour + icon lookup for cell rendering. Kept out of the component
+// so the JSX below stays scannable.
+const CELL_STYLE: Record<
+  ChecklistItemStatusValue,
+  { className: string; Icon: typeof Check }
+> = {
+  OK: {
+    className:
+      'bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500',
+    Icon: Check,
+  },
+  ATTENTION: {
+    className:
+      'bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-500 dark:hover:bg-amber-400',
+    Icon: AlertTriangle,
+  },
+  PENDING: {
+    className:
+      'bg-transparent text-muted-foreground/70 ring-1 ring-inset ring-border hover:bg-muted',
+    Icon: CircleDashed,
+  },
+  NA: {
+    className:
+      'bg-muted text-muted-foreground/60 hover:bg-muted/70',
+    Icon: MinusCircle,
+  },
 }
 
-export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
+export function OnboardingShell({
+  initialEmployees,
+  initialItems,
+}: OnboardingShellProps) {
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>('active')
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
+  // We hold local employee state so cell edits reflect instantly
+  // without waiting for a router.refresh() round-trip.
+  const [employees, setEmployees] = useState(initialEmployees)
+
   const activeCount = useMemo(
-    () => initialEmployees.filter((e) => e.status === 'ACTIVE').length,
-    [initialEmployees],
+    () => employees.filter((e) => e.status === 'ACTIVE').length,
+    [employees],
   )
-  const offboardedCount = initialEmployees.length - activeCount
+  const offboardedCount = employees.length - activeCount
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return initialEmployees.filter((e) => {
+    return employees.filter((e) => {
       if (tab === 'active' && e.status !== 'ACTIVE') return false
       if (tab === 'offboarded' && e.status !== 'OFFBOARDED') return false
       if (!q) return true
@@ -116,9 +118,61 @@ export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
         e.roleTitle.toLowerCase().includes(q)
       )
     })
-  }, [initialEmployees, tab, search])
+  }, [employees, tab, search])
 
   const anyAttention = rows.some((r) => r.checklist.attentionCount > 0)
+
+  function handleCellStatusChange(
+    employeeId: string,
+    itemId: string,
+    next: ChecklistItemStatusValue,
+    current: ChecklistItemStatusValue,
+  ) {
+    if (next === current) return
+
+    // Optimistic update — the cell recolours instantly. If the server
+    // rejects, we roll back to the pre-change status and toast.
+    const previous = employees
+    setEmployees((prev) =>
+      prev.map((e) => {
+        if (e.id !== employeeId) return e
+        const nextMap = { ...e.statusByItemId, [itemId]: next }
+        // Recount the summary too so the "N needs attention" banner
+        // stays truthful without a refetch.
+        let ok = 0
+        let pending = 0
+        let attention = 0
+        for (const s of Object.values(nextMap)) {
+          if (s === 'OK') ok++
+          else if (s === 'PENDING') pending++
+          else if (s === 'ATTENTION') attention++
+        }
+        return {
+          ...e,
+          statusByItemId: nextMap,
+          checklist: {
+            ...e.checklist,
+            okCount: ok,
+            pendingCount: pending,
+            attentionCount: attention,
+          },
+        }
+      }),
+    )
+
+    startTransition(async () => {
+      try {
+        await updateChecklistItemStatusAction(employeeId, itemId, {
+          status: next,
+        })
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to update status',
+        )
+        setEmployees(previous)
+      }
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -181,7 +235,7 @@ export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
       {isPending ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          Refreshing…
+          Saving…
         </div>
       ) : null}
 
@@ -212,83 +266,214 @@ export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
           ) : null}
         </EmptyState>
       ) : (
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Onboarded</TableHead>
-                <TableHead>Started</TableHead>
-                {tab === 'offboarded' ? (
-                  <TableHead>Offboarded</TableHead>
-                ) : null}
-                <TableHead>Checklist</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className="group cursor-pointer transition-colors hover:bg-muted/40"
-                  onClick={() =>
-                    startTransition(() =>
-                      router.push(`/admin/onboarding/${row.id}`),
-                    )
-                  }
-                >
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      {row.name}
-                      {row.checklist.attentionCount > 0 ? (
-                        <AlertTriangle className="size-3.5 text-amber-500" />
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {row.roleTitle}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(row.onboardingDate)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(row.dateStarted)}
-                  </TableCell>
-                  {tab === 'offboarded' ? (
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(row.offboardingDate)}
-                    </TableCell>
-                  ) : null}
-                  <TableCell>
-                    <ChecklistBar checklist={row.checklist} />
-                  </TableCell>
-                  <TableCell>
-                    <ChevronRight
-                      className={cn(
-                        'size-4 text-muted-foreground/40 transition-transform',
-                        'group-hover:translate-x-0.5 group-hover:text-foreground',
-                      )}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <OnboardingMatrix
+          rows={rows}
+          items={initialItems}
+          tab={tab}
+          isPending={isPending}
+          onCellChange={handleCellStatusChange}
+          onNameClick={(id) => router.push(`/admin/onboarding/${id}`)}
+        />
       )}
 
       {anyAttention ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200/70 bg-amber-50/60 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <div>
-            Some employees have checklist items flagged for attention. Open a
-            profile to review.
+            Some employees have items flagged for attention. Amber cells
+            below need follow-up.
           </div>
         </div>
       ) : null}
 
       <NewEmployeeDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Matrix table — spreadsheet-style view
+// ---------------------------------------------------------------------
+
+function OnboardingMatrix({
+  rows,
+  items,
+  tab,
+  isPending,
+  onCellChange,
+  onNameClick,
+}: {
+  rows: EmployeeListItem[]
+  items: ChecklistItem[]
+  tab: TabKey
+  isPending: boolean
+  onCellChange: (
+    employeeId: string,
+    itemId: string,
+    next: ChecklistItemStatusValue,
+    current: ChecklistItemStatusValue,
+  ) => void
+  onNameClick: (employeeId: string) => void
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="overflow-x-auto">
+        <table className="w-full border-separate border-spacing-0 text-sm">
+          <thead>
+            <tr className="bg-muted/40">
+              <th className="sticky left-0 z-20 bg-muted/40 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Name
+              </th>
+              <th className="sticky left-[180px] z-20 border-l bg-muted/40 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Role
+              </th>
+              <th className="border-l bg-muted/40 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                {tab === 'offboarded' ? 'Offboarded' : 'Onboarded'}
+              </th>
+              {items.map((item) => (
+                <th
+                  key={item.id}
+                  className="border-l bg-muted/40 px-2 py-2 text-center text-[10px] font-medium uppercase tracking-tight text-muted-foreground whitespace-nowrap"
+                  title={item.label}
+                >
+                  <span className="inline-block max-w-[110px] truncate">
+                    {item.label}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr
+                key={row.id}
+                className={cn(
+                  'transition-colors',
+                  i % 2 === 1 ? 'bg-muted/10' : '',
+                  'hover:bg-muted/25',
+                )}
+              >
+                <td
+                  className={cn(
+                    'sticky left-0 z-10 border-t bg-card px-3 py-2 font-medium',
+                    i % 2 === 1 && 'bg-muted/10',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onNameClick(row.id)}
+                    className="flex items-center gap-2 text-left hover:text-primary"
+                  >
+                    <span className="truncate">{row.name}</span>
+                    {row.checklist.attentionCount > 0 ? (
+                      <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                    ) : null}
+                  </button>
+                </td>
+                <td
+                  className={cn(
+                    'sticky left-[180px] z-10 border-l border-t bg-card px-3 py-2 text-muted-foreground',
+                    i % 2 === 1 && 'bg-muted/10',
+                  )}
+                >
+                  <span className="block max-w-[180px] truncate">
+                    {row.roleTitle}
+                  </span>
+                </td>
+                <td className="border-l border-t px-3 py-2 text-muted-foreground whitespace-nowrap">
+                  {formatDate(
+                    tab === 'offboarded'
+                      ? row.offboardingDate
+                      : row.onboardingDate,
+                  )}
+                </td>
+                {items.map((item) => {
+                  const current =
+                    (row.statusByItemId[item.id] as ChecklistItemStatusValue | undefined) ??
+                    'PENDING'
+                  return (
+                    <td
+                      key={item.id}
+                      className="border-l border-t px-2 py-1.5 text-center"
+                    >
+                      <StatusCell
+                        current={current}
+                        label={item.label}
+                        disabled={isPending}
+                        onChange={(next) =>
+                          onCellChange(row.id, item.id, next, current)
+                        }
+                      />
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function StatusCell({
+  current,
+  label,
+  disabled,
+  onChange,
+}: {
+  current: ChecklistItemStatusValue
+  label: string
+  disabled: boolean
+  onChange: (next: ChecklistItemStatusValue) => void
+}) {
+  const { className, Icon } = CELL_STYLE[current]
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`${label}: ${CHECKLIST_STATUS_LABELS[current]}. Click to change.`}
+        disabled={disabled}
+        render={
+          <button
+            type="button"
+            title={`${label} · ${CHECKLIST_STATUS_LABELS[current]}`}
+            className={cn(
+              'grid size-6 place-items-center rounded-full transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+              className,
+            )}
+          />
+        }
+      >
+        <Icon className="size-3" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="center" className="min-w-[9rem]">
+        {STATUS_OPTIONS.map((s) => {
+          const style = CELL_STYLE[s]
+          const SIcon = style.Icon
+          return (
+            <DropdownMenuItem
+              key={s}
+              onClick={() => onChange(s)}
+              className={cn(
+                'gap-2 text-sm',
+                s === current && 'bg-muted font-medium',
+              )}
+            >
+              <span
+                className={cn(
+                  'grid size-4 place-items-center rounded-full',
+                  style.className,
+                )}
+              >
+                <SIcon className="size-2.5" />
+              </span>
+              {CHECKLIST_STATUS_LABELS[s]}
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
