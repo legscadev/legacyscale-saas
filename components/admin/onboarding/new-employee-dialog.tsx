@@ -186,7 +186,7 @@ export function NewEmployeeDialog({
               value={templateSlug}
               onValueChange={(v) => setPickedSlug(v ?? NO_TEMPLATE)}
             >
-              <SelectTrigger id="employee-template" className="h-9">
+              <SelectTrigger id="employee-template" className="h-9 w-full">
                 <SelectValue>
                   {(v: string) => {
                     if (v === NO_TEMPLATE) return 'No template'
