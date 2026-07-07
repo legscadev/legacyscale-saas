@@ -29,6 +29,11 @@ import {
   type UpdateTemplateItemInput,
 } from '@/lib/validations/employee'
 
+export async function searchLinkableUsersAction(query: string) {
+  await requireAdmin()
+  return employeeService.searchLinkableUsers(query)
+}
+
 export async function createEmployeeAction(input: CreateEmployeeInput) {
   await requireAdmin()
   const parsed = createEmployeeSchema.parse(input)

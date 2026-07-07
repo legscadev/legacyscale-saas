@@ -56,12 +56,31 @@ export interface CreateEmployeeInput {
   dateStarted?: Date | null
   templateSlug?: string | null
   /**
-   * When true, the caller also provisions a TEAM-role SaaS account
-   * for this hire (Supabase auth user + Invite + welcome email) and
-   * links it via `Employee.userId`. `email` is required here.
+   * When true, the caller also provisions a SaaS account (Supabase
+   * auth user + Invite + welcome email) and links it via
+   * `Employee.userId`. `email` is required here. Mutually exclusive
+   * with `linkUserId`.
    */
   grantAccess?: boolean
+  /** SaaS role for the new account. Restricted to ADMIN or TEAM. */
+  accessRole?: 'ADMIN' | 'TEAM'
   email?: string
+  /**
+   * Link the new Employee to an existing User instead of provisioning
+   * a fresh account. Mutually exclusive with `grantAccess`. The
+   * service verifies the User exists and isn't already linked to
+   * another Employee, and does NOT change the user's role or send
+   * any email — this is purely a data link.
+   */
+  linkUserId?: string | null
+}
+
+export interface LinkableUser {
+  id: string
+  email: string
+  name: string | null
+  role: 'ADMIN' | 'TEAM' | 'MEMBER'
+  isAlreadyLinked: boolean
 }
 
 export interface UpdateEmployeeInput {
@@ -96,6 +115,44 @@ function summarize(
 }
 
 class EmployeeService {
+  /**
+   * Search existing Users by name or email for linking to a new
+   * Employee record. Returns up to 8 rows with an
+   * `isAlreadyLinked` flag so the UI can dim / disable users who
+   * already belong to an Employee (Employee.userId is @unique).
+   * Soft-deleted users are excluded.
+   */
+  async searchLinkableUsers(query: string): Promise<LinkableUser[]> {
+    const q = query.trim()
+    if (q.length < 1) return []
+
+    const users = await prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { name: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        employee: { select: { id: true } },
+      },
+      take: 8,
+      orderBy: [{ role: 'asc' }, { name: 'asc' }],
+    })
+    return users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      isAlreadyLinked: u.employee !== null,
+    }))
+  }
+
   async list(options: {
     status?: EmploymentStatus | 'all'
     search?: string
@@ -215,13 +272,36 @@ class EmployeeService {
           where: { isDefault: true },
         })
 
-    // If the admin ticked "Can access the system", provision the
-    // TEAM-role account first. We do this before creating the
-    // Employee row so that (a) email conflicts fail fast without
-    // leaving an orphan HR record, and (b) `Employee.userId` can be
-    // set atomically at insert time.
+    // Resolve the SaaS account link, if any. Two paths:
+    //   1. `linkUserId`   → attach to an existing User (no invite,
+    //                       role left as-is). Reject if that User is
+    //                       already linked to another Employee.
+    //   2. `grantAccess`  → provision a fresh Supabase auth user +
+    //                       users row + Invite + welcome email.
+    // Both paths run BEFORE inserting the Employee row so any
+    // failure (conflict, provisioning error) doesn't leave an
+    // orphan HR record behind.
     let userId: string | null = null
-    if (input.grantAccess) {
+    if (input.linkUserId) {
+      const target = await prisma.user.findUnique({
+        where: { id: input.linkUserId },
+        select: {
+          id: true,
+          email: true,
+          deletedAt: true,
+          employee: { select: { id: true, name: true } },
+        },
+      })
+      if (!target || target.deletedAt) {
+        throw new Error('Selected user could not be found')
+      }
+      if (target.employee) {
+        throw new Error(
+          `This user is already linked to another employee: ${target.employee.name}`,
+        )
+      }
+      userId = target.id
+    } else if (input.grantAccess) {
       if (!input.email) {
         // The zod schema already enforces this — belt-and-braces for
         // callers that skip validation.
@@ -230,7 +310,7 @@ class EmployeeService {
       const member = await provisionMemberWithInvite({
         name: input.name,
         email: input.email,
-        role: 'TEAM',
+        role: input.accessRole ?? 'TEAM',
       })
       userId = member.id
     }

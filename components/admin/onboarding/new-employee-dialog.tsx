@@ -26,6 +26,11 @@ import {
 import type { TemplateListItem } from '@/lib/services/checklist-template-service'
 
 import { createEmployeeAction } from '@/app/(admin)/admin/onboarding/actions'
+import {
+  EmployeeAccessSection,
+  INITIAL_ACCESS,
+  type AccessState,
+} from './employee-access-section'
 
 interface NewEmployeeDialogProps {
   open: boolean
@@ -51,8 +56,7 @@ export function NewEmployeeDialog({
   // derived below. That way we don't need an effect to preselect on
   // open (which would trip react-hooks/purity for the setState).
   const [pickedSlug, setPickedSlug] = useState<string | null>(null)
-  const [grantAccess, setGrantAccess] = useState(false)
-  const [email, setEmail] = useState('')
+  const [access, setAccess] = useState<AccessState>(INITIAL_ACCESS)
   const [pending, startTransition] = useTransition()
 
   const defaultSlug = useMemo(() => {
@@ -68,9 +72,14 @@ export function NewEmployeeDialog({
     setRoleTitle('')
     setOnboardingDate('')
     setPickedSlug(null)
-    setGrantAccess(false)
-    setEmail('')
+    setAccess(INITIAL_ACCESS)
   }
+
+  // Submit gate — access sub-modes have different completeness rules.
+  const accessComplete =
+    access.mode === 'none' ||
+    (access.mode === 'link' && access.linkedUser !== null) ||
+    (access.mode === 'create' && access.email.trim() !== '')
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,14 +91,22 @@ export function NewEmployeeDialog({
           roleTitle,
           onboardingDate: onboardingDate || null,
           templateSlug: templateSlug === NO_TEMPLATE ? null : templateSlug,
-          grantAccess,
-          email: grantAccess ? email.trim() : undefined,
+          grantAccess: access.mode === 'create',
+          accessRole:
+            access.mode === 'create' ? access.accessRole : undefined,
+          email:
+            access.mode === 'create' ? access.email.trim() : undefined,
+          linkUserId:
+            access.mode === 'link' ? access.linkedUser?.id ?? null : null,
         })
-        toast.success(
-          grantAccess
+
+        const successMessage =
+          access.mode === 'create'
             ? `Added ${employee.name} — invite sent`
-            : `Added ${employee.name}`,
-        )
+            : access.mode === 'link'
+              ? `Added ${employee.name} — linked to ${access.linkedUser?.name || access.linkedUser?.email}`
+              : `Added ${employee.name}`
+        toast.success(successMessage)
         reset()
         onOpenChange(false)
         router.push(`/admin/onboarding/${employee.id}`)
@@ -176,37 +193,11 @@ export function NewEmployeeDialog({
             </Select>
           </div>
 
-          <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
-            <label className="flex cursor-pointer items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5 size-4 rounded border-input"
-                checked={grantAccess}
-                onChange={(e) => setGrantAccess(e.target.checked)}
-                disabled={pending}
-              />
-              <span>
-                <span className="font-medium">Can access the system</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Creates a TEAM account and emails an invite link.
-                </span>
-              </span>
-            </label>
-            {grantAccess ? (
-              <div className="space-y-1.5 pl-6">
-                <Label htmlFor="employee-email">Login email</Label>
-                <Input
-                  id="employee-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="jane@company.com"
-                  required
-                  disabled={pending}
-                />
-              </div>
-            ) : null}
-          </div>
+          <EmployeeAccessSection
+            state={access}
+            onChange={setAccess}
+            disabled={pending}
+          />
 
           <DialogFooter>
             <Button
@@ -219,12 +210,7 @@ export function NewEmployeeDialog({
             </Button>
             <Button
               type="submit"
-              disabled={
-                pending ||
-                !name ||
-                !roleTitle ||
-                (grantAccess && !email.trim())
-              }
+              disabled={pending || !name || !roleTitle || !accessComplete}
             >
               {pending ? (
                 <>

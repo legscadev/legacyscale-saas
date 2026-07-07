@@ -34,6 +34,20 @@ const optionalDate = z
   .transform((v) => (v === null ? null : new Date(v)))
   .nullable()
 
+/**
+ * Which SaaS role a new employee gets when `grantAccess` is on.
+ * Restricted to ADMIN and TEAM — this is the internal onboarding
+ * flow, not a customer signup path, so MEMBER is intentionally
+ * omitted.
+ */
+export const employeeAccessRoleSchema = z.enum(['ADMIN', 'TEAM'])
+export type EmployeeAccessRoleValue = z.infer<typeof employeeAccessRoleSchema>
+
+export const EMPLOYEE_ACCESS_ROLE_LABELS: Record<EmployeeAccessRoleValue, string> = {
+  ADMIN: 'Admin',
+  TEAM: 'Internal team',
+}
+
 export const createEmployeeSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required').max(120),
@@ -43,10 +57,17 @@ export const createEmployeeSchema = z
     templateSlug: z.string().trim().min(1).max(80).nullable().optional(),
     /**
      * When true, the admin also wants this hire to have SaaS login
-     * access — we'll create a TEAM-role User account and email the
-     * invite link. `email` is required in that case.
+     * access — we'll create a User account with `accessRole`, issue
+     * an Invite, and email the link. `email` is required in that
+     * case.
      */
     grantAccess: z.boolean().optional().default(false),
+    /**
+     * SaaS role for the newly-provisioned account. Defaults to TEAM
+     * (internal-team access, no admin surface). Ignored when
+     * `grantAccess` is false.
+     */
+    accessRole: employeeAccessRoleSchema.optional().default('TEAM'),
     /**
      * The login email. Only required when `grantAccess` is true;
      * ignored otherwise. Not `.email()` here so the refine below can
@@ -54,8 +75,21 @@ export const createEmployeeSchema = z
      * when grantAccess=true and the field is empty.
      */
     email: z.string().trim().optional(),
+    /**
+     * Link to an existing User instead of creating a fresh account.
+     * Mutually exclusive with `grantAccess`.
+     */
+    linkUserId: z.string().uuid().nullable().optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.grantAccess && data.linkUserId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['linkUserId'],
+        message:
+          'Pick either an existing user or create a new one, not both',
+      })
+    }
     if (!data.grantAccess) return
     const email = data.email?.trim() ?? ''
     if (!email) {
