@@ -133,17 +133,21 @@ export function OnboardingShell({
     // Optimistic update — the cell recolours instantly. If the server
     // rejects, we roll back to the pre-change status and toast.
     const previous = employees
+    const employee = previous.find((e) => e.id === employeeId)
+    const item = initialItems.find((it) => it.id === itemId)
     setEmployees((prev) =>
       prev.map((e) => {
         if (e.id !== employeeId) return e
         const nextMap = { ...e.statusByItemId, [itemId]: next }
         // Recount the summary too so the "N needs attention" banner
-        // stays truthful without a refetch.
+        // stays truthful without a refetch. N/A rolls into ok here
+        // for the same reason it does server-side — a hire whose
+        // item is marked N/A is done with it.
         let ok = 0
         let pending = 0
         let attention = 0
         for (const s of Object.values(nextMap)) {
-          if (s === 'OK') ok++
+          if (s === 'OK' || s === 'NA') ok++
           else if (s === 'PENDING') pending++
           else if (s === 'ATTENTION') attention++
         }
@@ -164,6 +168,14 @@ export function OnboardingShell({
       try {
         await updateChecklistItemStatusAction(employeeId, itemId, {
           status: next,
+        })
+        // Confirmation toast so admins get feedback without having
+        // to notice the cell recolour on a busy screen. Kept short —
+        // the matrix will be clicked often.
+        const who = employee?.name ?? 'Employee'
+        const what = item?.label ?? 'item'
+        toast.success(`${who} · ${what} → ${CHECKLIST_STATUS_LABELS[next]}`, {
+          duration: 1500,
         })
       } catch (err) {
         toast.error(
