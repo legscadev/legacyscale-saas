@@ -21,9 +21,6 @@ export default async function OrgBoardAdminPage({ searchParams }: PageProps) {
       : orgBoardService.getCurrentTree(),
   ])
 
-  const stats = requestedTree
-    ? await orgBoardService.getStats(requestedTree.revision.id)
-    : null
   const auditLogs = requestedTree
     ? await orgBoardService.listAuditLogs(requestedTree.revision.id, 20)
     : []
@@ -32,7 +29,6 @@ export default async function OrgBoardAdminPage({ searchParams }: PageProps) {
     <OrgBoardShell
       tree={requestedTree}
       revisions={revisions}
-      stats={stats}
       auditLogs={auditLogs}
     />
   )

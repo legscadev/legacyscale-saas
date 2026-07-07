@@ -39,22 +39,9 @@ import type {
 
 import { OrgNodeMenu } from './org-node-menu'
 
-interface OrgStats {
-  divisions: number
-  departments: number
-  sections: number
-  units: number
-  positions: number
-  filledPositions: number
-  vacantPositions: number
-  employeesAssigned: number
-  departmentsWithVacancies: number
-}
-
 interface OrgBoardShellProps {
   tree: OrgBoardTree | null
   revisions: OrgBoardRevisionSummary[]
-  stats: OrgStats | null
   auditLogs: AuditLogEntry[]
 }
 
@@ -118,7 +105,6 @@ const CROWN_STYLE = {
 export function OrgBoardShell({
   tree,
   revisions,
-  stats,
   auditLogs,
 }: OrgBoardShellProps) {
   const router = useRouter()
@@ -198,8 +184,6 @@ export function OrgBoardShell({
           </div>
         }
       />
-
-      {stats ? <OrgStatsStrip stats={stats} /> : null}
 
       {tree.nodes.length === 0 ? (
         <EmptyBoardPrimer revisionId={tree.revision.id} />
@@ -340,47 +324,8 @@ function ViewSwitcher({ nodes }: { nodes: OrgNodeRow[] }) {
 }
 
 // ---------------------------------------------------------------------
-// Dashboard: stat cards + recent activity strip
+// Recent activity strip
 // ---------------------------------------------------------------------
-
-function OrgStatsStrip({ stats }: { stats: OrgStats }) {
-  const cards = [
-    { label: 'Divisions', value: stats.divisions },
-    { label: 'Departments', value: stats.departments },
-    { label: 'Positions', value: stats.positions },
-    {
-      label: 'Filled',
-      value: stats.filledPositions,
-      tone: 'success' as const,
-    },
-    {
-      label: 'Vacant',
-      value: stats.vacantPositions,
-      tone: stats.vacantPositions > 0 ? ('warning' as const) : undefined,
-    },
-    { label: 'Employees assigned', value: stats.employeesAssigned },
-  ]
-  return (
-    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {cards.map((c) => (
-        <div key={c.label} className="rounded-xl border bg-card p-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {c.label}
-          </p>
-          <p
-            className={cn(
-              'mt-1 text-xl font-semibold tabular-nums',
-              c.tone === 'success' && 'text-emerald-600',
-              c.tone === 'warning' && 'text-amber-600',
-            )}
-          >
-            {c.value}
-          </p>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 function RecentActivity({ entries }: { entries: AuditLogEntry[] }) {
   return (
