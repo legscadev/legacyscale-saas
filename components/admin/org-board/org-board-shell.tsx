@@ -214,7 +214,7 @@ function AddRootNodeButton({ revisionId }: { revisionId: string }) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label="Add root node"
+          aria-label="Add"
           render={
             <button
               type="button"
@@ -223,12 +223,12 @@ function AddRootNodeButton({ revisionId }: { revisionId: string }) {
           }
         >
           <Plus className="size-4" />
-          Add root
+          Add
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => setAddKind('CROWN')}>
             <Plus className="size-3.5" />
-            Top-level role (Founder / CEO)
+            Role
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setAddKind('DIVISION')}>
             <Plus className="size-3.5" />
@@ -254,12 +254,12 @@ function EmptyBoardPrimer({ revisionId }: { revisionId: string }) {
         icon={Network}
         tone="brand"
         title="No nodes yet"
-        description="Start by adding a top-level role (Founder / CEO) or the first Division."
+        description="Start by adding a role or a division."
       >
         <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={() => setAddKind('CROWN')}>Add top-level role</Button>
+          <Button onClick={() => setAddKind('CROWN')}>Add role</Button>
           <Button variant="outline" onClick={() => setAddKind('DIVISION')}>
-            Add Division
+            Add division
           </Button>
         </div>
       </EmptyState>
