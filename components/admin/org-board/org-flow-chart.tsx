@@ -282,6 +282,7 @@ export function OrgFlowChart({ nodes, onNodeClick }: OrgFlowChartProps) {
             nodesConnectable={false}
             nodesDraggable
             elementsSelectable
+            proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} />
             <Controls showInteractive={false} />
