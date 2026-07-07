@@ -49,6 +49,9 @@ export async function addOrgNodeAction(
     deptNumber: parsed.deptNumber ?? null,
     color: parsed.color ?? null,
     vfp: parsed.vfp ?? null,
+    functionText: parsed.functionText ?? null,
+    responsibilities: parsed.responsibilities,
+    notes: parsed.notes ?? null,
     employeeId: parsed.employeeId ?? null,
     freeTextHolder: parsed.freeTextHolder ?? null,
   })

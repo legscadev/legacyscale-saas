@@ -54,6 +54,12 @@ export function OrgNodeEditDialog({
   const [label, setLabel] = useState(node.label)
   const [positionTitle, setPositionTitle] = useState(node.positionTitle ?? '')
   const [vfp, setVfp] = useState(node.vfp ?? '')
+  const [functionText, setFunctionText] = useState(node.functionText ?? '')
+  const [responsibilities, setResponsibilities] = useState(
+    node.responsibilities.join('\n'),
+  )
+  const [notes, setNotes] = useState(node.notes ?? '')
+  const [color, setColor] = useState(node.color ?? '')
   const [employee, setEmployee] = useState<EmployeeRef | null>(
     node.employee
       ? {
@@ -76,6 +82,10 @@ export function OrgNodeEditDialog({
       setLabel(node.label)
       setPositionTitle(node.positionTitle ?? '')
       setVfp(node.vfp ?? '')
+      setFunctionText(node.functionText ?? '')
+      setResponsibilities(node.responsibilities.join('\n'))
+      setNotes(node.notes ?? '')
+      setColor(node.color ?? '')
       setFreeText(node.freeTextHolder ?? '')
       setEmployee(
         node.employee
@@ -99,6 +109,13 @@ export function OrgNodeEditDialog({
           label: label.trim(),
           positionTitle: positionTitle.trim() || null,
           vfp: vfp.trim() || null,
+          functionText: functionText.trim() || null,
+          responsibilities: responsibilities
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean),
+          notes: notes.trim() || null,
+          color: color.trim() || null,
           // employee wins over freeText — the picker either has one
           // or the other set.
           employeeId: employee?.id ?? null,
@@ -114,33 +131,42 @@ export function OrgNodeEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !pending && onOpenChange(v)}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit {ORG_NODE_KIND_LABELS[node.kind]}</DialogTitle>
           <DialogDescription>
-            Edit the label, role, holder, and VFP for this node.
+            Label, role, holder, VFP, function, responsibilities and notes.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="org-node-label">Label</Label>
-            <Input
-              id="org-node-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              required
-              autoFocus
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="org-node-label">Label</Label>
+              <Input
+                id="org-node-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="org-node-title">Role / Title</Label>
+              <Input
+                id="org-node-title"
+                value={positionTitle}
+                onChange={(e) => setPositionTitle(e.target.value)}
+                placeholder="e.g. Sales & Marketing Director"
+              />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="org-node-title">Role / Title</Label>
-            <Input
-              id="org-node-title"
-              value={positionTitle}
-              onChange={(e) => setPositionTitle(e.target.value)}
-              placeholder="e.g. Sales & Marketing Director"
-            />
-          </div>
+
+          {node.kind === 'DIVISION' ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="org-node-color">Colour</Label>
+              <ColorPicker value={color} onChange={setColor} disabled={pending} />
+            </div>
+          ) : null}
 
           <HolderPicker
             employee={employee}
@@ -156,8 +182,46 @@ export function OrgNodeEditDialog({
               id="org-node-vfp"
               value={vfp}
               onChange={(e) => setVfp(e.target.value)}
-              rows={3}
+              rows={2}
               placeholder="What this seat produces when it's on target"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-function">Function</Label>
+            <Textarea
+              id="org-node-function"
+              value={functionText}
+              onChange={(e) => setFunctionText(e.target.value)}
+              rows={3}
+              placeholder="How this seat operates day-to-day"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-responsibilities">
+              Responsibilities
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                (one per line)
+              </span>
+            </Label>
+            <Textarea
+              id="org-node-responsibilities"
+              value={responsibilities}
+              onChange={(e) => setResponsibilities(e.target.value)}
+              rows={4}
+              placeholder={'Own weekly team meeting\nReview quarterly targets\nMentor new hires'}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-notes">Notes</Label>
+            <Textarea
+              id="org-node-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder="Admin-only context"
             />
           </div>
 
@@ -483,6 +547,60 @@ function HolderPicker({
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Colour palette picker — swatches match seed / drilldown tokens.
+// ---------------------------------------------------------------------
+
+const COLOR_OPTIONS: Array<{ value: string; className: string; label: string }> = [
+  { value: 'blue', className: 'bg-blue-600', label: 'Blue' },
+  { value: 'amber', className: 'bg-amber-500', label: 'Amber' },
+  { value: 'indigo', className: 'bg-indigo-700', label: 'Indigo' },
+  { value: 'pink', className: 'bg-pink-400', label: 'Pink' },
+  { value: 'emerald', className: 'bg-emerald-700', label: 'Emerald' },
+  { value: 'slate', className: 'bg-slate-500', label: 'Slate' },
+  { value: 'yellow', className: 'bg-yellow-500', label: 'Yellow' },
+]
+
+function ColorPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string
+  onChange: (v: string) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {COLOR_OPTIONS.map((opt) => {
+        const active = value === opt.value
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(active ? '' : opt.value)}
+            disabled={disabled}
+            title={opt.label}
+            aria-label={opt.label}
+            className={cn(
+              'grid size-8 place-items-center rounded-full ring-2 transition-transform',
+              opt.className,
+              active
+                ? 'ring-foreground'
+                : 'ring-transparent hover:scale-105 hover:ring-border',
+              disabled && 'cursor-not-allowed opacity-50',
+            )}
+          >
+            {active ? (
+              <span className="text-xs font-bold text-white">✓</span>
+            ) : null}
+          </button>
+        )
+      })}
     </div>
   )
 }

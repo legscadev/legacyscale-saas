@@ -31,6 +31,11 @@ export const orgNodeAssignmentSchema = z
     { message: 'Pick either an employee or a placeholder, not both' },
   )
 
+/** Free-form string list (KPIs, responsibilities, requirements). */
+const stringListSchema = z
+  .array(z.string().trim().min(1).max(500))
+  .max(50)
+
 export const createOrgNodeSchema = z.object({
   parentId: z.string().uuid().nullable().optional(),
   kind: orgNodeKindSchema,
@@ -39,6 +44,9 @@ export const createOrgNodeSchema = z.object({
   deptNumber: z.number().int().min(1).max(999).nullable().optional(),
   color: z.string().max(30).nullable().optional(),
   vfp: z.string().max(2000).nullable().optional(),
+  functionText: z.string().max(4000).nullable().optional(),
+  responsibilities: stringListSchema.optional(),
+  notes: z.string().max(4000).nullable().optional(),
   employeeId: z.string().uuid().nullable().optional(),
   freeTextHolder: z.string().max(120).nullable().optional(),
 })
@@ -50,6 +58,9 @@ export const updateOrgNodeSchema = z.object({
   deptNumber: z.number().int().min(1).max(999).nullable().optional(),
   color: z.string().max(30).nullable().optional(),
   vfp: z.string().max(2000).nullable().optional(),
+  functionText: z.string().max(4000).nullable().optional(),
+  responsibilities: stringListSchema.optional(),
+  notes: z.string().max(4000).nullable().optional(),
   employeeId: z.string().uuid().nullable().optional(),
   freeTextHolder: z.string().max(120).nullable().optional(),
 })

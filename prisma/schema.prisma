@@ -136,6 +136,17 @@ enum OrgNodeKind {
   POSITION
 }
 
+/// Employment classification for a Position assignment. Broad enough
+/// to cover contractors and interns while staying a small enum so
+/// filters and reports can stay typed.
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  ADVISORY
+}
+
 // ============================================
 // USER MANAGEMENT
 // ============================================
@@ -852,9 +863,10 @@ model Employee {
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
-  user              User?                         @relation("EmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
-  checklistStatuses EmployeeChecklistItemStatus[]
-  orgAssignments    OrgNode[]                     @relation("OrgNodeEmployee")
+  user                User?                         @relation("EmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
+  checklistStatuses   EmployeeChecklistItemStatus[]
+  orgAssignments      OrgNode[]                     @relation("OrgNodeEmployee")
+  positionAssignments PositionAssignment[]          @relation("EmployeePositionAssignments")
 
   @@index([status])
   @@index([roleTitle])
@@ -938,51 +950,120 @@ model OrgBoardRevision {
 /// node just changes its parentId. Cascade on parent delete so
 /// removing a division cleanly wipes its descendants.
 model OrgNode {
-  id             String      @id @default(uuid())
-  revisionId     String      @map("revision_id")
-  parentId       String?     @map("parent_id")
-  kind           OrgNodeKind
+  id               String      @id @default(uuid())
+  revisionId       String      @map("revision_id")
+  parentId         String?     @map("parent_id")
+  kind             OrgNodeKind
   /// Header text shown on the card (e.g. "Division 2 - Sales &
   /// Marketing" or "Founder" or "Recognition - Department 1").
-  label          String
+  label            String
   /// Optional Hubbard-style dept number 1-21. Kept as a plain int
   /// so custom departments outside the classic 21 are still
   /// representable.
-  deptNumber     Int?        @map("dept_number")
+  deptNumber       Int?        @map("dept_number")
   /// The role/title displayed under the label — e.g. "Sales &
   /// Marketing Director" or "Video Editor". Used for POSITION
   /// nodes and for any header node that has a designated role.
-  positionTitle  String?     @map("position_title")
+  positionTitle    String?     @map("position_title")
   /// The Employee currently holding this node's role. Only
   /// meaningful for POSITION and DIVISION/DEPARTMENT-level roles.
   /// SetNull so offboarding an employee blanks the seat without
   /// destroying the org structure.
-  employeeId     String?     @map("employee_id")
+  employeeId       String?     @map("employee_id")
   /// Free-text fallback for people who aren't (yet) Employees.
   /// Handy for "To be hired" placeholders. Ignored when
   /// `employeeId` is set.
-  freeTextHolder String?     @map("free_text_holder")
+  freeTextHolder   String?     @map("free_text_holder")
   /// Valuable Final Product statement (Hubbard vocab). Rendered as
   /// the coloured banner at the bottom of a division / department
   /// column, or as a small footnote on a section.
-  vfp            String?
+  vfp              String?
+  /// Free-text description of what this node/role does. Applies at
+  /// any level (a Division has a Function; a Position has one too).
+  /// Distinct from VFP: VFP is the *output*, Function is the *how*.
+  functionText     String?     @map("function_text")
+  /// Bullet list of the node's responsibilities. Stored as a
+  /// Postgres text[] so we don't have to marshal JSON on the client.
+  responsibilities String[]    @default([])
+  /// Free-text notes (admin-only).
+  notes            String?
   /// Optional Tailwind-safe colour token override. Divisions have
   /// a default palette so this can stay null for the common case.
-  color          String?
+  color            String?
   /// Sibling order within the same parent. Zero-based; unique
   /// only within (revisionId, parentId).
-  orderIndex     Int         @map("order_index")
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
+  orderIndex       Int         @map("order_index")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
 
-  revision OrgBoardRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
-  parent   OrgNode?         @relation("OrgNodeParent", fields: [parentId], references: [id], onDelete: Cascade)
-  children OrgNode[]        @relation("OrgNodeParent")
-  employee Employee?        @relation("OrgNodeEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  revision       OrgBoardRevision     @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  parent         OrgNode?             @relation("OrgNodeParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children       OrgNode[]            @relation("OrgNodeParent")
+  employee       Employee?            @relation("OrgNodeEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  positionDetail PositionDetail?
+  assignments    PositionAssignment[]
 
   @@index([revisionId])
   @@index([parentId])
   @@index([kind])
   @@index([employeeId])
   @@map("org_nodes")
+}
+
+/// Position-specific attributes kept in a sidecar table so the main
+/// tree stays lean. 1:1 with OrgNode; only rows of kind POSITION or
+/// DIVISION/DEPARTMENT that have a formal role head will have one.
+/// Missing PositionDetail means "no structured detail yet" — the
+/// admin can add later.
+model PositionDetail {
+  id             String          @id @default(uuid())
+  nodeId         String          @unique @map("node_id")
+  /// Human-readable identifier (e.g. "POS-004" or "ENG-DIR"). No
+  /// uniqueness constraint at the DB layer — organisations sometimes
+  /// reuse codes across divisions on purpose.
+  code           String?
+  /// Numeric seniority. Convention: 1 = executive, 10 = individual
+  /// contributor. Nullable because plenty of positions don't slot
+  /// neatly onto a linear ladder.
+  level          Int?
+  /// Headcount range for this seat. Both nullable because most
+  /// positions have exactly one holder — the fields matter when a
+  /// role is scaled (e.g. "3-5 Appointment Setters in this unit").
+  headcountMin   Int?            @map("headcount_min")
+  headcountMax   Int?            @map("headcount_max")
+  employmentType EmploymentType? @map("employment_type")
+  /// Position-specific KPIs.
+  kpis           String[]        @default([])
+  /// Position-specific qualifications.
+  requirements   String[]        @default([])
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  node OrgNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@map("position_details")
+}
+
+/// Records an employee holding a position. Multiple rows per node
+/// support the "multiple Video Editors" pattern from the Makh org
+/// board. An assignment ends when `endedAt` is set; querying "who
+/// currently holds this seat" filters `endedAt = null`.
+model PositionAssignment {
+  id             String          @id @default(uuid())
+  nodeId         String          @map("node_id")
+  employeeId     String          @map("employee_id")
+  dateAssigned   DateTime        @default(now()) @map("date_assigned")
+  endedAt        DateTime?       @map("ended_at")
+  employmentType EmploymentType? @map("employment_type")
+  notes          String?
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  node     OrgNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  employee Employee @relation("EmployeePositionAssignments", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId, endedAt])
+  @@index([employeeId, endedAt])
+  @@map("position_assignments")
 }

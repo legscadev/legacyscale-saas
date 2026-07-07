@@ -32,6 +32,10 @@ export interface OrgNodeRow {
   deptNumber: number | null
   positionTitle: string | null
   vfp: string | null
+  /** How this seat operates — distinct from VFP (which is the output). */
+  functionText: string | null
+  responsibilities: string[]
+  notes: string | null
   color: string | null
   orderIndex: number
   employee: OrgNodeEmployeeRef | null
@@ -52,6 +56,9 @@ export interface CreateOrgNodeArgs {
   deptNumber?: number | null
   color?: string | null
   vfp?: string | null
+  functionText?: string | null
+  responsibilities?: string[]
+  notes?: string | null
   employeeId?: string | null
   freeTextHolder?: string | null
 }
@@ -62,6 +69,9 @@ export interface UpdateOrgNodeArgs {
   deptNumber?: number | null
   color?: string | null
   vfp?: string | null
+  functionText?: string | null
+  responsibilities?: string[]
+  notes?: string | null
   employeeId?: string | null
   freeTextHolder?: string | null
 }
@@ -80,6 +90,9 @@ function mapRow(row: {
   deptNumber: number | null
   positionTitle: string | null
   vfp: string | null
+  functionText: string | null
+  responsibilities: string[]
+  notes: string | null
   color: string | null
   orderIndex: number
   freeTextHolder: string | null
@@ -94,6 +107,9 @@ function mapRow(row: {
     deptNumber: row.deptNumber,
     positionTitle: row.positionTitle,
     vfp: row.vfp,
+    functionText: row.functionText,
+    responsibilities: row.responsibilities,
+    notes: row.notes,
     color: row.color,
     orderIndex: row.orderIndex,
     freeTextHolder: row.freeTextHolder,
@@ -281,6 +297,9 @@ class OrgBoardService {
         deptNumber: input.deptNumber ?? null,
         color: input.color ?? null,
         vfp: input.vfp ?? null,
+        functionText: input.functionText ?? null,
+        responsibilities: input.responsibilities ?? [],
+        notes: input.notes ?? null,
         employeeId: input.employeeId ?? null,
         freeTextHolder: input.freeTextHolder ?? null,
         orderIndex: nextIndex,
@@ -303,6 +322,9 @@ class OrgBoardService {
     if (input.deptNumber !== undefined) data.deptNumber = input.deptNumber
     if (input.color !== undefined) data.color = input.color
     if (input.vfp !== undefined) data.vfp = input.vfp
+    if (input.functionText !== undefined) data.functionText = input.functionText
+    if (input.responsibilities !== undefined) data.responsibilities = input.responsibilities
+    if (input.notes !== undefined) data.notes = input.notes
     if (input.employeeId !== undefined) {
       data.employee = input.employeeId
         ? { connect: { id: input.employeeId } }
