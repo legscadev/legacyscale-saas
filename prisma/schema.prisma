@@ -827,14 +827,10 @@ model Employee {
   offboardingDate DateTime?        @map("offboarding_date")
   /// Free-text notes from HR (why they left, gotchas, etc).
   notes           String?
-  /// Which checklist template applies to this hire. Nullable so an
-  /// employee can exist before their onboarding path is decided.
-  templateId      String?          @map("template_id")
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
   user              User?                         @relation("EmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
-  template          OnboardingChecklistTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
   checklistStatuses EmployeeChecklistItemStatus[]
 
   @@index([status])
@@ -843,47 +839,23 @@ model Employee {
   @@map("employees")
 }
 
-/// A reusable onboarding checklist template. Each row defines a named
-/// set of tasks (Company Email, Slack, etc). Multiple templates can
-/// exist for different roles/tracks.
-model OnboardingChecklistTemplate {
-  id          String   @id @default(uuid())
-  /// Stable slug for programmatic lookup ("standard", "setter", etc).
-  slug        String   @unique
-  name        String
-  description String?
-  /// The default template used when an admin creates a new employee
-  /// without picking one. Exactly one row should have this = true;
-  /// callers should treat multiple defaults as "any of them will do".
-  isDefault   Boolean  @default(false) @map("is_default")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  items     OnboardingChecklistItem[]
-  employees Employee[]
-
-  @@index([isDefault])
-  @@map("onboarding_checklist_templates")
-}
-
-/// One row per task inside a template. Order matters for display and
-/// is preserved via `orderIndex` (0-based). Deleting a template
-/// cascades its items.
+/// One row per task in the (single, global) onboarding checklist.
+/// Order matters for display and is preserved via `orderIndex`
+/// (0-based, unique across all rows). Every Employee is
+/// implicitly attached to the same list — the multi-template
+/// abstraction that used to live here was cut in favour of a flat
+/// model. Statuses reference items directly.
 model OnboardingChecklistItem {
   id          String   @id @default(uuid())
-  templateId  String   @map("template_id")
   label       String
   description String?
-  /// Display order within the template (0-based).
-  orderIndex  Int      @map("order_index")
+  /// Display order across the whole checklist (0-based, unique).
+  orderIndex  Int      @unique @map("order_index")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  template OnboardingChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
   statuses EmployeeChecklistItemStatus[]
 
-  @@unique([templateId, orderIndex])
-  @@index([templateId])
   @@map("onboarding_checklist_items")
 }
 

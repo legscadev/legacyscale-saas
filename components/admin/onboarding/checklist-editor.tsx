@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   DndContext,
   KeyboardSensor,
@@ -19,12 +18,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import {
-  GripVertical,
-  Loader2,
-  Plus,
-  Trash2,
-} from 'lucide-react'
+import { GripVertical, Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared'
@@ -40,40 +34,26 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import type { TemplateDetail } from '@/lib/services/checklist-template-service'
+import type { ChecklistItem } from '@/lib/services/checklist-service'
 
 import {
-  addTemplateItemAction,
-  deleteTemplateAction,
-  deleteTemplateItemAction,
-  getDeleteItemImpactAction,
-  getTemplateDetailAction,
-  moveTemplateItemAction,
-  updateTemplateAction,
-  updateTemplateItemAction,
+  addChecklistItemAction,
+  deleteChecklistItemAction,
+  getDeleteChecklistItemImpactAction,
+  moveChecklistItemAction,
+  updateChecklistItemFieldsAction,
 } from '@/app/(admin)/admin/onboarding/actions'
 
-interface TemplateEditorProps {
-  initialDetail: TemplateDetail
+interface ChecklistEditorProps {
+  initialItems: ChecklistItem[]
 }
 
-// Query param used when navigating back to /admin/onboarding so the
-// list lands on the Checklists tab instead of resetting to Active.
-const BACK_HREF = '/admin/onboarding?tab=checklists'
+const BACK_HREF = '/admin/onboarding'
 
-export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
-  const router = useRouter()
-  const [detail, setDetail] = useState<TemplateDetail>(initialDetail)
+export function ChecklistEditor({ initialItems }: ChecklistEditorProps) {
+  const [items, setItems] = useState<ChecklistItem[]>(initialItems)
   const [pending, startTransition] = useTransition()
-
-  const [nameDraft, setNameDraft] = useState(initialDetail.name)
-  const [descDraft, setDescDraft] = useState(initialDetail.description ?? '')
-  const [defaultDraft, setDefaultDraft] = useState(initialDetail.isDefault)
-  const [savingHeader, setSavingHeader] = useState(false)
-
   const [newItemLabel, setNewItemLabel] = useState('')
   const [deleteState, setDeleteState] = useState<{
     itemId: string
@@ -81,86 +61,9 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
     statusCount: number
     affectedEmployeeCount: number
   } | null>(null)
-  const [deleteTemplateOpen, setDeleteTemplateOpen] = useState(false)
 
-  // Fresh fetch after any mutation so counts + item order stay
-  // consistent. Uses the cancelled-flag pattern to be safe against
-  // rapid successive edits.
-  const refresh = useCallback(() => {
-    let cancelled = false
-    getTemplateDetailAction(detail.id)
-      .then((data) => {
-        if (cancelled) return
-        setDetail(data)
-        setNameDraft(data.name)
-        setDescDraft(data.description ?? '')
-        setDefaultDraft(data.isDefault)
-      })
-      .catch(() => {
-        if (!cancelled) toast.error('Failed to reload template')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [detail.id])
-
-  function saveHeader() {
-    if (
-      nameDraft.trim() === detail.name &&
-      (descDraft || null) === (detail.description || null) &&
-      defaultDraft === detail.isDefault
-    ) {
-      return
-    }
-    setSavingHeader(true)
-    startTransition(async () => {
-      try {
-        await updateTemplateAction(detail.id, {
-          name: nameDraft.trim(),
-          description: descDraft.trim() || null,
-          isDefault: defaultDraft,
-        })
-        toast.success('Template updated')
-        refresh()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to save')
-      } finally {
-        setSavingHeader(false)
-      }
-    })
-  }
-
-  function addItem(e: React.FormEvent) {
-    e.preventDefault()
-    if (!newItemLabel.trim()) return
-    startTransition(async () => {
-      try {
-        await addTemplateItemAction(detail.id, { label: newItemLabel.trim() })
-        setNewItemLabel('')
-        refresh()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to add')
-      }
-    })
-  }
-
-  function renameItem(itemId: string, label: string, prev: string) {
-    if (label.trim() === prev) return
-    startTransition(async () => {
-      try {
-        await updateTemplateItemAction(itemId, { label: label.trim() })
-        refresh()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to rename')
-      }
-    })
-  }
-
-  // dnd-kit sensors — Pointer for mouse/touch, Keyboard for a11y.
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      // Small distance threshold so a click-on-label doesn't kick off
-      // a drag by accident.
       activationConstraint: { distance: 4 },
     }),
     useSensor(KeyboardSensor, {
@@ -168,9 +71,38 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
     }),
   )
 
-  const sortableIds = useMemo(
-    () => detail.items.map((i) => i.id),
-    [detail.items],
+  const sortableIds = useMemo(() => items.map((i) => i.id), [items])
+
+  function addItem(e: React.FormEvent) {
+    e.preventDefault()
+    const label = newItemLabel.trim()
+    if (!label) return
+    startTransition(async () => {
+      try {
+        const next = await addChecklistItemAction({ label })
+        setItems(next)
+        setNewItemLabel('')
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to add')
+      }
+    })
+  }
+
+  const renameItem = useCallback(
+    (itemId: string, label: string, prev: string) => {
+      if (label.trim() === prev) return
+      startTransition(async () => {
+        try {
+          const next = await updateChecklistItemFieldsAction(itemId, {
+            label: label.trim(),
+          })
+          setItems(next)
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to rename')
+        }
+      })
+    },
+    [],
   )
 
   const handleDragEnd = useCallback(
@@ -178,34 +110,34 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
       const { active, over } = event
       if (!over || active.id === over.id) return
 
-      const oldIndex = detail.items.findIndex((i) => i.id === active.id)
-      const newIndex = detail.items.findIndex((i) => i.id === over.id)
+      const oldIndex = items.findIndex((i) => i.id === active.id)
+      const newIndex = items.findIndex((i) => i.id === over.id)
       if (oldIndex < 0 || newIndex < 0) return
 
       // Optimistic reorder — the drop feels instant. On server error
       // we snap back to the previous order so the UI matches truth.
-      const previous = detail.items
-      const nextItems = arrayMove(detail.items, oldIndex, newIndex)
-      setDetail({ ...detail, items: nextItems })
+      const previous = items
+      const nextItems = arrayMove(items, oldIndex, newIndex)
+      setItems(nextItems)
 
       void (async () => {
         try {
-          await moveTemplateItemAction(String(active.id), {
+          const rows = await moveChecklistItemAction(String(active.id), {
             targetIndex: newIndex,
           })
-          refresh()
+          setItems(rows)
         } catch (err) {
           toast.error(err instanceof Error ? err.message : 'Failed to move')
-          setDetail({ ...detail, items: previous })
+          setItems(previous)
         }
       })()
     },
-    [detail, refresh],
+    [items],
   )
 
   async function askDelete(itemId: string) {
     try {
-      const impact = await getDeleteItemImpactAction(itemId)
+      const impact = await getDeleteChecklistItemImpactAction(itemId)
       setDeleteState({
         itemId,
         label: impact.itemLabel,
@@ -222,23 +154,10 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
     const { itemId, label } = deleteState
     startTransition(async () => {
       try {
-        await deleteTemplateItemAction(itemId)
+        const next = await deleteChecklistItemAction(itemId)
+        setItems(next)
         toast.success(`Deleted "${label}"`)
         setDeleteState(null)
-        refresh()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to delete')
-      }
-    })
-  }
-
-  function confirmDeleteTemplate() {
-    startTransition(async () => {
-      try {
-        await deleteTemplateAction(detail.id)
-        toast.success('Template deleted')
-        setDeleteTemplateOpen(false)
-        router.push(BACK_HREF)
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to delete')
       }
@@ -249,84 +168,23 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
     <div className="space-y-5">
       <PageHeader
         breadcrumbs={[
-          { label: 'Onboarding', href: '/admin/onboarding' },
-          { label: 'Checklists', href: BACK_HREF },
-          { label: detail.name },
+          { label: 'Onboarding', href: BACK_HREF },
+          { label: 'Checklist' },
         ]}
-        title={detail.name}
-        description={
-          detail.description ?? 'Edit checklist items. Changes reflect on every attached employee.'
-        }
-        eyebrow={
-          <span className="inline-flex items-center gap-1.5">
-            {detail.isDefault ? 'Default template · ' : null}
-            {detail.employeeCount} employee
-            {detail.employeeCount === 1 ? '' : 's'} attached
-          </span>
-        }
-        actions={
-          <Button
-            variant="outline"
-            className="text-destructive hover:text-destructive"
-            disabled={pending}
-            onClick={() => setDeleteTemplateOpen(true)}
-          >
-            <Trash2 className="mr-1.5 size-4" />
-            Delete template
-          </Button>
-        }
+        title="Onboarding checklist"
+        description="Edit the shared checklist. Every employee sees the same items — changes reflect on all attached profiles immediately."
       />
 
-      {/* Header edit form */}
-      <div className="space-y-4 rounded-xl border bg-card p-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="tpl-edit-name">Name</Label>
-          <Input
-            id="tpl-edit-name"
-            value={nameDraft}
-            onChange={(e) => setNameDraft(e.target.value)}
-            onBlur={saveHeader}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="tpl-edit-desc">Description</Label>
-          <Textarea
-            id="tpl-edit-desc"
-            rows={3}
-            value={descDraft}
-            onChange={(e) => setDescDraft(e.target.value)}
-            onBlur={saveHeader}
-            placeholder="What this checklist is for"
-          />
-        </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-4 rounded border-input"
-            checked={defaultDraft}
-            onChange={(e) => {
-              setDefaultDraft(e.target.checked)
-              setTimeout(saveHeader, 0)
-            }}
-          />
-          Default template for new employees
-        </label>
-        {savingHeader ? (
-          <p className="text-xs text-muted-foreground">Saving…</p>
-        ) : null}
-      </div>
-
-      {/* Items */}
       <div className="rounded-xl border bg-card">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <h2 className="text-sm font-semibold">
-            Items ({detail.items.length})
+            Items ({items.length})
           </h2>
           <span className="hidden text-xs text-muted-foreground sm:inline">
             Drag to reorder · click label to rename · trash removes
           </span>
         </div>
-        {detail.items.length === 0 ? (
+        {items.length === 0 ? (
           <p className="px-3 py-8 text-center text-sm text-muted-foreground">
             No items yet. Add one below.
           </p>
@@ -341,7 +199,7 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
               strategy={verticalListSortingStrategy}
             >
               <ul className="divide-y">
-                {detail.items.map((item) => (
+                {items.map((item) => (
                   <ItemRow
                     key={item.id}
                     item={item}
@@ -376,7 +234,6 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
         </form>
       </div>
 
-      {/* Per-item delete confirmation with impact preview */}
       <AlertDialog
         open={deleteState !== null}
         onOpenChange={(v) => !v && setDeleteState(null)}
@@ -415,42 +272,6 @@ export function TemplateEditor({ initialDetail }: TemplateEditorProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Whole-template delete confirmation */}
-      <AlertDialog
-        open={deleteTemplateOpen}
-        onOpenChange={setDeleteTemplateOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this template?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {detail.employeeCount === 0
-                ? 'No employees are attached — safe to remove.'
-                : `${detail.employeeCount} employee${
-                    detail.employeeCount === 1 ? '' : 's'
-                  } will be detached (their profile will show "No checklist template assigned"). All items and status history for this template will be permanently removed.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteTemplate}
-              disabled={pending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {pending ? (
-                <>
-                  <Loader2 className="mr-1.5 size-4 animate-spin" />
-                  Deleting…
-                </>
-              ) : (
-                'Delete template'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }
@@ -461,7 +282,7 @@ function ItemRow({
   onRename,
   onDelete,
 }: {
-  item: TemplateDetail['items'][number]
+  item: ChecklistItem
   disabled: boolean
   onRename: (label: string) => void
   onDelete: () => void
@@ -481,7 +302,6 @@ function ItemRow({
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    // Slight pop while dragging so the row lifts above its neighbours.
     zIndex: isDragging ? 10 : undefined,
     opacity: isDragging ? 0.85 : 1,
   }

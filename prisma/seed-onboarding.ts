@@ -24,6 +24,9 @@ interface SeedEmployee {
   statuses: SeedStatus[]
 }
 
+// The seed JSON still nests items under a `template` object (kept as-is
+// so we don't have to migrate the checked-in fixture). We just ignore
+// the wrapping metadata now that the template abstraction is gone.
 interface SeedData {
   template: {
     slug: string
@@ -52,37 +55,14 @@ function toDate(iso: string | null): Date | null {
 export async function seedOnboarding(prisma: PrismaClient): Promise<void> {
   const data = loadSeedData()
 
-  const template = await prisma.onboardingChecklistTemplate.upsert({
-    where: { slug: data.template.slug },
-    update: {
-      name: data.template.name,
-      description: data.template.description,
-      isDefault: data.template.isDefault,
-    },
-    create: {
-      slug: data.template.slug,
-      name: data.template.name,
-      description: data.template.description,
-      isDefault: data.template.isDefault,
-    },
-  })
-
-  // Upsert items keyed by (templateId, orderIndex). We don't have a
-  // per-item slug on the model — slugs only live in the seed JSON as
-  // the join key for status rows. We resolve slug → item.id via a
-  // parallel map built from the item label + orderIndex.
+  // Upsert items keyed by orderIndex — that's the natural key now
+  // that everything lives in one flat table.
   const itemBySlug = new Map<string, string>()
   for (const item of data.template.items) {
     const row = await prisma.onboardingChecklistItem.upsert({
-      where: {
-        templateId_orderIndex: {
-          templateId: template.id,
-          orderIndex: item.orderIndex,
-        },
-      },
+      where: { orderIndex: item.orderIndex },
       update: { label: item.label },
       create: {
-        templateId: template.id,
         label: item.label,
         orderIndex: item.orderIndex,
       },
@@ -91,9 +71,10 @@ export async function seedOnboarding(prisma: PrismaClient): Promise<void> {
   }
 
   for (const emp of data.employees) {
-    // Employees are keyed by (name + onboardingDate). It's a soft key
-    // because there's no natural unique — but for seed idempotency
-    // it's good enough: two different hires never share both.
+    // Employees are keyed by (name + onboardingDate). It's a soft
+    // key because there's no natural unique — but for seed
+    // idempotency it's good enough: two different hires never
+    // share both.
     const existing = await prisma.employee.findFirst({
       where: {
         name: emp.name,
@@ -108,7 +89,6 @@ export async function seedOnboarding(prisma: PrismaClient): Promise<void> {
       onboardingDate: toDate(emp.onboardingDate),
       dateStarted: toDate(emp.dateStarted),
       offboardingDate: toDate(emp.offboardingDate),
-      templateId: template.id,
     }
 
     const employee = existing
@@ -133,6 +113,6 @@ export async function seedOnboarding(prisma: PrismaClient): Promise<void> {
   }
 
   console.warn(
-    `✅ Seeded onboarding: template "${template.name}" with ${data.template.items.length} items, ${data.employees.length} employees`,
+    `✅ Seeded onboarding: ${data.template.items.length} items, ${data.employees.length} employees`,
   )
 }

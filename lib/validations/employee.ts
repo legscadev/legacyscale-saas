@@ -54,7 +54,6 @@ export const createEmployeeSchema = z
     roleTitle: z.string().trim().min(1, 'Role is required').max(120),
     onboardingDate: optionalDate.optional(),
     dateStarted: optionalDate.optional(),
-    templateSlug: z.string().trim().min(1).max(80).nullable().optional(),
     /**
      * When true, the admin also wants this hire to have SaaS login
      * access — we'll create a User account with `accessRole`, issue
@@ -139,36 +138,24 @@ export const updateChecklistItemSchema = z.object({
 export type UpdateChecklistItemInput = z.input<typeof updateChecklistItemSchema>
 
 // ---------------------------------------------------------------------
-// Checklist template CRUD
+// Single-checklist item CRUD (no template scope anymore)
 // ---------------------------------------------------------------------
 
-export const createTemplateSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(80),
-  description: z.string().max(1000).nullable().optional(),
-  isDefault: z.boolean().optional(),
-})
-export type CreateTemplateInput = z.input<typeof createTemplateSchema>
-
-export const updateTemplateSchema = z.object({
-  name: z.string().trim().min(1).max(80).optional(),
-  description: z.string().max(1000).nullable().optional(),
-  isDefault: z.boolean().optional(),
-})
-export type UpdateTemplateInput = z.input<typeof updateTemplateSchema>
-
-export const addTemplateItemSchema = z.object({
+export const addChecklistItemSchema = z.object({
   label: z.string().trim().min(1, 'Label is required').max(120),
   description: z.string().max(500).nullable().optional(),
 })
-export type AddTemplateItemInput = z.input<typeof addTemplateItemSchema>
+export type AddChecklistItemInput = z.input<typeof addChecklistItemSchema>
 
-export const updateTemplateItemSchema = z.object({
+export const updateChecklistItemFieldsSchema = z.object({
   label: z.string().trim().min(1).max(120).optional(),
   description: z.string().max(500).nullable().optional(),
 })
-export type UpdateTemplateItemInput = z.input<typeof updateTemplateItemSchema>
+export type UpdateChecklistItemFieldsInput = z.input<
+  typeof updateChecklistItemFieldsSchema
+>
 
-export const moveTemplateItemSchema = z.object({
+export const moveChecklistItemSchema = z.object({
   targetIndex: z.number().int().min(0),
 })
-export type MoveTemplateItemInput = z.input<typeof moveTemplateItemSchema>
+export type MoveChecklistItemInput = z.input<typeof moveChecklistItemSchema>

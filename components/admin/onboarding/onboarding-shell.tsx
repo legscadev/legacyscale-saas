@@ -1,11 +1,13 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import {
   AlertTriangle,
   ChevronRight,
+  ListChecks,
   Loader2,
   Plus,
   Search,
@@ -26,9 +28,7 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { EmployeeListItem } from '@/lib/services/employee-service'
-import type { TemplateListItem } from '@/lib/services/checklist-template-service'
 
-import { ChecklistsTab } from './checklists-tab'
 import { NewEmployeeDialog } from './new-employee-dialog'
 
 export type EmployeeRow = Pick<
@@ -46,10 +46,9 @@ export type EmployeeRow = Pick<
 
 interface OnboardingShellProps {
   initialEmployees: EmployeeRow[]
-  initialTemplates: TemplateListItem[]
 }
 
-type TabKey = 'active' | 'offboarded' | 'checklists'
+type TabKey = 'active' | 'offboarded'
 
 function formatDate(date: Date | null | undefined) {
   if (!date) return '—'
@@ -65,7 +64,7 @@ function ChecklistBar({
 }) {
   const { totalItems, okCount, pendingCount, attentionCount } = checklist
   if (totalItems === 0) {
-    return <span className="text-xs text-muted-foreground">No template</span>
+    return <span className="text-xs text-muted-foreground">No items</span>
   }
   const okPct = (okCount / totalItems) * 100
   const attnPct = (attentionCount / totalItems) * 100
@@ -93,34 +92,12 @@ function ChecklistBar({
   )
 }
 
-const VALID_TABS: readonly TabKey[] = ['active', 'offboarded', 'checklists']
-
-export function OnboardingShell({
-  initialEmployees,
-  initialTemplates,
-}: OnboardingShellProps) {
+export function OnboardingShell({ initialEmployees }: OnboardingShellProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  // Tab reads from ?tab= so linking back from a template editor page
-  // (or refreshing) lands on the right tab. Unknown values fall back
-  // to Active without erroring.
-  const paramTab = searchParams.get('tab') as TabKey | null
-  const tab: TabKey = paramTab && VALID_TABS.includes(paramTab) ? paramTab : 'active'
-
-  function setTab(next: TabKey) {
-    const params = new URLSearchParams(searchParams.toString())
-    if (next === 'active') params.delete('tab')
-    else params.set('tab', next)
-    const qs = params.toString()
-    router.replace(qs ? `/admin/onboarding?${qs}` : '/admin/onboarding')
-  }
-
+  const [tab, setTab] = useState<TabKey>('active')
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
-
-  const onEmployeeTab = tab !== 'checklists'
 
   const activeCount = useMemo(
     () => initialEmployees.filter((e) => e.status === 'ACTIVE').length,
@@ -149,14 +126,19 @@ export function OnboardingShell({
         title="Onboarding"
         description="Track hiring pipeline, checklist progress, and offboarding history for the internal team."
         actions={
-          onEmployeeTab ? (
-            <div className="flex items-center gap-2">
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-1.5 size-4" />
-                Add employee
-              </Button>
-            </div>
-          ) : null
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/onboarding/checklist"
+              className="inline-flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <ListChecks className="mr-1.5 size-4" />
+              Edit checklist
+            </Link>
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-1.5 size-4" />
+              Add employee
+            </Button>
+          </div>
         }
       />
 
@@ -179,29 +161,21 @@ export function OnboardingShell({
                 {offboardedCount}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="checklists">
-              Checklists
-              <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
-                {initialTemplates.length}
-              </span>
-            </TabsTrigger>
           </TabsList>
         </Tabs>
 
-        {onEmployeeTab ? (
-          <div className="relative w-full sm:w-72">
-            <Search
-              aria-hidden
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name or role"
-              className="pl-9"
-            />
-          </div>
-        ) : null}
+        <div className="relative w-full sm:w-72">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name or role"
+            className="pl-9"
+          />
+        </div>
       </div>
 
       {isPending ? (
@@ -211,9 +185,7 @@ export function OnboardingShell({
         </div>
       ) : null}
 
-      {!onEmployeeTab ? (
-        <ChecklistsTab templates={initialTemplates} />
-      ) : rows.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState
           icon={UserPlus}
           tone={tab === 'active' ? 'brand' : 'neutral'}
@@ -306,7 +278,7 @@ export function OnboardingShell({
         </div>
       )}
 
-      {onEmployeeTab && anyAttention ? (
+      {anyAttention ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200/70 bg-amber-50/60 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <div>
@@ -316,11 +288,7 @@ export function OnboardingShell({
         </div>
       ) : null}
 
-      <NewEmployeeDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        templates={initialTemplates}
-      />
+      <NewEmployeeDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </div>
   )
 }

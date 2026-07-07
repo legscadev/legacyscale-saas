@@ -59,7 +59,7 @@ import {
   deleteEmployeeAction,
   offboardEmployeeAction,
   reactivateEmployeeAction,
-  updateChecklistItemAction,
+  updateChecklistItemStatusAction,
 } from '@/app/(admin)/admin/onboarding/actions'
 
 interface EmployeeDetailShellProps {
@@ -123,7 +123,7 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
   const [offboardNotes, setOffboardNotes] = useState('')
   const [pending, startTransition] = useTransition()
 
-  const { template, checklist } = employee
+  const { items, checklist } = employee
   const isOffboarded = employee.status === 'OFFBOARDED'
 
   function handleStatusChange(
@@ -134,7 +134,7 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
     if (next === current) return
     startTransition(async () => {
       try {
-        await updateChecklistItemAction(employee.id, itemId, {
+        await updateChecklistItemStatusAction(employee.id, itemId, {
           status: next,
         })
       } catch (err) {
@@ -154,7 +154,7 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
     if (note === previous) return
     startTransition(async () => {
       try {
-        await updateChecklistItemAction(employee.id, itemId, {
+        await updateChecklistItemStatusAction(employee.id, itemId, {
           status,
           note: note || null,
         })
@@ -322,18 +322,16 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
           <div className="min-w-0">
             <h2 className="text-sm font-semibold leading-tight">Checklist</h2>
             <p className="truncate text-xs text-muted-foreground">
-              {template
-                ? template.name
-                : 'No checklist template assigned'}
+              {items.length} items
             </p>
           </div>
           <p className="hidden text-xs text-muted-foreground/80 sm:block">
             Click a status to change
           </p>
         </div>
-        {template && template.items.length > 0 ? (
+        {items.length > 0 ? (
           <ul className="divide-y">
-            {template.items.map((item) => (
+            {items.map((item) => (
               <ChecklistRow
                 key={item.id}
                 item={item}
@@ -481,11 +479,7 @@ function ChecklistRow({
   onNoteBlur,
   disabled,
 }: {
-  item: EmployeeDetail['template'] extends infer T
-    ? T extends { items: Array<infer I> }
-      ? I
-      : never
-    : never
+  item: EmployeeDetail['items'][number]
   onStatusChange: (next: ChecklistItemStatusValue) => void
   onNoteBlur: (note: string, previous: string) => void
   disabled: boolean

@@ -7,26 +7,22 @@ import {
   employeeService,
   MemberEmailConflictError,
 } from '@/lib/services/employee-service'
-import { checklistTemplateService } from '@/lib/services/checklist-template-service'
+import { checklistService } from '@/lib/services/checklist-service'
 import {
-  addTemplateItemSchema,
+  addChecklistItemSchema,
   createEmployeeSchema,
-  createTemplateSchema,
-  moveTemplateItemSchema,
+  moveChecklistItemSchema,
   offboardEmployeeSchema,
+  updateChecklistItemFieldsSchema,
   updateChecklistItemSchema,
   updateEmployeeSchema,
-  updateTemplateItemSchema,
-  updateTemplateSchema,
-  type AddTemplateItemInput,
+  type AddChecklistItemInput,
   type CreateEmployeeInput,
-  type CreateTemplateInput,
-  type MoveTemplateItemInput,
+  type MoveChecklistItemInput,
   type OffboardEmployeeInput,
+  type UpdateChecklistItemFieldsInput,
   type UpdateChecklistItemInput,
   type UpdateEmployeeInput,
-  type UpdateTemplateInput,
-  type UpdateTemplateItemInput,
 } from '@/lib/validations/employee'
 
 export async function searchLinkableUsersAction(query: string) {
@@ -94,7 +90,7 @@ export async function deleteEmployeeAction(id: string) {
   revalidatePath('/admin/onboarding')
 }
 
-export async function updateChecklistItemAction(
+export async function updateChecklistItemStatusAction(
   employeeId: string,
   itemId: string,
   input: UpdateChecklistItemInput,
@@ -111,80 +107,56 @@ export async function updateChecklistItemAction(
 }
 
 // ---------------------------------------------------------------------
-// Checklist template CRUD
+// Global checklist item CRUD (single canonical list)
 // ---------------------------------------------------------------------
 
-export async function getTemplateDetailAction(id: string) {
+export async function listChecklistItemsAction() {
   await requireAdmin()
-  return checklistTemplateService.get(id)
+  return checklistService.listItems()
 }
 
-export async function createTemplateAction(input: CreateTemplateInput) {
+export async function addChecklistItemAction(input: AddChecklistItemInput) {
   await requireAdmin()
-  const parsed = createTemplateSchema.parse(input)
-  const template = await checklistTemplateService.create(parsed)
+  const parsed = addChecklistItemSchema.parse(input)
+  const items = await checklistService.addItem(parsed)
   revalidatePath('/admin/onboarding')
-  return template
+  revalidatePath('/admin/onboarding/checklist')
+  return items
 }
 
-export async function updateTemplateAction(
-  id: string,
-  input: UpdateTemplateInput,
-) {
-  await requireAdmin()
-  const parsed = updateTemplateSchema.parse(input)
-  const template = await checklistTemplateService.update(id, parsed)
-  revalidatePath('/admin/onboarding')
-  return template
-}
-
-export async function deleteTemplateAction(id: string) {
-  await requireAdmin()
-  await checklistTemplateService.delete(id)
-  revalidatePath('/admin/onboarding')
-}
-
-export async function addTemplateItemAction(
-  templateId: string,
-  input: AddTemplateItemInput,
-) {
-  await requireAdmin()
-  const parsed = addTemplateItemSchema.parse(input)
-  const template = await checklistTemplateService.addItem(templateId, parsed)
-  revalidatePath('/admin/onboarding')
-  return template
-}
-
-export async function updateTemplateItemAction(
+export async function updateChecklistItemFieldsAction(
   itemId: string,
-  input: UpdateTemplateItemInput,
+  input: UpdateChecklistItemFieldsInput,
 ) {
   await requireAdmin()
-  const parsed = updateTemplateItemSchema.parse(input)
-  const template = await checklistTemplateService.updateItem(itemId, parsed)
+  const parsed = updateChecklistItemFieldsSchema.parse(input)
+  const items = await checklistService.updateItem(itemId, parsed)
   revalidatePath('/admin/onboarding')
-  return template
+  revalidatePath('/admin/onboarding/checklist')
+  return items
 }
 
-export async function moveTemplateItemAction(
+export async function moveChecklistItemAction(
   itemId: string,
-  input: MoveTemplateItemInput,
+  input: MoveChecklistItemInput,
 ) {
   await requireAdmin()
-  const parsed = moveTemplateItemSchema.parse(input)
-  const template = await checklistTemplateService.moveItem(itemId, parsed.targetIndex)
+  const parsed = moveChecklistItemSchema.parse(input)
+  const items = await checklistService.moveItem(itemId, parsed.targetIndex)
   revalidatePath('/admin/onboarding')
-  return template
+  revalidatePath('/admin/onboarding/checklist')
+  return items
 }
 
-export async function getDeleteItemImpactAction(itemId: string) {
+export async function getDeleteChecklistItemImpactAction(itemId: string) {
   await requireAdmin()
-  return checklistTemplateService.deleteItemImpact(itemId)
+  return checklistService.deleteItemImpact(itemId)
 }
 
-export async function deleteTemplateItemAction(itemId: string) {
+export async function deleteChecklistItemAction(itemId: string) {
   await requireAdmin()
-  const template = await checklistTemplateService.deleteItem(itemId)
+  const items = await checklistService.deleteItem(itemId)
   revalidatePath('/admin/onboarding')
-  return template
+  revalidatePath('/admin/onboarding/checklist')
+  return items
 }
