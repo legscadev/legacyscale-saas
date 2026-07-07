@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import type { LinkableUser } from '@/lib/services/employee-service'
 import type { TemplateListItem } from '@/lib/services/checklist-template-service'
 
 import { createEmployeeAction } from '@/app/(admin)/admin/onboarding/actions'
@@ -31,6 +32,7 @@ import {
   INITIAL_ACCESS,
   type AccessState,
 } from './employee-access-section'
+import { EmployeeNameField } from './employee-name-field'
 
 interface NewEmployeeDialogProps {
   open: boolean
@@ -50,6 +52,7 @@ export function NewEmployeeDialog({
 }: NewEmployeeDialogProps) {
   const router = useRouter()
   const [name, setName] = useState('')
+  const [linkedUser, setLinkedUser] = useState<LinkableUser | null>(null)
   const [roleTitle, setRoleTitle] = useState('')
   const [onboardingDate, setOnboardingDate] = useState('')
   // We track only the user's *override* — the effective value is
@@ -69,21 +72,38 @@ export function NewEmployeeDialog({
 
   function reset() {
     setName('')
+    setLinkedUser(null)
     setRoleTitle('')
     setOnboardingDate('')
     setPickedSlug(null)
     setAccess(INITIAL_ACCESS)
   }
 
-  // Submit gate — access sub-modes have different completeness rules.
-  const accessComplete =
-    access.mode === 'none' ||
-    (access.mode === 'link' && access.linkedUser !== null) ||
-    (access.mode === 'create' && access.email.trim() !== '')
+  function handleLink(user: LinkableUser) {
+    setLinkedUser(user)
+    // Sync the name field with the picked user so the payload we
+    // eventually send matches what the admin sees.
+    setName(user.name || user.email)
+    // A linked user brings their own account; the "create new
+    // account" branch is meaningless here.
+    setAccess(INITIAL_ACCESS)
+  }
+
+  function handleUnlink() {
+    setLinkedUser(null)
+    setName('')
+  }
+
+  // Submit gate:
+  //   - name + roleTitle always required
+  //   - if not linked and access checkbox is on, email must be filled
+  const accessOk =
+    linkedUser !== null || !access.enabled || access.email.trim() !== ''
+  const canSubmit = !pending && Boolean(name) && Boolean(roleTitle) && accessOk
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (pending) return
+    if (!canSubmit) return
     startTransition(async () => {
       try {
         const employee = await createEmployeeAction({
@@ -91,21 +111,21 @@ export function NewEmployeeDialog({
           roleTitle,
           onboardingDate: onboardingDate || null,
           templateSlug: templateSlug === NO_TEMPLATE ? null : templateSlug,
-          grantAccess: access.mode === 'create',
+          // Linked user takes precedence; access.enabled is ignored
+          // when a user is already linked.
+          linkUserId: linkedUser?.id ?? null,
+          grantAccess: !linkedUser && access.enabled,
           accessRole:
-            access.mode === 'create' ? access.accessRole : undefined,
+            !linkedUser && access.enabled ? access.accessRole : undefined,
           email:
-            access.mode === 'create' ? access.email.trim() : undefined,
-          linkUserId:
-            access.mode === 'link' ? access.linkedUser?.id ?? null : null,
+            !linkedUser && access.enabled ? access.email.trim() : undefined,
         })
 
-        const successMessage =
-          access.mode === 'create'
+        const successMessage = linkedUser
+          ? `Added ${employee.name} — linked to ${linkedUser.name || linkedUser.email}`
+          : access.enabled
             ? `Added ${employee.name} — invite sent`
-            : access.mode === 'link'
-              ? `Added ${employee.name} — linked to ${access.linkedUser?.name || access.linkedUser?.email}`
-              : `Added ${employee.name}`
+            : `Added ${employee.name}`
         toast.success(successMessage)
         reset()
         onOpenChange(false)
@@ -129,22 +149,18 @@ export function NewEmployeeDialog({
         <DialogHeader>
           <DialogTitle>Add employee</DialogTitle>
           <DialogDescription>
-            Start a new onboarding record. You can fill in checklist items
-            from the employee profile.
+            Search for an existing user or add a brand-new hire.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="employee-name">Name</Label>
-            <Input
-              id="employee-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Jane Doe"
-              required
-              autoFocus
-            />
-          </div>
+          <EmployeeNameField
+            value={name}
+            onChange={setName}
+            linkedUser={linkedUser}
+            onLink={handleLink}
+            onUnlink={handleUnlink}
+            disabled={pending}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="employee-role">Role</Label>
             <Input
@@ -193,11 +209,16 @@ export function NewEmployeeDialog({
             </Select>
           </div>
 
-          <EmployeeAccessSection
-            state={access}
-            onChange={setAccess}
-            disabled={pending}
-          />
+          {/* Access section only makes sense when we're creating a
+              brand-new record. If an existing user was linked, they
+              already have an account (and role) — nothing to decide. */}
+          {linkedUser ? null : (
+            <EmployeeAccessSection
+              state={access}
+              onChange={setAccess}
+              disabled={pending}
+            />
+          )}
 
           <DialogFooter>
             <Button
@@ -208,10 +229,7 @@ export function NewEmployeeDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={pending || !name || !roleTitle || !accessComplete}
-            >
+            <Button type="submit" disabled={!canSubmit}>
               {pending ? (
                 <>
                   <Loader2 className="mr-1.5 size-4 animate-spin" />
