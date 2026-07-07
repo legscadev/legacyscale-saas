@@ -201,9 +201,6 @@ const CROWN_CHAIN: Array<{ label: string; positionTitle: string | null }> = [
   { label: 'Vice President', positionTitle: null },
 ]
 
-const CANONICAL_VFP =
-  'VFP: Valuable, and effective Closers who are able to produce consistently and efficaciously, making those companies in which they are placed profitable and happy'
-
 export async function seedOrgBoard(prisma: PrismaClient): Promise<void> {
   // If any revision already exists, leave it alone — the seed
   // should never clobber admin edits on re-run.
@@ -275,20 +272,6 @@ export async function seedOrgBoard(prisma: PrismaClient): Promise<void> {
       })
     }
   }
-
-  // Overall board VFP banner — a floating node with a well-known
-  // kind. We stash it as a POSITION at the root; UI decides how to
-  // render it.
-  await prisma.orgNode.create({
-    data: {
-      revisionId: revision.id,
-      parentId: null,
-      kind: 'POSITION' satisfies OrgNodeKind,
-      label: 'Board VFP',
-      vfp: CANONICAL_VFP,
-      orderIndex: 999,
-    },
-  })
 
   console.warn(
     `✅ Seeded org board: revision "${revision.name}" with ${DIVISIONS.length} divisions and ${
