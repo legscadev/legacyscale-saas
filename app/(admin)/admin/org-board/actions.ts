@@ -40,23 +40,26 @@ export async function addOrgNodeAction(
   revisionId: string,
   input: CreateOrgNodeInput,
 ) {
-  await requireAdmin()
+  const admin = await requireAdmin()
   const parsed = createOrgNodeSchema.parse(input)
-  const node = await orgBoardService.addNode({
-    revisionId,
-    parentId: parsed.parentId ?? null,
-    kind: parsed.kind,
-    label: parsed.label,
-    positionTitle: parsed.positionTitle ?? null,
-    deptNumber: parsed.deptNumber ?? null,
-    color: parsed.color ?? null,
-    vfp: parsed.vfp ?? null,
-    functionText: parsed.functionText ?? null,
-    responsibilities: parsed.responsibilities,
-    notes: parsed.notes ?? null,
-    employeeId: parsed.employeeId ?? null,
-    freeTextHolder: parsed.freeTextHolder ?? null,
-  })
+  const node = await orgBoardService.addNode(
+    {
+      revisionId,
+      parentId: parsed.parentId ?? null,
+      kind: parsed.kind,
+      label: parsed.label,
+      positionTitle: parsed.positionTitle ?? null,
+      deptNumber: parsed.deptNumber ?? null,
+      color: parsed.color ?? null,
+      vfp: parsed.vfp ?? null,
+      functionText: parsed.functionText ?? null,
+      responsibilities: parsed.responsibilities,
+      notes: parsed.notes ?? null,
+      employeeId: parsed.employeeId ?? null,
+      freeTextHolder: parsed.freeTextHolder ?? null,
+    },
+    { actorUserId: admin.id },
+  )
   revalidate(parsed.parentId ?? undefined)
   return node
 }
@@ -65,9 +68,9 @@ export async function updateOrgNodeAction(
   id: string,
   input: UpdateOrgNodeInput,
 ) {
-  await requireAdmin()
+  const admin = await requireAdmin()
   const parsed = updateOrgNodeSchema.parse(input)
-  const node = await orgBoardService.updateNode(id, parsed)
+  const node = await orgBoardService.updateNode(id, parsed, { actorUserId: admin.id })
   revalidate(id)
   return node
 }
@@ -78,8 +81,8 @@ export async function getOrgNodeDeleteImpactAction(id: string) {
 }
 
 export async function deleteOrgNodeAction(id: string) {
-  await requireAdmin()
-  await orgBoardService.deleteNode(id)
+  const admin = await requireAdmin()
+  await orgBoardService.deleteNode(id, { actorUserId: admin.id })
   revalidate()
 }
 
@@ -87,9 +90,9 @@ export async function moveOrgNodeAction(
   id: string,
   input: MoveOrgNodeInput,
 ) {
-  await requireAdmin()
+  const admin = await requireAdmin()
   const parsed = moveOrgNodeSchema.parse(input)
-  await orgBoardService.moveNode(id, parsed.direction)
+  await orgBoardService.moveNode(id, parsed.direction, { actorUserId: admin.id })
   revalidate(id)
 }
 
@@ -109,14 +112,17 @@ export async function addPositionAssignmentAction(
   nodeId: string,
   input: AddPositionAssignmentInput,
 ) {
-  await requireAdmin()
+  const admin = await requireAdmin()
   const parsed = addPositionAssignmentSchema.parse(input)
-  const row = await orgBoardService.addAssignment({
-    nodeId,
-    employeeId: parsed.employeeId,
-    employmentType: parsed.employmentType ?? null,
-    notes: parsed.notes ?? null,
-  })
+  const row = await orgBoardService.addAssignment(
+    {
+      nodeId,
+      employeeId: parsed.employeeId,
+      employmentType: parsed.employmentType ?? null,
+      notes: parsed.notes ?? null,
+    },
+    { actorUserId: admin.id },
+  )
   revalidate(nodeId)
   return row
 }
@@ -125,7 +131,14 @@ export async function endPositionAssignmentAction(
   assignmentId: string,
   nodeId: string,
 ) {
-  await requireAdmin()
-  await orgBoardService.endAssignment(assignmentId)
+  const admin = await requireAdmin()
+  await orgBoardService.endAssignment(assignmentId, new Date(), {
+    actorUserId: admin.id,
+  })
   revalidate(nodeId)
+}
+
+export async function listOrgAuditLogsAction(revisionId: string, limit = 100) {
+  await requireAdmin()
+  return orgBoardService.listAuditLogs(revisionId, limit)
 }

@@ -1,10 +1,12 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
-import { Network } from 'lucide-react'
+import { Network, Search } from 'lucide-react'
+
+import { Input } from '@/components/ui/input'
 
 import { PageHeader, EmptyState } from '@/components/shared'
 import {
@@ -16,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type {
+  AuditLogEntry,
   OrgBoardRevisionSummary,
   OrgBoardTree,
   OrgNodeRow,
@@ -23,9 +26,23 @@ import type {
 
 import { OrgNodeMenu } from './org-node-menu'
 
+interface OrgStats {
+  divisions: number
+  departments: number
+  sections: number
+  units: number
+  positions: number
+  filledPositions: number
+  vacantPositions: number
+  employeesAssigned: number
+  departmentsWithVacancies: number
+}
+
 interface OrgBoardShellProps {
   tree: OrgBoardTree | null
   revisions: OrgBoardRevisionSummary[]
+  stats: OrgStats | null
+  auditLogs: AuditLogEntry[]
 }
 
 // Named palette shared with the seed script. Divisions carry a
@@ -85,7 +102,12 @@ const CROWN_STYLE = {
   ring: 'ring-sky-700/40',
 }
 
-export function OrgBoardShell({ tree, revisions }: OrgBoardShellProps) {
+export function OrgBoardShell({
+  tree,
+  revisions,
+  stats,
+  auditLogs,
+}: OrgBoardShellProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -161,7 +183,145 @@ export function OrgBoardShell({ tree, revisions }: OrgBoardShellProps) {
         }
       />
 
-      <TopLevelChart nodes={tree.nodes} />
+      {stats ? <OrgStatsStrip stats={stats} /> : null}
+
+      <FilterableChart nodes={tree.nodes} />
+
+      {auditLogs.length > 0 ? <RecentActivity entries={auditLogs} /> : null}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Dashboard: stat cards + recent activity strip
+// ---------------------------------------------------------------------
+
+function OrgStatsStrip({ stats }: { stats: OrgStats }) {
+  const cards = [
+    { label: 'Divisions', value: stats.divisions },
+    { label: 'Departments', value: stats.departments },
+    { label: 'Positions', value: stats.positions },
+    {
+      label: 'Filled',
+      value: stats.filledPositions,
+      tone: 'success' as const,
+    },
+    {
+      label: 'Vacant',
+      value: stats.vacantPositions,
+      tone: stats.vacantPositions > 0 ? ('warning' as const) : undefined,
+    },
+    { label: 'Employees assigned', value: stats.employeesAssigned },
+  ]
+  return (
+    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {cards.map((c) => (
+        <div key={c.label} className="rounded-xl border bg-card p-3">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            {c.label}
+          </p>
+          <p
+            className={cn(
+              'mt-1 text-xl font-semibold tabular-nums',
+              c.tone === 'success' && 'text-emerald-600',
+              c.tone === 'warning' && 'text-amber-600',
+            )}
+          >
+            {c.value}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RecentActivity({ entries }: { entries: AuditLogEntry[] }) {
+  return (
+    <details className="rounded-xl border bg-card">
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold hover:bg-muted/40">
+        Recent activity <span className="text-xs text-muted-foreground">({entries.length})</span>
+      </summary>
+      <ul className="divide-y border-t">
+        {entries.slice(0, 20).map((e) => (
+          <li key={e.id} className="flex items-start gap-3 px-4 py-2 text-sm">
+            <span className="mt-0.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
+              {e.action.replace(/_/g, ' ').toLowerCase()}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate">
+                {e.actor?.name ?? e.actor?.email ?? 'system'}{' '}
+                <span className="text-muted-foreground">·{' '}
+                  {new Date(e.createdAt).toLocaleString()}
+                </span>
+              </p>
+              {e.newValue && typeof e.newValue === 'object' && 'label' in (e.newValue as object) ? (
+                <p className="truncate text-xs text-muted-foreground">
+                  {(e.newValue as { label?: string }).label}
+                </p>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Filter panel — search text, kind filter, vacancy toggle. Dims
+// non-matching nodes rather than hiding them, so the tree shape
+// stays visible.
+// ---------------------------------------------------------------------
+
+function FilterableChart({ nodes }: { nodes: OrgNodeRow[] }) {
+  const [query, setQuery] = useState('')
+  const [vacantOnly, setVacantOnly] = useState(false)
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q && !vacantOnly) return null // null = "everything visible"
+    const acc = new Set<string>()
+    for (const n of nodes) {
+      const hasHolder = Boolean(n.employee?.name || n.freeTextHolder)
+      const isVacant = n.kind === 'POSITION' && !hasHolder && n.activeAssignmentsCount === 0
+      const textMatch =
+        !q ||
+        n.label.toLowerCase().includes(q) ||
+        (n.positionTitle ?? '').toLowerCase().includes(q) ||
+        (n.employee?.name ?? '').toLowerCase().includes(q) ||
+        (n.freeTextHolder ?? '').toLowerCase().includes(q)
+      const vacantMatch = !vacantOnly || isVacant
+      if (textMatch && vacantMatch) acc.add(n.id)
+    }
+    return acc
+  }, [query, vacantOnly, nodes])
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search label, role, holder…"
+            className="pl-9"
+          />
+        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4 rounded border-input"
+            checked={vacantOnly}
+            onChange={(e) => setVacantOnly(e.target.checked)}
+          />
+          Vacant only
+        </label>
+      </div>
+      <TopLevelChart nodes={nodes} matchIds={matches} />
     </div>
   )
 }
@@ -170,7 +330,19 @@ export function OrgBoardShell({ tree, revisions }: OrgBoardShellProps) {
 // Top-level view — crown chain + 7 divisions
 // ---------------------------------------------------------------------
 
-function TopLevelChart({ nodes }: { nodes: OrgNodeRow[] }) {
+function TopLevelChart({
+  nodes,
+  matchIds,
+}: {
+  nodes: OrgNodeRow[]
+  /** null = filter inactive; otherwise contains the set of node
+   *  ids that pass the filter. Non-matching nodes get dimmed. */
+  matchIds?: Set<string> | null
+}) {
+  function dimClass(nodeId: string): string {
+    if (!matchIds) return ''
+    return matchIds.has(nodeId) ? '' : 'opacity-25'
+  }
   const { crown, divisions, boardVfp, byParent } = useMemo(() => {
     const crown = nodes
       .filter((n) => n.kind === 'CROWN')
@@ -206,7 +378,9 @@ function TopLevelChart({ nodes }: { nodes: OrgNodeRow[] }) {
       <div className="flex justify-center">
         <div className="flex flex-col items-center gap-4">
           {crown.map((c) => (
-            <CrownCard key={c.id} node={c} />
+            <div key={c.id} className={cn('transition-opacity', dimClass(c.id))}>
+              <CrownCard node={c} />
+            </div>
           ))}
         </div>
       </div>
@@ -225,11 +399,9 @@ function TopLevelChart({ nodes }: { nodes: OrgNodeRow[] }) {
             }}
           >
             {divisions.map((div) => (
-              <DivisionColumn
-                key={div.id}
-                node={div}
-                depts={byParent.get(div.id) ?? []}
-              />
+              <div key={div.id} className={cn('transition-opacity', dimClass(div.id))}>
+                <DivisionColumn node={div} depts={byParent.get(div.id) ?? []} />
+              </div>
             ))}
           </div>
         </div>

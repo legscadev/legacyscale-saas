@@ -1,4 +1,9 @@
-import type { EmploymentType, OrgNodeKind, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import type {
+  EmploymentType,
+  OrgAuditAction,
+  OrgNodeKind,
+} from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
@@ -101,6 +106,26 @@ export interface AddAssignmentArgs {
   dateAssigned?: Date
   employmentType?: EmploymentType | null
   notes?: string | null
+}
+
+/**
+ * Attached to every mutation so we can attribute the audit log
+ * entry. Optional so internal callers (jobs, seeds) that don't
+ * have a user context can still mutate without pretending.
+ */
+export interface AuditContext {
+  actorUserId?: string | null
+}
+
+export interface AuditLogEntry {
+  id: string
+  revisionId: string
+  nodeId: string | null
+  actor: { id: string; name: string | null; email: string } | null
+  action: OrgAuditAction
+  oldValue: unknown
+  newValue: unknown
+  createdAt: Date
 }
 
 function mapRow(row: {
@@ -301,7 +326,66 @@ class OrgBoardService {
   // Mutations
   // -----------------------------------------------------------------
 
-  async addNode(input: CreateOrgNodeArgs): Promise<OrgNodeRow> {
+  /**
+   * Internal helper — writes a single append-only audit entry.
+   * Called by every mutation; failures are swallowed with a
+   * console.error because losing an audit line should never
+   * break the mutation the user came for.
+   */
+  private async writeAudit(
+    revisionId: string,
+    nodeId: string | null,
+    action: OrgAuditAction,
+    ctx: AuditContext | undefined,
+    oldValue: unknown,
+    newValue: unknown,
+  ): Promise<void> {
+    try {
+      await prisma.orgNodeAuditLog.create({
+        data: {
+          revisionId,
+          nodeId,
+          actorUserId: ctx?.actorUserId ?? null,
+          action,
+          oldValue: oldValue === undefined ? Prisma.JsonNull : (oldValue as Prisma.InputJsonValue),
+          newValue: newValue === undefined ? Prisma.JsonNull : (newValue as Prisma.InputJsonValue),
+        },
+      })
+    } catch (err) {
+      console.error('org audit log write failed:', err)
+    }
+  }
+
+  /** Compact snapshot of node fields we care about for audit. */
+  private auditSnapshot(row: {
+    id: string
+    kind: OrgNodeKind
+    label: string
+    positionTitle: string | null
+    parentId: string | null
+    employeeId: string | null
+    freeTextHolder: string | null
+    color: string | null
+    vfp: string | null
+    functionText: string | null
+    orderIndex: number
+  }) {
+    return {
+      id: row.id,
+      kind: row.kind,
+      label: row.label,
+      positionTitle: row.positionTitle,
+      parentId: row.parentId,
+      employeeId: row.employeeId,
+      freeTextHolder: row.freeTextHolder,
+      color: row.color,
+      vfp: row.vfp,
+      functionText: row.functionText,
+      orderIndex: row.orderIndex,
+    }
+  }
+
+  async addNode(input: CreateOrgNodeArgs, ctx?: AuditContext): Promise<OrgNodeRow> {
     // Append at the end of the parent's children — matches the
     // "Add Position" / "Add Section" expectation of showing up at
     // the bottom of the current list.
@@ -338,12 +422,21 @@ class OrgBoardService {
       },
       include: { employee: { select: { id: true, name: true, roleTitle: true } } },
     })
+    await this.writeAudit(
+      row.revisionId,
+      row.id,
+      'NODE_CREATED',
+      ctx,
+      null,
+      this.auditSnapshot(row),
+    )
     return mapRow(row)
   }
 
   async updateNode(
     id: string,
     input: UpdateOrgNodeArgs,
+    ctx?: AuditContext,
   ): Promise<OrgNodeRow> {
     if (input.employeeId && input.freeTextHolder) {
       throw new Error('Pick either an employee or a placeholder, not both')
@@ -364,11 +457,20 @@ class OrgBoardService {
     }
     if (input.freeTextHolder !== undefined) data.freeTextHolder = input.freeTextHolder
 
+    const before = await prisma.orgNode.findUnique({ where: { id } })
     const row = await prisma.orgNode.update({
       where: { id },
       data,
       include: { employee: { select: { id: true, name: true, roleTitle: true } } },
     })
+    await this.writeAudit(
+      row.revisionId,
+      row.id,
+      'NODE_UPDATED',
+      ctx,
+      before ? this.auditSnapshot(before) : null,
+      this.auditSnapshot(row),
+    )
     return mapRow(row)
   }
 
@@ -419,9 +521,21 @@ class OrgBoardService {
     }
   }
 
-  async deleteNode(id: string): Promise<void> {
+  async deleteNode(id: string, ctx?: AuditContext): Promise<void> {
+    const before = await prisma.orgNode.findUnique({ where: { id } })
+    if (!before) return
     // Cascade in schema handles descendants.
     await prisma.orgNode.delete({ where: { id } })
+    // nodeId=null because the row itself is gone; revisionId
+    // survives so the log is still queryable per board.
+    await this.writeAudit(
+      before.revisionId,
+      null,
+      'NODE_DELETED',
+      ctx,
+      this.auditSnapshot(before),
+      null,
+    )
   }
 
   /**
@@ -432,6 +546,7 @@ class OrgBoardService {
   async moveNode(
     id: string,
     direction: 'up' | 'down' | 'left' | 'right',
+    ctx?: AuditContext,
   ): Promise<void> {
     const target = await prisma.orgNode.findUnique({
       where: { id },
@@ -480,6 +595,14 @@ class OrgBoardService {
         data: { orderIndex: sibling.orderIndex },
       }),
     ])
+    await this.writeAudit(
+      target.revisionId,
+      target.id,
+      'NODE_MOVED',
+      ctx,
+      { orderIndex: target.orderIndex, direction },
+      { orderIndex: sibling.orderIndex, swappedWith: sibling.id },
+    )
   }
 
   // -----------------------------------------------------------------
@@ -519,7 +642,10 @@ class OrgBoardService {
     }))
   }
 
-  async addAssignment(args: AddAssignmentArgs): Promise<PositionAssignmentRow> {
+  async addAssignment(
+    args: AddAssignmentArgs,
+    ctx?: AuditContext,
+  ): Promise<PositionAssignmentRow> {
     // Guard against duplicate live assignments — same employee
     // already actively holds this seat. Two rows would mostly work
     // but downstream counts would misreport.
@@ -546,6 +672,26 @@ class OrgBoardService {
         employee: { select: { id: true, name: true, roleTitle: true } },
       },
     })
+    const node = await prisma.orgNode.findUnique({
+      where: { id: row.nodeId },
+      select: { revisionId: true },
+    })
+    if (node) {
+      await this.writeAudit(
+        node.revisionId,
+        row.nodeId,
+        'ASSIGNMENT_ADDED',
+        ctx,
+        null,
+        {
+          assignmentId: row.id,
+          employeeId: row.employeeId,
+          employeeName: row.employee.name,
+          employmentType: row.employmentType,
+          dateAssigned: row.dateAssigned,
+        },
+      )
+    }
     return {
       id: row.id,
       nodeId: row.nodeId,
@@ -569,11 +715,160 @@ class OrgBoardService {
   async endAssignment(
     assignmentId: string,
     endedAt: Date = new Date(),
+    ctx?: AuditContext,
   ): Promise<void> {
+    const before = await prisma.positionAssignment.findUnique({
+      where: { id: assignmentId },
+      include: { node: { select: { revisionId: true } }, employee: { select: { name: true } } },
+    })
     await prisma.positionAssignment.update({
       where: { id: assignmentId },
       data: { endedAt },
     })
+    if (before) {
+      await this.writeAudit(
+        before.node.revisionId,
+        before.nodeId,
+        'ASSIGNMENT_ENDED',
+        ctx,
+        {
+          assignmentId,
+          employeeId: before.employeeId,
+          employeeName: before.employee.name,
+          dateAssigned: before.dateAssigned,
+        },
+        { endedAt },
+      )
+    }
+  }
+
+  /**
+   * Dashboard-friendly aggregate counts for a revision. Filled /
+   * vacant assumes a "position with a primary employeeId or any
+   * active assignment" is filled. Everything else is vacant.
+   */
+  async getStats(revisionId: string): Promise<{
+    divisions: number
+    departments: number
+    sections: number
+    units: number
+    positions: number
+    filledPositions: number
+    vacantPositions: number
+    employeesAssigned: number
+    departmentsWithVacancies: number
+  }> {
+    const nodes = await prisma.orgNode.findMany({
+      where: { revisionId },
+      include: {
+        _count: { select: { assignments: { where: { endedAt: null } } } },
+      },
+    })
+    let divisions = 0
+    let departments = 0
+    let sections = 0
+    let units = 0
+    let positions = 0
+    let filled = 0
+    const filledDeptIds = new Set<string>()
+    const employeeIds = new Set<string>()
+
+    for (const n of nodes) {
+      if (n.kind === 'DIVISION') divisions++
+      else if (n.kind === 'DEPARTMENT') departments++
+      else if (n.kind === 'SECTION') sections++
+      else if (n.kind === 'UNIT') units++
+      else if (n.kind === 'POSITION') positions++
+      const isFilled = Boolean(n.employeeId) || n._count.assignments > 0
+      if (n.kind === 'POSITION' && isFilled) filled++
+      if (n.employeeId) employeeIds.add(n.employeeId)
+    }
+
+    // Second pass: for every DEPARTMENT, check whether any
+    // descendant POSITION is vacant. We do this via a childrenOf
+    // walk since we already have the flat list in memory.
+    const childrenOf = new Map<string, typeof nodes>()
+    for (const n of nodes) {
+      if (!n.parentId) continue
+      const list = childrenOf.get(n.parentId) ?? []
+      list.push(n)
+      childrenOf.set(n.parentId, list)
+    }
+    let departmentsWithVacancies = 0
+    for (const dept of nodes) {
+      if (dept.kind !== 'DEPARTMENT') continue
+      // BFS descendants
+      let hasVacancy = false
+      const queue: typeof nodes = [...(childrenOf.get(dept.id) ?? [])]
+      while (queue.length > 0) {
+        const cur = queue.shift()!
+        if (cur.kind === 'POSITION') {
+          const isFilled = Boolean(cur.employeeId) || cur._count.assignments > 0
+          if (!isFilled) {
+            hasVacancy = true
+            break
+          }
+        }
+        queue.push(...(childrenOf.get(cur.id) ?? []))
+      }
+      if (hasVacancy) {
+        departmentsWithVacancies++
+        filledDeptIds.add(dept.id) // just to keep set typed
+      }
+    }
+    // filledDeptIds size not surfaced; kept to avoid unused var
+    void filledDeptIds
+
+    // Distinct employees appearing in position_assignments too.
+    const activeAssignEmployees = await prisma.positionAssignment.findMany({
+      where: { node: { revisionId }, endedAt: null },
+      select: { employeeId: true },
+      distinct: ['employeeId'],
+    })
+    for (const a of activeAssignEmployees) employeeIds.add(a.employeeId)
+
+    return {
+      divisions,
+      departments,
+      sections,
+      units,
+      positions,
+      filledPositions: filled,
+      vacantPositions: positions - filled,
+      employeesAssigned: employeeIds.size,
+      departmentsWithVacancies,
+    }
+  }
+
+  /**
+   * Return the most recent audit entries for a revision. Defaults
+   * to 100 rows — the dashboard "Recently updated" panel uses this
+   * and drops any older detail on the floor.
+   */
+  async listAuditLogs(
+    revisionId: string,
+    limit = 100,
+  ): Promise<AuditLogEntry[]> {
+    const rows = await prisma.orgNodeAuditLog.findMany({
+      where: { revisionId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        actor: { select: { id: true, name: true, email: true } },
+      },
+    })
+    return rows.map((r) => ({
+      id: r.id,
+      revisionId: r.revisionId,
+      nodeId: r.nodeId,
+      actor: r.actor
+        ? { id: r.actor.id, name: r.actor.name, email: r.actor.email }
+        : null,
+      action: r.action,
+      oldValue: r.oldValue,
+      newValue: r.newValue,
+      createdAt: r.createdAt,
+    }))
   }
 }
 

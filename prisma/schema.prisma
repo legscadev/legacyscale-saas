@@ -147,6 +147,17 @@ enum EmploymentType {
   ADVISORY
 }
 
+/// Kinds of changes we log on the org board. Kept small on purpose;
+/// finer distinctions live in the `newValue` JSON payload.
+enum OrgAuditAction {
+  NODE_CREATED
+  NODE_UPDATED
+  NODE_MOVED
+  NODE_DELETED
+  ASSIGNMENT_ADDED
+  ASSIGNMENT_ENDED
+}
+
 // ============================================
 // USER MANAGEMENT
 // ============================================
@@ -204,6 +215,7 @@ model User {
   nudgesAuthored        Nudge[]                @relation("NudgeAuthor")
   employee              Employee?              @relation("EmployeeUser")
   orgBoardRevisions     OrgBoardRevision[]     @relation("OrgBoardRevisionAuthor")
+  orgAuditLogs          OrgNodeAuditLog[]      @relation("OrgAuditActor")
 
   @@index([role])
   @@index([isActive])
@@ -938,7 +950,8 @@ model OrgBoardRevision {
   createdById String?   @map("created_by_id")
   createdBy   User?     @relation("OrgBoardRevisionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
 
-  nodes OrgNode[]
+  nodes     OrgNode[]
+  auditLogs OrgNodeAuditLog[]
 
   @@index([isCurrent])
   @@map("org_board_revisions")
@@ -1002,6 +1015,7 @@ model OrgNode {
   employee       Employee?            @relation("OrgNodeEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
   positionDetail PositionDetail?
   assignments    PositionAssignment[]
+  auditLogs      OrgNodeAuditLog[]
 
   @@index([revisionId])
   @@index([parentId])
@@ -1066,4 +1080,36 @@ model PositionAssignment {
   @@index([nodeId, endedAt])
   @@index([employeeId, endedAt])
   @@map("position_assignments")
+}
+
+/// Append-only log of every mutation on the org board. `nodeId` is
+/// nullable + SetNull so history survives after a node is deleted
+/// (we still want to know "someone deleted Department X on this
+/// date"). `oldValue` / `newValue` are free-form JSON so we can
+/// stash whatever the mutation touched without a migration when the
+/// service layer gains a new field.
+model OrgNodeAuditLog {
+  id          String         @id @default(uuid())
+  revisionId  String         @map("revision_id")
+  /// The node the change targeted. Null for post-deletion history.
+  nodeId      String?        @map("node_id")
+  /// User who initiated the change. Null when the change came from
+  /// a service token or a background job.
+  actorUserId String?        @map("actor_user_id")
+  action      OrgAuditAction
+  /// Freeze of the affected fields *before* the change (null for
+  /// creates). Compact — we don't snapshot the whole node.
+  oldValue    Json?
+  /// Freeze of the affected fields *after* the change (null for
+  /// pure deletes).
+  newValue    Json?
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  revision OrgBoardRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  node     OrgNode?         @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  actor    User?            @relation("OrgAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([revisionId, createdAt])
+  @@index([nodeId, createdAt])
+  @@map("org_node_audit_logs")
 }
