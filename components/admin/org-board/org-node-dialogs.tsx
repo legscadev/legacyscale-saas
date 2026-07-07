@@ -25,6 +25,7 @@ import {
 
 import {
   addOrgNodeAction,
+  resolveHolderToEmployeeAction,
   searchAssignableEmployeesAction,
   updateOrgNodeAction,
 } from '@/app/(admin)/admin/org-board/actions'
@@ -36,6 +37,9 @@ import { PositionAssignmentsPanel } from './position-assignments-panel'
 // ---------------------------------------------------------------------
 
 interface EmployeeRef {
+  /** 'employee' when it came from the Employee table; 'user' when
+   *  it's a User row that needs an Employee upsert on submit. */
+  kind: 'employee' | 'user'
   id: string
   name: string | null
   email: string
@@ -65,6 +69,7 @@ export function OrgNodeEditDialog({
   const [employee, setEmployee] = useState<EmployeeRef | null>(
     node.employee
       ? {
+          kind: 'employee',
           id: node.employee.id,
           name: node.employee.name,
           email: node.employee.roleTitle, // shim: we don't get email back
@@ -92,6 +97,7 @@ export function OrgNodeEditDialog({
       setEmployee(
         node.employee
           ? {
+              kind: 'employee',
               id: node.employee.id,
               name: node.employee.name,
               email: node.employee.roleTitle,
@@ -107,6 +113,15 @@ export function OrgNodeEditDialog({
     if (pending) return
     startTransition(async () => {
       try {
+        // Resolve the picked holder to an Employee.id first —
+        // "user" picks upsert an Employee record so the FK on
+        // OrgNode.employeeId is always valid.
+        const employeeId = employee
+          ? await resolveHolderToEmployeeAction({
+              kind: employee.kind,
+              id: employee.id,
+            })
+          : null
         await updateOrgNodeAction(node.id, {
           label: label.trim(),
           positionTitle: positionTitle.trim() || null,
@@ -120,7 +135,7 @@ export function OrgNodeEditDialog({
           color: color.trim() || null,
           // employee wins over freeText — the picker either has one
           // or the other set.
-          employeeId: employee?.id ?? null,
+          employeeId,
           freeTextHolder: employee ? null : freeText.trim() || null,
         })
         toast.success(`Updated "${label.trim() || node.label}"`)
@@ -313,13 +328,21 @@ export function OrgNodeAddDialog({
     if (pending) return
     startTransition(async () => {
       try {
+        // See EditDialog: the resolver upserts an Employee row for
+        // User picks so the resulting id is always FK-valid.
+        const employeeId = employee
+          ? await resolveHolderToEmployeeAction({
+              kind: employee.kind,
+              id: employee.id,
+            })
+          : null
         await addOrgNodeAction(revisionId, {
           parentId,
           kind: childKind as OrgNodeKindValue,
           label: label.trim(),
           positionTitle: positionTitle.trim() || null,
           vfp: vfp.trim() || null,
-          employeeId: employee?.id ?? null,
+          employeeId,
           freeTextHolder: employee ? null : freeText.trim() || null,
         })
         toast.success(`Added "${label.trim()}"`)
