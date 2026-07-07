@@ -66,6 +66,30 @@ export const updateOrgNodeSchema = z.object({
 })
 export type UpdateOrgNodeInput = z.input<typeof updateOrgNodeSchema>
 
+export const employmentTypeSchema = z.enum([
+  'FULL_TIME',
+  'PART_TIME',
+  'CONTRACT',
+  'INTERN',
+  'ADVISORY',
+])
+export type EmploymentTypeValue = z.infer<typeof employmentTypeSchema>
+
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentTypeValue, string> = {
+  FULL_TIME: 'Full-time',
+  PART_TIME: 'Part-time',
+  CONTRACT: 'Contract',
+  INTERN: 'Intern',
+  ADVISORY: 'Advisory',
+}
+
+export const addPositionAssignmentSchema = z.object({
+  employeeId: z.string().uuid(),
+  employmentType: employmentTypeSchema.nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+})
+export type AddPositionAssignmentInput = z.input<typeof addPositionAssignmentSchema>
+
 export const moveOrgNodeSchema = z.object({
   /**
    * "up"/"down" swap with the sibling above/below in orderIndex.

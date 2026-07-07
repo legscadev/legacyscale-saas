@@ -9,6 +9,18 @@ import type {
 
 import { OrgNodeMenu } from './org-node-menu'
 
+function AssignmentBadge({ count }: { count: number }) {
+  if (count <= 1) return null
+  return (
+    <span
+      className="inline-flex shrink-0 items-center rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold"
+      title={`${count} people currently assigned`}
+    >
+      +{count - 1}
+    </span>
+  )
+}
+
 function buildChildrenIndex(subtree: OrgNodeRow[]): Map<string, OrgNodeRow[]> {
   const map = new Map<string, OrgNodeRow[]>()
   for (const n of subtree) {
@@ -176,14 +188,17 @@ export function OrgNodeDrilldown({
         {node.positionTitle ? (
           <div className={cn('rounded-b-md px-4 py-2 text-center text-sm', color.sub, color.text)}>
             <p className="font-medium">{node.positionTitle}</p>
-            <p className="text-xs opacity-80">
-              {node.employee?.name ||
-                node.freeTextHolder ||
-                (
-                  <span className="italic opacity-70">
-                    Unassigned
-                  </span>
-                )}
+            <p className="flex items-center justify-center gap-1.5 text-xs opacity-80">
+              <span>
+                {node.employee?.name ||
+                  node.freeTextHolder ||
+                  (
+                    <span className="italic opacity-70">
+                      Unassigned
+                    </span>
+                  )}
+              </span>
+              <AssignmentBadge count={node.activeAssignmentsCount} />
             </p>
           </div>
         ) : null}
@@ -266,10 +281,13 @@ function ColumnNode({
       {node.positionTitle ? (
         <div className={cn('px-3 py-2 text-center text-[11px]', color.sub)}>
           <p className="font-medium">{node.positionTitle}</p>
-          <p className="opacity-80">
-            {node.employee?.name ||
-              node.freeTextHolder ||
-              <span className="italic opacity-70">Unassigned</span>}
+          <p className="flex items-center justify-center gap-1.5 opacity-80">
+            <span>
+              {node.employee?.name ||
+                node.freeTextHolder ||
+                <span className="italic opacity-70">Unassigned</span>}
+            </span>
+            <AssignmentBadge count={node.activeAssignmentsCount} />
           </p>
         </div>
       ) : null}
@@ -330,8 +348,11 @@ function NestedNode({
         <p className="text-[11px] opacity-80">{node.positionTitle}</p>
       ) : null}
       {node.employee?.name || node.freeTextHolder ? (
-        <p className="text-[11px] opacity-70">
-          {node.employee?.name || node.freeTextHolder}
+        <p className="flex items-center gap-1.5 text-[11px] opacity-70">
+          <span className="truncate">
+            {node.employee?.name || node.freeTextHolder}
+          </span>
+          <AssignmentBadge count={node.activeAssignmentsCount} />
         </p>
       ) : null}
 

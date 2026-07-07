@@ -29,6 +29,8 @@ import {
   updateOrgNodeAction,
 } from '@/app/(admin)/admin/org-board/actions'
 
+import { PositionAssignmentsPanel } from './position-assignments-panel'
+
 // ---------------------------------------------------------------------
 // Edit dialog — label, position title, employee (or free-text), VFP
 // ---------------------------------------------------------------------
@@ -224,6 +226,8 @@ export function OrgNodeEditDialog({
               placeholder="Admin-only context"
             />
           </div>
+
+          <PositionAssignmentsPanel nodeId={node.id} />
 
           <DialogFooter>
             <Button

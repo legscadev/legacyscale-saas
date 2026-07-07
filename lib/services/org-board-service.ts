@@ -1,4 +1,4 @@
-import type { OrgNodeKind, Prisma } from '@prisma/client'
+import type { EmploymentType, OrgNodeKind, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
@@ -40,6 +40,10 @@ export interface OrgNodeRow {
   orderIndex: number
   employee: OrgNodeEmployeeRef | null
   freeTextHolder: string | null
+  /** Number of active (endedAt = null) position_assignments for
+   *  this node. Used for the "+N" badge next to the primary
+   *  holder. Zero when nobody's assigned yet. */
+  activeAssignmentsCount: number
 }
 
 export interface OrgBoardTree {
@@ -81,6 +85,24 @@ export interface OrgNodeDeleteImpact {
   positionsWithEmployeeCount: number
 }
 
+export interface PositionAssignmentRow {
+  id: string
+  nodeId: string
+  employee: OrgNodeEmployeeRef
+  dateAssigned: Date
+  endedAt: Date | null
+  employmentType: EmploymentType | null
+  notes: string | null
+}
+
+export interface AddAssignmentArgs {
+  nodeId: string
+  employeeId: string
+  dateAssigned?: Date
+  employmentType?: EmploymentType | null
+  notes?: string | null
+}
+
 function mapRow(row: {
   id: string
   revisionId: string
@@ -97,6 +119,7 @@ function mapRow(row: {
   orderIndex: number
   freeTextHolder: string | null
   employee: { id: string; name: string; roleTitle: string } | null
+  activeAssignmentsCount?: number
 }): OrgNodeRow {
   return {
     id: row.id,
@@ -113,6 +136,7 @@ function mapRow(row: {
     color: row.color,
     orderIndex: row.orderIndex,
     freeTextHolder: row.freeTextHolder,
+    activeAssignmentsCount: row.activeAssignmentsCount ?? 0,
     employee: row.employee
       ? {
           id: row.employee.id,
@@ -176,9 +200,17 @@ class OrgBoardService {
       orderBy: [{ orderIndex: 'asc' }],
       include: {
         employee: { select: { id: true, name: true, roleTitle: true } },
+        // Count only active (open-ended) assignments — historical
+        // rows shouldn't inflate the "+N" badge.
+        _count: { select: { assignments: { where: { endedAt: null } } } },
       },
     })
-    return rows.map(mapRow)
+    return rows.map((r) =>
+      mapRow({
+        ...r,
+        activeAssignmentsCount: r._count.assignments,
+      }),
+    )
   }
 
   /** Get the current revision AND its nodes in a single call. */
@@ -448,6 +480,100 @@ class OrgBoardService {
         data: { orderIndex: sibling.orderIndex },
       }),
     ])
+  }
+
+  // -----------------------------------------------------------------
+  // Position assignments — N:M layer supporting multiple holders per
+  // node ("three Video Editors", "two Ads Managers", ...). The 1:1
+  // `OrgNode.employeeId` stays around as the "primary" holder for
+  // now so existing UI keeps working; new code should prefer the
+  // assignments list.
+  // -----------------------------------------------------------------
+
+  async listAssignments(
+    nodeId: string,
+    options: { includeEnded?: boolean } = {},
+  ): Promise<PositionAssignmentRow[]> {
+    const rows = await prisma.positionAssignment.findMany({
+      where: {
+        nodeId,
+        ...(options.includeEnded ? {} : { endedAt: null }),
+      },
+      orderBy: [{ dateAssigned: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        employee: { select: { id: true, name: true, roleTitle: true } },
+      },
+    })
+    return rows.map((r) => ({
+      id: r.id,
+      nodeId: r.nodeId,
+      employee: {
+        id: r.employee.id,
+        name: r.employee.name,
+        roleTitle: r.employee.roleTitle,
+      },
+      dateAssigned: r.dateAssigned,
+      endedAt: r.endedAt,
+      employmentType: r.employmentType,
+      notes: r.notes,
+    }))
+  }
+
+  async addAssignment(args: AddAssignmentArgs): Promise<PositionAssignmentRow> {
+    // Guard against duplicate live assignments — same employee
+    // already actively holds this seat. Two rows would mostly work
+    // but downstream counts would misreport.
+    const existing = await prisma.positionAssignment.findFirst({
+      where: {
+        nodeId: args.nodeId,
+        employeeId: args.employeeId,
+        endedAt: null,
+      },
+      select: { id: true },
+    })
+    if (existing) {
+      throw new Error('This employee is already assigned to this position')
+    }
+    const row = await prisma.positionAssignment.create({
+      data: {
+        nodeId: args.nodeId,
+        employeeId: args.employeeId,
+        dateAssigned: args.dateAssigned ?? new Date(),
+        employmentType: args.employmentType ?? null,
+        notes: args.notes ?? null,
+      },
+      include: {
+        employee: { select: { id: true, name: true, roleTitle: true } },
+      },
+    })
+    return {
+      id: row.id,
+      nodeId: row.nodeId,
+      employee: {
+        id: row.employee.id,
+        name: row.employee.name,
+        roleTitle: row.employee.roleTitle,
+      },
+      dateAssigned: row.dateAssigned,
+      endedAt: row.endedAt,
+      employmentType: row.employmentType,
+      notes: row.notes,
+    }
+  }
+
+  /**
+   * Soft-end an assignment. We keep the row for history so an admin
+   * can later see who held a seat and when. `endedAt` defaults to
+   * now.
+   */
+  async endAssignment(
+    assignmentId: string,
+    endedAt: Date = new Date(),
+  ): Promise<void> {
+    await prisma.positionAssignment.update({
+      where: { id: assignmentId },
+      data: { endedAt },
+    })
   }
 }
 

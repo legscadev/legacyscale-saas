@@ -259,14 +259,33 @@ function CrownCard({ node }: { node: OrgNodeRow }) {
         {node.label}
       </div>
       <div className="flex items-center justify-between gap-2 bg-white/10 px-3 py-2 text-sm">
-        <span className="truncate">
-          {node.employee?.name || node.freeTextHolder || (
-            <span className="italic opacity-70">Unassigned</span>
-          )}
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          <span className="truncate">
+            {node.employee?.name || node.freeTextHolder || (
+              <span className="italic opacity-70">Unassigned</span>
+            )}
+          </span>
+          <AssignmentBadge count={node.activeAssignmentsCount} />
         </span>
         <OrgNodeMenu node={node} layout="row" triggerClassName="text-white" />
       </div>
     </div>
+  )
+}
+
+function AssignmentBadge({ count }: { count: number }) {
+  // Show "+N" whenever additional assignments exist beyond the
+  // primary holder that we already render inline. When there's no
+  // primary holder but there are assignments, the badge still
+  // indicates the seat is filled.
+  if (count <= 1) return null
+  return (
+    <span
+      className="inline-flex shrink-0 items-center rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold"
+      title={`${count} people currently assigned`}
+    >
+      +{count - 1}
+    </span>
   )
 }
 
@@ -294,8 +313,11 @@ function DivisionColumn({
           <div className="mt-2 rounded bg-black/20 px-2 py-1 text-xs font-medium">
             <p className="truncate">{node.positionTitle}</p>
             {node.employee?.name || node.freeTextHolder ? (
-              <p className="truncate text-[11px] opacity-80">
-                {node.employee?.name || node.freeTextHolder}
+              <p className="flex items-center justify-center gap-1.5 truncate text-[11px] opacity-80">
+                <span className="truncate">
+                  {node.employee?.name || node.freeTextHolder}
+                </span>
+                <AssignmentBadge count={node.activeAssignmentsCount} />
               </p>
             ) : (
               <p className="truncate text-[11px] italic opacity-70">
@@ -347,8 +369,11 @@ function DepartmentBlock({ node }: { node: OrgNodeRow }) {
         <p className="text-[11px] opacity-90">{node.positionTitle}</p>
       ) : null}
       {node.employee?.name || node.freeTextHolder ? (
-        <p className="text-[11px] opacity-70">
-          {node.employee?.name || node.freeTextHolder}
+        <p className="flex items-center gap-1.5 text-[11px] opacity-70">
+          <span className="truncate">
+            {node.employee?.name || node.freeTextHolder}
+          </span>
+          <AssignmentBadge count={node.activeAssignmentsCount} />
         </p>
       ) : null}
     </div>

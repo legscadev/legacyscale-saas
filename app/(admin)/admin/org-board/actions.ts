@@ -6,9 +6,11 @@ import { requireAdmin } from '@/lib/auth/get-user'
 import { orgBoardService } from '@/lib/services/org-board-service'
 import { employeeService } from '@/lib/services/employee-service'
 import {
+  addPositionAssignmentSchema,
   createOrgNodeSchema,
   moveOrgNodeSchema,
   updateOrgNodeSchema,
+  type AddPositionAssignmentInput,
   type CreateOrgNodeInput,
   type MoveOrgNodeInput,
   type UpdateOrgNodeInput,
@@ -89,4 +91,41 @@ export async function moveOrgNodeAction(
   const parsed = moveOrgNodeSchema.parse(input)
   await orgBoardService.moveNode(id, parsed.direction)
   revalidate(id)
+}
+
+// -----------------------------------------------------------------
+// Position assignments
+// -----------------------------------------------------------------
+
+export async function listPositionAssignmentsAction(
+  nodeId: string,
+  options: { includeEnded?: boolean } = {},
+) {
+  await requireAdmin()
+  return orgBoardService.listAssignments(nodeId, options)
+}
+
+export async function addPositionAssignmentAction(
+  nodeId: string,
+  input: AddPositionAssignmentInput,
+) {
+  await requireAdmin()
+  const parsed = addPositionAssignmentSchema.parse(input)
+  const row = await orgBoardService.addAssignment({
+    nodeId,
+    employeeId: parsed.employeeId,
+    employmentType: parsed.employmentType ?? null,
+    notes: parsed.notes ?? null,
+  })
+  revalidate(nodeId)
+  return row
+}
+
+export async function endPositionAssignmentAction(
+  assignmentId: string,
+  nodeId: string,
+) {
+  await requireAdmin()
+  await orgBoardService.endAssignment(assignmentId)
+  revalidate(nodeId)
 }
