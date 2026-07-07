@@ -115,6 +115,27 @@ enum ChecklistItemStatus {
   NA
 }
 
+/// Level of an org-board node inside its revision. All nodes share
+/// a single self-referencing table; `kind` disambiguates rendering
+/// and drives which parents/children are allowed. Modelled after
+/// L. Ron Hubbard's classic 7-division org board.
+///   CROWN      – Founder / Executive Director / Deputy / VP.
+///                Sits above the divisions; typically a linear chain.
+///   DIVISION   – One of the 7 coloured columns.
+///   DEPARTMENT – Standard Hubbard dept (1-21) inside a division.
+///   SECTION    – A named group inside a department (optional).
+///   UNIT       – A sub-group inside a section (optional, rare).
+///   POSITION   – A role that a single Employee can hold. Positions
+///                may nest under any of the above levels.
+enum OrgNodeKind {
+  CROWN
+  DIVISION
+  DEPARTMENT
+  SECTION
+  UNIT
+  POSITION
+}
+
 // ============================================
 // USER MANAGEMENT
 // ============================================
@@ -171,6 +192,7 @@ model User {
   nudgesReceived        Nudge[]                @relation("NudgeRecipient")
   nudgesAuthored        Nudge[]                @relation("NudgeAuthor")
   employee              Employee?              @relation("EmployeeUser")
+  orgBoardRevisions     OrgBoardRevision[]     @relation("OrgBoardRevisionAuthor")
 
   @@index([role])
   @@index([isActive])
@@ -832,6 +854,7 @@ model Employee {
 
   user              User?                         @relation("EmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
   checklistStatuses EmployeeChecklistItemStatus[]
+  orgAssignments    OrgNode[]                     @relation("OrgNodeEmployee")
 
   @@index([status])
   @@index([roleTitle])
@@ -880,4 +903,86 @@ model EmployeeChecklistItemStatus {
   @@index([itemId])
   @@index([status])
   @@map("employee_checklist_item_statuses")
+}
+
+// ============================================
+// INTERNAL — ORG BOARD (Hubbard 7-division)
+// ============================================
+
+/// A named snapshot of the whole org structure. Exactly one row
+/// should carry `isCurrent = true` at any moment — the live board
+/// admins see and edit. Older revisions are read-only history so
+/// admins can compare "who was where in Q2 vs Q3". The service
+/// layer enforces "one current" via transaction; callers should
+/// still treat multiple currents as "any is fine" defensively.
+model OrgBoardRevision {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  isCurrent   Boolean   @default(false) @map("is_current")
+  publishedAt DateTime? @map("published_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdById String?   @map("created_by_id")
+  createdBy   User?     @relation("OrgBoardRevisionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  nodes OrgNode[]
+
+  @@index([isCurrent])
+  @@map("org_board_revisions")
+}
+
+/// One node in an org-board tree. Everything from the Founder box
+/// down to a single position lives here — `kind` disambiguates
+/// rendering. Trees are per-revision (revisionId), and moving a
+/// node just changes its parentId. Cascade on parent delete so
+/// removing a division cleanly wipes its descendants.
+model OrgNode {
+  id             String      @id @default(uuid())
+  revisionId     String      @map("revision_id")
+  parentId       String?     @map("parent_id")
+  kind           OrgNodeKind
+  /// Header text shown on the card (e.g. "Division 2 - Sales &
+  /// Marketing" or "Founder" or "Recognition - Department 1").
+  label          String
+  /// Optional Hubbard-style dept number 1-21. Kept as a plain int
+  /// so custom departments outside the classic 21 are still
+  /// representable.
+  deptNumber     Int?        @map("dept_number")
+  /// The role/title displayed under the label — e.g. "Sales &
+  /// Marketing Director" or "Video Editor". Used for POSITION
+  /// nodes and for any header node that has a designated role.
+  positionTitle  String?     @map("position_title")
+  /// The Employee currently holding this node's role. Only
+  /// meaningful for POSITION and DIVISION/DEPARTMENT-level roles.
+  /// SetNull so offboarding an employee blanks the seat without
+  /// destroying the org structure.
+  employeeId     String?     @map("employee_id")
+  /// Free-text fallback for people who aren't (yet) Employees.
+  /// Handy for "To be hired" placeholders. Ignored when
+  /// `employeeId` is set.
+  freeTextHolder String?     @map("free_text_holder")
+  /// Valuable Final Product statement (Hubbard vocab). Rendered as
+  /// the coloured banner at the bottom of a division / department
+  /// column, or as a small footnote on a section.
+  vfp            String?
+  /// Optional Tailwind-safe colour token override. Divisions have
+  /// a default palette so this can stay null for the common case.
+  color          String?
+  /// Sibling order within the same parent. Zero-based; unique
+  /// only within (revisionId, parentId).
+  orderIndex     Int         @map("order_index")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  revision OrgBoardRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  parent   OrgNode?         @relation("OrgNodeParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children OrgNode[]        @relation("OrgNodeParent")
+  employee Employee?        @relation("OrgNodeEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([revisionId])
+  @@index([parentId])
+  @@index([kind])
+  @@index([employeeId])
+  @@map("org_nodes")
 }

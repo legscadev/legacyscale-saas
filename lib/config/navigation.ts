@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Megaphone,
+  Network,
   Settings,
   Tag,
   TrendingUp,
@@ -59,6 +60,7 @@ export const adminNav: NavSection[] = [
     label: 'Internal',
     items: [
       { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus },
+      { label: 'Org Board', href: '/admin/org-board', icon: Network },
     ],
   },
   {
