@@ -7,20 +7,8 @@ import type {
   OrgNodeRow,
 } from '@/lib/services/org-board-service'
 
-import { HolderText } from './holder-text'
+import { AssignmentBadge, HolderText } from './holder-text'
 import { OrgNodeMenu } from './org-node-menu'
-
-function AssignmentBadge({ count }: { count: number }) {
-  if (count <= 1) return null
-  return (
-    <span
-      className="inline-flex shrink-0 items-center rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold"
-      title={`${count} people currently assigned`}
-    >
-      +{count - 1}
-    </span>
-  )
-}
 
 function buildChildrenIndex(subtree: OrgNodeRow[]): Map<string, OrgNodeRow[]> {
   const map = new Map<string, OrgNodeRow[]>()

@@ -26,3 +26,27 @@ export function HolderText({
       return <span className={unassignedClassName}>Unassigned</span>
   }
 }
+
+interface AssignmentBadgeProps {
+  count: number
+  className?: string
+}
+
+/**
+ * "+N" chip that appears next to the primary holder when a node has
+ * multiple active position_assignments. Renders nothing when there's
+ * one or zero — that's the "no additional holders" state. */
+export function AssignmentBadge({
+  count,
+  className = 'bg-white/25 text-[10px] font-semibold',
+}: AssignmentBadgeProps) {
+  if (count <= 1) return null
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 ${className}`}
+      title={`${count} people currently assigned`}
+    >
+      +{count - 1}
+    </span>
+  )
+}

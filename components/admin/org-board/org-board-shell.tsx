@@ -37,7 +37,7 @@ import type {
   OrgNodeRow,
 } from '@/lib/services/org-board-service'
 
-import { HolderText } from './holder-text'
+import { AssignmentBadge, HolderText } from './holder-text'
 import { OrgNodeMenu } from './org-node-menu'
 
 interface OrgBoardShellProps {
@@ -684,22 +684,6 @@ function CrownCard({ node }: { node: OrgNodeRow }) {
         <OrgNodeMenu node={node} layout="row" triggerClassName="text-white" />
       </div>
     </div>
-  )
-}
-
-function AssignmentBadge({ count }: { count: number }) {
-  // Show "+N" whenever additional assignments exist beyond the
-  // primary holder that we already render inline. When there's no
-  // primary holder but there are assignments, the badge still
-  // indicates the seat is filled.
-  if (count <= 1) return null
-  return (
-    <span
-      className="inline-flex shrink-0 items-center rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold"
-      title={`${count} people currently assigned`}
-    >
-      +{count - 1}
-    </span>
   )
 }
 

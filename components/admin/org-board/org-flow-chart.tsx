@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { OrgNodeRow } from '@/lib/services/org-board-service'
 
-import { HolderText } from './holder-text'
+import { AssignmentBadge, HolderText } from './holder-text'
 
 interface OrgFlowChartProps {
   nodes: OrgNodeRow[]
@@ -171,13 +171,9 @@ function OrgNodeCard({ data }: NodeProps) {
       {row.positionTitle ? (
         <div className="px-3 py-2 text-center text-[11px]">
           <p className="font-medium">{row.positionTitle}</p>
-          <p className="opacity-80">
+          <p className="flex items-center justify-center gap-1.5 opacity-80">
             <HolderText holder={row.holder} />
-            {row.activeAssignmentsCount > 1 ? (
-              <span className="ml-1 rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold">
-                +{row.activeAssignmentsCount - 1}
-              </span>
-            ) : null}
+            <AssignmentBadge count={row.activeAssignmentsCount} />
           </p>
         </div>
       ) : null}
