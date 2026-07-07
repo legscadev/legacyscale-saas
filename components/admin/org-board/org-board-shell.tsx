@@ -148,7 +148,13 @@ export function OrgBoardShell({
         }`}
         actions={
           <div className="flex items-center gap-2">
-            <AddRootNodeButton revisionId={tree.revision.id} />
+            {/* Header shortcut is hidden on empty boards — the empty
+                state primer already surfaces the same actions with
+                more explanation, and we don't want two entry points
+                fighting for attention. */}
+            {tree.nodes.length > 0 ? (
+              <AddRootNodeButton revisionId={tree.revision.id} />
+            ) : null}
             {revisions.length > 0 ? (
               <>
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
