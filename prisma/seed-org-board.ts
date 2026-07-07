@@ -29,7 +29,6 @@ interface SeedDivision {
   label: string
   directorTitle: string
   depts: SeedDept[]
-  vfp?: string
   functionText?: string
 }
 
@@ -38,7 +37,6 @@ const DIVISIONS: SeedDivision[] = [
     number: 7,
     label: 'Division 7 - Executive',
     directorTitle: 'Executive Director',
-    vfp: 'A solvent, viable and expanding organization',
     functionText:
       "This division coordinates and supervises the organization's activities so it runs smoothly, produces its products efficiently and in abundance and delivers its products and services to individuals and the community in high quality.",
     depts: [
@@ -102,7 +100,6 @@ const DIVISIONS: SeedDivision[] = [
         directorTitle: 'Sales Director',
       },
     ],
-    vfp: '1) DELIVERED COMPANY PUBLICATION MATERIALS\n2) SUFFICIENT SALES VOLUME TO ENSURE INCOME IS GREATER THAN OUTGO PLUS RESERVES',
   },
   {
     number: 3,
@@ -251,7 +248,6 @@ export async function seedOrgBoard(prisma: PrismaClient): Promise<void> {
         positionTitle: div.directorTitle,
         deptNumber: div.number,
         color: DIVISION_PALETTE[div.number],
-        vfp: div.vfp ?? null,
         functionText: div.functionText ?? null,
         orderIndex: d,
       },

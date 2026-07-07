@@ -79,7 +79,6 @@ export async function addOrgNodeAction(
       positionTitle: parsed.positionTitle ?? null,
       deptNumber: parsed.deptNumber ?? null,
       color: parsed.color ?? null,
-      vfp: parsed.vfp ?? null,
       functionText: parsed.functionText ?? null,
       responsibilities: parsed.responsibilities,
       notes: parsed.notes ?? null,

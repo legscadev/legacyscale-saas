@@ -36,8 +36,7 @@ export interface OrgNodeRow {
   label: string
   deptNumber: number | null
   positionTitle: string | null
-  vfp: string | null
-  /** How this seat operates — distinct from VFP (which is the output). */
+  /** How this seat operates. */
   functionText: string | null
   responsibilities: string[]
   notes: string | null
@@ -64,7 +63,6 @@ export interface CreateOrgNodeArgs {
   positionTitle?: string | null
   deptNumber?: number | null
   color?: string | null
-  vfp?: string | null
   functionText?: string | null
   responsibilities?: string[]
   notes?: string | null
@@ -77,7 +75,6 @@ export interface UpdateOrgNodeArgs {
   positionTitle?: string | null
   deptNumber?: number | null
   color?: string | null
-  vfp?: string | null
   functionText?: string | null
   responsibilities?: string[]
   notes?: string | null
@@ -140,7 +137,6 @@ function mapRow(row: {
   label: string
   deptNumber: number | null
   positionTitle: string | null
-  vfp: string | null
   functionText: string | null
   responsibilities: string[]
   notes: string | null
@@ -158,7 +154,6 @@ function mapRow(row: {
     label: row.label,
     deptNumber: row.deptNumber,
     positionTitle: row.positionTitle,
-    vfp: row.vfp,
     functionText: row.functionText,
     responsibilities: row.responsibilities,
     notes: row.notes,
@@ -370,7 +365,6 @@ class OrgBoardService {
     employeeId: string | null
     freeTextHolder: string | null
     color: string | null
-    vfp: string | null
     functionText: string | null
     orderIndex: number
   }) {
@@ -383,7 +377,6 @@ class OrgBoardService {
       employeeId: row.employeeId,
       freeTextHolder: row.freeTextHolder,
       color: row.color,
-      vfp: row.vfp,
       functionText: row.functionText,
       orderIndex: row.orderIndex,
     }
@@ -416,7 +409,6 @@ class OrgBoardService {
         positionTitle: input.positionTitle ?? null,
         deptNumber: input.deptNumber ?? null,
         color: input.color ?? null,
-        vfp: input.vfp ?? null,
         functionText: input.functionText ?? null,
         responsibilities: input.responsibilities ?? [],
         notes: input.notes ?? null,
@@ -450,7 +442,6 @@ class OrgBoardService {
     if (input.positionTitle !== undefined) data.positionTitle = input.positionTitle
     if (input.deptNumber !== undefined) data.deptNumber = input.deptNumber
     if (input.color !== undefined) data.color = input.color
-    if (input.vfp !== undefined) data.vfp = input.vfp
     if (input.functionText !== undefined) data.functionText = input.functionText
     if (input.responsibilities !== undefined) data.responsibilities = input.responsibilities
     if (input.notes !== undefined) data.notes = input.notes
@@ -757,104 +748,6 @@ class OrgBoardService {
         },
         { endedAt },
       )
-    }
-  }
-
-  /**
-   * Dashboard-friendly aggregate counts for a revision. Filled /
-   * vacant assumes a "position with a primary employeeId or any
-   * active assignment" is filled. Everything else is vacant.
-   */
-  async getStats(revisionId: string): Promise<{
-    divisions: number
-    departments: number
-    sections: number
-    units: number
-    positions: number
-    filledPositions: number
-    vacantPositions: number
-    employeesAssigned: number
-    departmentsWithVacancies: number
-  }> {
-    const nodes = await prisma.orgNode.findMany({
-      where: { revisionId },
-      include: {
-        _count: { select: { assignments: { where: { endedAt: null } } } },
-      },
-    })
-    let divisions = 0
-    let departments = 0
-    let sections = 0
-    let units = 0
-    let positions = 0
-    let filled = 0
-    const filledDeptIds = new Set<string>()
-    const employeeIds = new Set<string>()
-
-    for (const n of nodes) {
-      if (n.kind === 'DIVISION') divisions++
-      else if (n.kind === 'DEPARTMENT') departments++
-      else if (n.kind === 'SECTION') sections++
-      else if (n.kind === 'UNIT') units++
-      else if (n.kind === 'POSITION') positions++
-      const isFilled = Boolean(n.employeeId) || n._count.assignments > 0
-      if (n.kind === 'POSITION' && isFilled) filled++
-      if (n.employeeId) employeeIds.add(n.employeeId)
-    }
-
-    // Second pass: for every DEPARTMENT, check whether any
-    // descendant POSITION is vacant. We do this via a childrenOf
-    // walk since we already have the flat list in memory.
-    const childrenOf = new Map<string, typeof nodes>()
-    for (const n of nodes) {
-      if (!n.parentId) continue
-      const list = childrenOf.get(n.parentId) ?? []
-      list.push(n)
-      childrenOf.set(n.parentId, list)
-    }
-    let departmentsWithVacancies = 0
-    for (const dept of nodes) {
-      if (dept.kind !== 'DEPARTMENT') continue
-      // BFS descendants
-      let hasVacancy = false
-      const queue: typeof nodes = [...(childrenOf.get(dept.id) ?? [])]
-      while (queue.length > 0) {
-        const cur = queue.shift()!
-        if (cur.kind === 'POSITION') {
-          const isFilled = Boolean(cur.employeeId) || cur._count.assignments > 0
-          if (!isFilled) {
-            hasVacancy = true
-            break
-          }
-        }
-        queue.push(...(childrenOf.get(cur.id) ?? []))
-      }
-      if (hasVacancy) {
-        departmentsWithVacancies++
-        filledDeptIds.add(dept.id) // just to keep set typed
-      }
-    }
-    // filledDeptIds size not surfaced; kept to avoid unused var
-    void filledDeptIds
-
-    // Distinct employees appearing in position_assignments too.
-    const activeAssignEmployees = await prisma.positionAssignment.findMany({
-      where: { node: { revisionId }, endedAt: null },
-      select: { employeeId: true },
-      distinct: ['employeeId'],
-    })
-    for (const a of activeAssignEmployees) employeeIds.add(a.employeeId)
-
-    return {
-      divisions,
-      departments,
-      sections,
-      units,
-      positions,
-      filledPositions: filled,
-      vacantPositions: positions - filled,
-      employeesAssigned: employeeIds.size,
-      departmentsWithVacancies,
     }
   }
 

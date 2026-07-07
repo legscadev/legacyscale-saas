@@ -987,13 +987,8 @@ model OrgNode {
   /// Handy for "To be hired" placeholders. Ignored when
   /// `employeeId` is set.
   freeTextHolder   String?     @map("free_text_holder")
-  /// Valuable Final Product statement (Hubbard vocab). Rendered as
-  /// the coloured banner at the bottom of a division / department
-  /// column, or as a small footnote on a section.
-  vfp              String?
   /// Free-text description of what this node/role does. Applies at
   /// any level (a Division has a Function; a Position has one too).
-  /// Distinct from VFP: VFP is the *output*, Function is the *how*.
   functionText     String?     @map("function_text")
   /// Bullet list of the node's responsibilities. Stored as a
   /// Postgres text[] so we don't have to marshal JSON on the client.
