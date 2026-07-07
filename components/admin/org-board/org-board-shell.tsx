@@ -472,26 +472,75 @@ function TopLevelChart({
 
   return (
     <div className="space-y-6 overflow-x-auto">
-      {/* Crown chain */}
+      {/* Crown chain — cards are stacked vertically with a short
+          connector line between each so the reporting chain reads
+          as connected. */}
       <div className="flex justify-center">
-        <div className="flex flex-col items-center gap-4">
-          {crown.map((c) => (
-            <div key={c.id} className={cn('transition-opacity', dimClass(c.id))}>
+        <div className="flex flex-col items-center">
+          {crown.map((c, i) => (
+            <div
+              key={c.id}
+              className={cn('flex flex-col items-center transition-opacity', dimClass(c.id))}
+            >
+              {i > 0 ? (
+                <span className="h-4 w-px bg-zinc-400 dark:bg-zinc-500" />
+              ) : null}
               <CrownCard node={c} />
             </div>
           ))}
         </div>
       </div>
 
-      {/* Divisions row */}
+      {/* Divisions row with a proper T-shape connector: vertical
+          stub down from crown → horizontal spanning centre-to-centre
+          of the outer divisions → vertical drop into each division
+          column top. The connector line uses zinc-400 in light /
+          zinc-500 in dark so it's clearly visible on either theme
+          (bg-border is too subtle for a functional org chart). */}
       {divisions.length > 0 ? (
-        <div className="relative">
-          {/* Connector line above divisions */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center">
-            <div className="h-4 w-px bg-border" />
-          </div>
+        <div className="space-y-0">
+          {/* Vertical stub from crown chain */}
+          <div className="mx-auto h-4 w-px bg-zinc-400 dark:bg-zinc-500" />
+
+          {/* Branch row — one cell per division. Each cell has an
+              optional horizontal top-line + a centred vertical drop.
+              For a single division we skip the horizontal entirely. */}
           <div
-            className="grid gap-3 pt-4"
+            className="grid"
+            style={{
+              gridTemplateColumns: `repeat(${divisions.length}, minmax(180px, 1fr))`,
+            }}
+          >
+            {divisions.map((_, i) => {
+              const isFirst = i === 0
+              const isLast = i === divisions.length - 1
+              const onlyOne = divisions.length === 1
+              return (
+                <div key={i} className="relative flex justify-center">
+                  {/* Horizontal segment across the top of the cell.
+                      First cell: right half only. Last cell: left
+                      half only. Middle cells: full width. */}
+                  {!onlyOne ? (
+                    <span
+                      className={cn(
+                        'pointer-events-none absolute top-0 h-px bg-zinc-400 dark:bg-zinc-500',
+                        isFirst
+                          ? 'left-1/2 right-0'
+                          : isLast
+                            ? 'left-0 right-1/2'
+                            : 'left-0 right-0',
+                      )}
+                    />
+                  ) : null}
+                  {/* Vertical drop into the division column below. */}
+                  <span className="h-4 w-px bg-zinc-400 dark:bg-zinc-500" />
+                </div>
+              )
+            })}
+          </div>
+
+          <div
+            className="grid gap-3"
             style={{
               gridTemplateColumns: `repeat(${divisions.length}, minmax(180px, 1fr))`,
             }}
