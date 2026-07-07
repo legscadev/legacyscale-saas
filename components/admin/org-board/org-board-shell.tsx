@@ -7,6 +7,10 @@ import { format } from 'date-fns'
 import { Network, Search } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+
+import { OrgFlowChart } from './org-flow-chart'
+import { OrgNodeDrawer } from './org-node-drawer'
 
 import { PageHeader, EmptyState } from '@/components/shared'
 import {
@@ -185,9 +189,60 @@ export function OrgBoardShell({
 
       {stats ? <OrgStatsStrip stats={stats} /> : null}
 
-      <FilterableChart nodes={tree.nodes} />
+      <ViewSwitcher nodes={tree.nodes} />
 
       {auditLogs.length > 0 ? <RecentActivity entries={auditLogs} /> : null}
+    </div>
+  )
+}
+
+function ViewSwitcher({ nodes }: { nodes: OrgNodeRow[] }) {
+  // Persist the last chosen view between reloads. Not critical
+  // enough for URL state — localStorage is fine.
+  const [view, setView] = useState<'classic' | 'chart'>(() => {
+    if (typeof window === 'undefined') return 'classic'
+    return (localStorage.getItem('orgBoardView') as 'classic' | 'chart') ?? 'classic'
+  })
+  const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null)
+
+  function updateView(next: 'classic' | 'chart') {
+    setView(next)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('orgBoardView', next)
+    }
+  }
+
+  const drawerNode = drawerNodeId
+    ? nodes.find((n) => n.id === drawerNodeId) ?? null
+    : null
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Tabs value={view} onValueChange={(v) => updateView(v as 'classic' | 'chart')}>
+          <TabsList>
+            <TabsTrigger value="classic">Classic</TabsTrigger>
+            <TabsTrigger value="chart">Chart</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {view === 'classic' ? (
+        <FilterableChart nodes={nodes} />
+      ) : (
+        <OrgFlowChart
+          nodes={nodes}
+          onNodeClick={(id) => setDrawerNodeId(id)}
+        />
+      )}
+
+      <OrgNodeDrawer
+        node={drawerNode}
+        open={drawerNodeId !== null}
+        onOpenChange={(v) => {
+          if (!v) setDrawerNodeId(null)
+        }}
+      />
     </div>
   )
 }
