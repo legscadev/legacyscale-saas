@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useRef } from 'react'
+import { useTheme } from 'next-themes'
 import {
   Background,
   BackgroundVariant,
@@ -9,6 +10,7 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  type ColorMode,
   type Edge,
   type Node,
   type NodeProps,
@@ -193,6 +195,12 @@ const NODE_TYPES = { orgNode: OrgNodeCard }
 export function OrgFlowChart({ nodes, onNodeClick }: OrgFlowChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const { flowNodes, flowEdges } = useMemo(() => layoutNodes(nodes), [nodes])
+  // Feed the resolved theme to ReactFlow so the built-in Controls
+  // switch to their dark palette. Without this the +/- buttons stay
+  // white-on-white when the app is in dark mode.
+  const { resolvedTheme } = useTheme()
+  const colorMode: ColorMode =
+    resolvedTheme === 'dark' ? 'dark' : 'light'
 
   const handleNodeClick = useCallback(
     (_: unknown, node: Node) => {
@@ -268,6 +276,7 @@ export function OrgFlowChart({ nodes, onNodeClick }: OrgFlowChartProps) {
             edges={flowEdges}
             nodeTypes={NODE_TYPES}
             onNodeClick={handleNodeClick}
+            colorMode={colorMode}
             fitView
             fitViewOptions={{ padding: 0.2 }}
             nodesConnectable={false}
