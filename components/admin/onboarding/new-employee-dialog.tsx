@@ -51,6 +51,8 @@ export function NewEmployeeDialog({
   // derived below. That way we don't need an effect to preselect on
   // open (which would trip react-hooks/purity for the setState).
   const [pickedSlug, setPickedSlug] = useState<string | null>(null)
+  const [grantAccess, setGrantAccess] = useState(false)
+  const [email, setEmail] = useState('')
   const [pending, startTransition] = useTransition()
 
   const defaultSlug = useMemo(() => {
@@ -66,6 +68,8 @@ export function NewEmployeeDialog({
     setRoleTitle('')
     setOnboardingDate('')
     setPickedSlug(null)
+    setGrantAccess(false)
+    setEmail('')
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -78,8 +82,14 @@ export function NewEmployeeDialog({
           roleTitle,
           onboardingDate: onboardingDate || null,
           templateSlug: templateSlug === NO_TEMPLATE ? null : templateSlug,
+          grantAccess,
+          email: grantAccess ? email.trim() : undefined,
         })
-        toast.success(`Added ${employee.name}`)
+        toast.success(
+          grantAccess
+            ? `Added ${employee.name} — invite sent`
+            : `Added ${employee.name}`,
+        )
         reset()
         onOpenChange(false)
         router.push(`/admin/onboarding/${employee.id}`)
@@ -165,6 +175,39 @@ export function NewEmployeeDialog({
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 rounded border-input"
+                checked={grantAccess}
+                onChange={(e) => setGrantAccess(e.target.checked)}
+                disabled={pending}
+              />
+              <span>
+                <span className="font-medium">Can access the system</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Creates a TEAM account and emails an invite link.
+                </span>
+              </span>
+            </label>
+            {grantAccess ? (
+              <div className="space-y-1.5 pl-6">
+                <Label htmlFor="employee-email">Login email</Label>
+                <Input
+                  id="employee-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="jane@company.com"
+                  required
+                  disabled={pending}
+                />
+              </div>
+            ) : null}
+          </div>
+
           <DialogFooter>
             <Button
               type="button"
@@ -174,7 +217,15 @@ export function NewEmployeeDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={pending || !name || !roleTitle}>
+            <Button
+              type="submit"
+              disabled={
+                pending ||
+                !name ||
+                !roleTitle ||
+                (grantAccess && !email.trim())
+              }
+            >
               {pending ? (
                 <>
                   <Loader2 className="mr-1.5 size-4 animate-spin" />

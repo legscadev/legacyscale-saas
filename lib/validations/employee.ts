@@ -34,13 +34,46 @@ const optionalDate = z
   .transform((v) => (v === null ? null : new Date(v)))
   .nullable()
 
-export const createEmployeeSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(120),
-  roleTitle: z.string().trim().min(1, 'Role is required').max(120),
-  onboardingDate: optionalDate.optional(),
-  dateStarted: optionalDate.optional(),
-  templateSlug: z.string().trim().min(1).max(80).nullable().optional(),
-})
+export const createEmployeeSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Name is required').max(120),
+    roleTitle: z.string().trim().min(1, 'Role is required').max(120),
+    onboardingDate: optionalDate.optional(),
+    dateStarted: optionalDate.optional(),
+    templateSlug: z.string().trim().min(1).max(80).nullable().optional(),
+    /**
+     * When true, the admin also wants this hire to have SaaS login
+     * access — we'll create a TEAM-role User account and email the
+     * invite link. `email` is required in that case.
+     */
+    grantAccess: z.boolean().optional().default(false),
+    /**
+     * The login email. Only required when `grantAccess` is true;
+     * ignored otherwise. Not `.email()` here so the refine below can
+     * give a friendlier "Email is required for system access" error
+     * when grantAccess=true and the field is empty.
+     */
+    email: z.string().trim().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.grantAccess) return
+    const email = data.email?.trim() ?? ''
+    if (!email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['email'],
+        message: 'Email is required to grant system access',
+      })
+      return
+    }
+    if (!z.string().email().safeParse(email).success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['email'],
+        message: 'Invalid email address',
+      })
+    }
+  })
 /**
  * Input shape callers pass (dates as strings/null). The transformed
  * output — with Date objects — lives on the service layer, hidden

@@ -3,7 +3,10 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
-import { employeeService } from '@/lib/services/employee-service'
+import {
+  employeeService,
+  MemberEmailConflictError,
+} from '@/lib/services/employee-service'
 import { checklistTemplateService } from '@/lib/services/checklist-template-service'
 import {
   addTemplateItemSchema,
@@ -29,9 +32,19 @@ import {
 export async function createEmployeeAction(input: CreateEmployeeInput) {
   await requireAdmin()
   const parsed = createEmployeeSchema.parse(input)
-  const employee = await employeeService.create(parsed)
-  revalidatePath('/admin/onboarding')
-  return employee
+  try {
+    const employee = await employeeService.create(parsed)
+    revalidatePath('/admin/onboarding')
+    return employee
+  } catch (err) {
+    // Convert the low-level provisioning error into a friendlier
+    // message the dialog can surface as a toast. Any other failure
+    // propagates as-is so the caller still sees the root cause.
+    if (err instanceof MemberEmailConflictError) {
+      throw new Error('A user with this email already exists')
+    }
+    throw err
+  }
 }
 
 export async function updateEmployeeAction(

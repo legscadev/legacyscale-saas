@@ -1,6 +1,16 @@
 import type { ChecklistItemStatus, EmploymentStatus, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import {
+  MemberEmailConflictError,
+  provisionMemberWithInvite,
+} from '@/lib/services/member-provisioning'
+
+/**
+ * Re-export so route/action handlers that surface friendlier error
+ * messages can branch on it without importing from two services.
+ */
+export { MemberEmailConflictError }
 
 export interface EmployeeListItem {
   id: string
@@ -45,6 +55,13 @@ export interface CreateEmployeeInput {
   onboardingDate?: Date | null
   dateStarted?: Date | null
   templateSlug?: string | null
+  /**
+   * When true, the caller also provisions a TEAM-role SaaS account
+   * for this hire (Supabase auth user + Invite + welcome email) and
+   * links it via `Employee.userId`. `email` is required here.
+   */
+  grantAccess?: boolean
+  email?: string
 }
 
 export interface UpdateEmployeeInput {
@@ -198,6 +215,26 @@ class EmployeeService {
           where: { isDefault: true },
         })
 
+    // If the admin ticked "Can access the system", provision the
+    // TEAM-role account first. We do this before creating the
+    // Employee row so that (a) email conflicts fail fast without
+    // leaving an orphan HR record, and (b) `Employee.userId` can be
+    // set atomically at insert time.
+    let userId: string | null = null
+    if (input.grantAccess) {
+      if (!input.email) {
+        // The zod schema already enforces this — belt-and-braces for
+        // callers that skip validation.
+        throw new Error('Email is required to grant system access')
+      }
+      const member = await provisionMemberWithInvite({
+        name: input.name,
+        email: input.email,
+        role: 'TEAM',
+      })
+      userId = member.id
+    }
+
     const employee = await prisma.employee.create({
       data: {
         name: input.name,
@@ -205,6 +242,7 @@ class EmployeeService {
         onboardingDate: input.onboardingDate ?? null,
         dateStarted: input.dateStarted ?? null,
         templateId: template?.id ?? null,
+        userId,
       },
     })
     return this.get(employee.id)
