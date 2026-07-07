@@ -6,7 +6,6 @@ import {
   BackgroundVariant,
   Controls,
   Handle,
-  MiniMap,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -168,9 +167,11 @@ function OrgNodeCard({ data }: NodeProps) {
       <div className="border-b border-white/20 px-3 py-2 text-center text-[11px] font-semibold uppercase leading-tight tracking-wide">
         {row.label}
       </div>
-      {row.positionTitle ? (
+      {row.positionTitle || row.holder.kind !== 'unassigned' ? (
         <div className="px-3 py-2 text-center text-[11px]">
-          <p className="font-medium">{row.positionTitle}</p>
+          {row.positionTitle ? (
+            <p className="font-medium">{row.positionTitle}</p>
+          ) : null}
           <p className="flex items-center justify-center gap-1.5 opacity-80">
             <HolderText holder={row.holder} />
             <AssignmentBadge count={row.activeAssignmentsCount} />
@@ -274,7 +275,6 @@ export function OrgFlowChart({ nodes, onNodeClick }: OrgFlowChartProps) {
             elementsSelectable
           >
             <Background variant={BackgroundVariant.Dots} gap={20} />
-            <MiniMap zoomable pannable />
             <Controls showInteractive={false} />
           </ReactFlow>
         </ReactFlowProvider>
