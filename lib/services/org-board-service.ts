@@ -151,6 +151,75 @@ class OrgBoardService {
     const nodes = await this.getNodes(revisionId)
     return { revision, nodes }
   }
+
+  /**
+   * Returns the target node itself, all of its descendants (any
+   * depth), and the ancestor chain up to the revision root. Used
+   * by the drill-down page to render a division/department with
+   * its whole subtree plus a breadcrumb.
+   *
+   * Two DB round-trips: one to fetch the ancestor chain (uses the
+   * flat node list already available on the revision), one for
+   * the subtree. Both are small enough that we don't need a
+   * recursive CTE.
+   */
+  async getNodeWithSubtree(id: string): Promise<{
+    node: OrgNodeRow
+    ancestors: OrgNodeRow[]
+    subtree: OrgNodeRow[]
+    revision: OrgBoardRevisionSummary
+  } | null> {
+    const target = await prisma.orgNode.findUnique({
+      where: { id },
+      include: {
+        employee: { select: { id: true, name: true, roleTitle: true } },
+      },
+    })
+    if (!target) return null
+
+    // Grab every node in this revision so we can walk both the
+    // ancestor chain and the descendant tree in-memory.
+    const revision = await this.getRevision(target.revisionId)
+    if (!revision) return null
+    const all = await this.getNodes(target.revisionId)
+
+    const byId = new Map(all.map((n) => [n.id, n]))
+    const childrenOf = new Map<string, OrgNodeRow[]>()
+    for (const n of all) {
+      if (!n.parentId) continue
+      const list = childrenOf.get(n.parentId) ?? []
+      list.push(n)
+      childrenOf.set(n.parentId, list)
+    }
+    for (const list of childrenOf.values()) {
+      list.sort((a, b) => a.orderIndex - b.orderIndex)
+    }
+
+    // Ancestor walk, closest first, dropped once we return.
+    const ancestors: OrgNodeRow[] = []
+    let cursorParentId = target.parentId
+    while (cursorParentId) {
+      const parent = byId.get(cursorParentId)
+      if (!parent) break
+      ancestors.push(parent)
+      cursorParentId = parent.parentId
+    }
+    ancestors.reverse() // root first, matches breadcrumb order
+
+    // BFS to gather descendants including the target itself.
+    const subtree: OrgNodeRow[] = []
+    const seed = byId.get(target.id)
+    if (!seed) return null
+    const queue: OrgNodeRow[] = [seed]
+    while (queue.length > 0) {
+      const cur = queue.shift()!
+      subtree.push(cur)
+      const kids = childrenOf.get(cur.id) ?? []
+      queue.push(...kids)
+    }
+
+    return { node: seed, ancestors, subtree, revision }
+  }
 }
 
 export const orgBoardService = new OrgBoardService()
