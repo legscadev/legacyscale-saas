@@ -21,6 +21,7 @@ import type {
 import {
   listPositionAssignmentsAction,
 } from '@/app/(admin)/admin/org-board/actions'
+import { HolderText } from './holder-text'
 import { OrgNodeEditDialog } from './org-node-dialogs'
 
 interface OrgNodeDrawerProps {
@@ -79,13 +80,10 @@ export function OrgNodeDrawer({ node, open, onOpenChange }: OrgNodeDrawerProps) 
                   Primary holder
                 </p>
                 <p className="text-sm font-medium">
-                  {node.employee?.name ??
-                    node.freeTextHolder ??
-                    (
-                      <span className="italic text-muted-foreground">
-                        Unassigned
-                      </span>
-                    )}
+                  <HolderText
+                    holder={node.holder}
+                    unassignedClassName="italic text-muted-foreground"
+                  />
                 </p>
               </section>
 

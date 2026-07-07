@@ -24,6 +24,17 @@ export interface OrgNodeEmployeeRef {
 }
 
 /**
+ * Discriminated union of who currently occupies a node's seat. Every
+ * OrgNodeRow carries this — the UI never has to reconstruct the
+ * "employee OR freeTextHolder OR unassigned" three-way from raw
+ * fields. Keeps rendering call sites to a single truthy check.
+ */
+export type OrgNodeHolder =
+  | { kind: 'employee'; employee: OrgNodeEmployeeRef }
+  | { kind: 'placeholder'; label: string }
+  | { kind: 'unassigned' }
+
+/**
  * Flat view of a node used by the top-level list + drill-down
  * pages. Client-side code rebuilds the tree from parentId so we
  * don't pay serialisation cost on deeply-nested Prisma includes.
@@ -44,6 +55,9 @@ export interface OrgNodeRow {
   orderIndex: number
   employee: OrgNodeEmployeeRef | null
   freeTextHolder: string | null
+  /** Pre-computed holder resolution. Prefer this over checking
+   *  `employee` / `freeTextHolder` directly in the UI. */
+  holder: OrgNodeHolder
   /** Number of active (endedAt = null) position_assignments for
    *  this node. Used for the "+N" badge next to the primary
    *  holder. Zero when nobody's assigned yet. */
@@ -146,6 +160,20 @@ function mapRow(row: {
   employee: { id: string; name: string; roleTitle: string } | null
   activeAssignmentsCount?: number
 }): OrgNodeRow {
+  const employee = row.employee
+    ? {
+        id: row.employee.id,
+        name: row.employee.name,
+        roleTitle: row.employee.roleTitle,
+      }
+    : null
+
+  const holder: OrgNodeHolder = employee
+    ? { kind: 'employee', employee }
+    : row.freeTextHolder
+      ? { kind: 'placeholder', label: row.freeTextHolder }
+      : { kind: 'unassigned' }
+
   return {
     id: row.id,
     revisionId: row.revisionId,
@@ -161,13 +189,8 @@ function mapRow(row: {
     orderIndex: row.orderIndex,
     freeTextHolder: row.freeTextHolder,
     activeAssignmentsCount: row.activeAssignmentsCount ?? 0,
-    employee: row.employee
-      ? {
-          id: row.employee.id,
-          name: row.employee.name,
-          roleTitle: row.employee.roleTitle,
-        }
-      : null,
+    employee,
+    holder,
   }
 }
 

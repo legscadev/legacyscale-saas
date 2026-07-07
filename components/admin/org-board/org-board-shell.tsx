@@ -37,6 +37,7 @@ import type {
   OrgNodeRow,
 } from '@/lib/services/org-board-service'
 
+import { HolderText } from './holder-text'
 import { OrgNodeMenu } from './org-node-menu'
 
 interface OrgBoardShellProps {
@@ -380,14 +381,21 @@ function FilterableChart({ nodes }: { nodes: OrgNodeRow[] }) {
     if (!q && !vacantOnly) return null // null = "everything visible"
     const acc = new Set<string>()
     for (const n of nodes) {
-      const hasHolder = Boolean(n.employee?.name || n.freeTextHolder)
-      const isVacant = n.kind === 'POSITION' && !hasHolder && n.activeAssignmentsCount === 0
+      const isVacant =
+        n.kind === 'POSITION' &&
+        n.holder.kind === 'unassigned' &&
+        n.activeAssignmentsCount === 0
+      const holderText =
+        n.holder.kind === 'employee'
+          ? n.holder.employee.name
+          : n.holder.kind === 'placeholder'
+            ? n.holder.label
+            : ''
       const textMatch =
         !q ||
         n.label.toLowerCase().includes(q) ||
         (n.positionTitle ?? '').toLowerCase().includes(q) ||
-        (n.employee?.name ?? '').toLowerCase().includes(q) ||
-        (n.freeTextHolder ?? '').toLowerCase().includes(q)
+        holderText.toLowerCase().includes(q)
       const vacantMatch = !vacantOnly || isVacant
       if (textMatch && vacantMatch) acc.add(n.id)
     }
@@ -599,9 +607,7 @@ function CrownCard({ node }: { node: OrgNodeRow }) {
       <div className="flex items-center justify-between gap-2 bg-white/10 px-3 py-2 text-sm">
         <span className="flex min-w-0 items-center gap-1.5 truncate">
           <span className="truncate">
-            {node.employee?.name || node.freeTextHolder || (
-              <span className="italic opacity-70">Unassigned</span>
-            )}
+            <HolderText holder={node.holder} />
           </span>
           <AssignmentBadge count={node.activeAssignmentsCount} />
         </span>
@@ -650,18 +656,12 @@ function DivisionColumn({
         {node.positionTitle ? (
           <div className="mt-2 rounded bg-black/20 px-2 py-1 text-xs font-medium">
             <p className="truncate">{node.positionTitle}</p>
-            {node.employee?.name || node.freeTextHolder ? (
-              <p className="flex items-center justify-center gap-1.5 truncate text-[11px] opacity-80">
-                <span className="truncate">
-                  {node.employee?.name || node.freeTextHolder}
-                </span>
-                <AssignmentBadge count={node.activeAssignmentsCount} />
-              </p>
-            ) : (
-              <p className="truncate text-[11px] italic opacity-70">
-                Unassigned
-              </p>
-            )}
+            <p className="flex items-center justify-center gap-1.5 truncate text-[11px] opacity-80">
+              <span className="truncate">
+                <HolderText holder={node.holder} />
+              </span>
+              <AssignmentBadge count={node.activeAssignmentsCount} />
+            </p>
           </div>
         ) : null}
       </div>
@@ -700,10 +700,10 @@ function DepartmentBlock({ node }: { node: OrgNodeRow }) {
       {node.positionTitle ? (
         <p className="text-[11px] opacity-90">{node.positionTitle}</p>
       ) : null}
-      {node.employee?.name || node.freeTextHolder ? (
+      {node.holder.kind !== 'unassigned' ? (
         <p className="flex items-center gap-1.5 text-[11px] opacity-70">
           <span className="truncate">
-            {node.employee?.name || node.freeTextHolder}
+            <HolderText holder={node.holder} />
           </span>
           <AssignmentBadge count={node.activeAssignmentsCount} />
         </p>

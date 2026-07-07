@@ -24,6 +24,8 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { OrgNodeRow } from '@/lib/services/org-board-service'
 
+import { HolderText } from './holder-text'
+
 interface OrgFlowChartProps {
   nodes: OrgNodeRow[]
   onNodeClick?: (nodeId: string) => void
@@ -154,7 +156,6 @@ function OrgNodeCard({ data }: NodeProps) {
             // darker so they read as children.
             (COLOR_BG[row.color ?? 'slate'] ?? 'bg-slate-600')
           : 'bg-slate-500'
-  const holder = row.employee?.name || row.freeTextHolder
   return (
     <div
       style={{ width: NODE_WIDTH }}
@@ -171,7 +172,7 @@ function OrgNodeCard({ data }: NodeProps) {
         <div className="px-3 py-2 text-center text-[11px]">
           <p className="font-medium">{row.positionTitle}</p>
           <p className="opacity-80">
-            {holder ?? <span className="italic opacity-70">Unassigned</span>}
+            <HolderText holder={row.holder} />
             {row.activeAssignmentsCount > 1 ? (
               <span className="ml-1 rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold">
                 +{row.activeAssignmentsCount - 1}

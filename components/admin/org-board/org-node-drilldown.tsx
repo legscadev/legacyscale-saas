@@ -7,6 +7,7 @@ import type {
   OrgNodeRow,
 } from '@/lib/services/org-board-service'
 
+import { HolderText } from './holder-text'
 import { OrgNodeMenu } from './org-node-menu'
 
 function AssignmentBadge({ count }: { count: number }) {
@@ -183,13 +184,7 @@ export function OrgNodeDrilldown({
             <p className="font-medium">{node.positionTitle}</p>
             <p className="flex items-center justify-center gap-1.5 text-xs opacity-80">
               <span>
-                {node.employee?.name ||
-                  node.freeTextHolder ||
-                  (
-                    <span className="italic opacity-70">
-                      Unassigned
-                    </span>
-                  )}
+                <HolderText holder={node.holder} />
               </span>
               <AssignmentBadge count={node.activeAssignmentsCount} />
             </p>
@@ -265,9 +260,7 @@ function ColumnNode({
           <p className="font-medium">{node.positionTitle}</p>
           <p className="flex items-center justify-center gap-1.5 opacity-80">
             <span>
-              {node.employee?.name ||
-                node.freeTextHolder ||
-                <span className="italic opacity-70">Unassigned</span>}
+              <HolderText holder={node.holder} />
             </span>
             <AssignmentBadge count={node.activeAssignmentsCount} />
           </p>
@@ -321,10 +314,10 @@ function NestedNode({
       {node.positionTitle ? (
         <p className="text-[11px] opacity-80">{node.positionTitle}</p>
       ) : null}
-      {node.employee?.name || node.freeTextHolder ? (
+      {node.holder.kind !== 'unassigned' ? (
         <p className="flex items-center gap-1.5 text-[11px] opacity-70">
           <span className="truncate">
-            {node.employee?.name || node.freeTextHolder}
+            <HolderText holder={node.holder} />
           </span>
           <AssignmentBadge count={node.activeAssignmentsCount} />
         </p>
