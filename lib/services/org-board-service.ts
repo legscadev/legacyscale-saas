@@ -88,6 +88,10 @@ export interface UpdateOrgNodeArgs {
 export interface OrgNodeDeleteImpact {
   descendantCount: number
   positionsWithEmployeeCount: number
+  /** Descendant node labels + kind, in BFS order. Capped at 20 so
+   *  a rogue Founder delete doesn't try to render 200 items. */
+  sampleDescendants: Array<{ label: string; kind: OrgNodeKind }>
+  hasMore: boolean
 }
 
 export interface PositionAssignmentRow {
@@ -487,7 +491,13 @@ class OrgBoardService {
     if (!target) throw new Error('Org node not found')
     const all = await prisma.orgNode.findMany({
       where: { revisionId: target.revisionId },
-      select: { id: true, parentId: true, employeeId: true },
+      select: {
+        id: true,
+        parentId: true,
+        employeeId: true,
+        label: true,
+        kind: true,
+      },
     })
     const childrenOf = new Map<string, string[]>()
     for (const n of all) {
@@ -497,6 +507,7 @@ class OrgBoardService {
       childrenOf.set(n.parentId, list)
     }
     const empById = new Map(all.map((n) => [n.id, n.employeeId]))
+    const rowById = new Map(all.map((n) => [n.id, n]))
     // BFS descendants (excluding the target itself for the count).
     const visited: string[] = []
     const queue: string[] = [target.id]
@@ -515,9 +526,16 @@ class OrgBoardService {
     // Also count the target itself if it's a POSITION holding an
     // employee.
     if (empById.get(target.id)) empCount++
+    const sampleLimit = 20
+    const sampleDescendants = visited.slice(0, sampleLimit).map((nid) => {
+      const row = rowById.get(nid)!
+      return { label: row.label, kind: row.kind }
+    })
     return {
       descendantCount: visited.length,
       positionsWithEmployeeCount: empCount,
+      sampleDescendants,
+      hasMore: visited.length > sampleLimit,
     }
   }
 

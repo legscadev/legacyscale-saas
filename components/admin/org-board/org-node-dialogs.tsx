@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Loader2, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -73,6 +74,7 @@ export function OrgNodeEditDialog({
   )
   const [freeText, setFreeText] = useState(node.freeTextHolder ?? '')
   const [pending, startTransition] = useTransition()
+  const router = useRouter()
 
   // Reset local state when the dialog opens against a fresh node.
   // Wrapped in queueMicrotask so react-hooks/purity is satisfied
@@ -122,6 +124,7 @@ export function OrgNodeEditDialog({
         })
         toast.success(`Updated "${label.trim() || node.label}"`)
         onOpenChange(false)
+        router.refresh()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to save')
       }
@@ -274,6 +277,7 @@ export function OrgNodeAddDialog({
   const [employee, setEmployee] = useState<EmployeeRef | null>(null)
   const [freeText, setFreeText] = useState('')
   const [pending, startTransition] = useTransition()
+  const router = useRouter()
 
   useEffect(() => {
     if (!open) return
@@ -307,6 +311,7 @@ export function OrgNodeAddDialog({
         })
         toast.success(`Added "${label.trim()}"`)
         onOpenChange(false)
+        router.refresh()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to add')
       }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   ArrowDown,
   ArrowLeft,
@@ -32,7 +33,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import type { OrgNodeRow } from '@/lib/services/org-board-service'
+import type {
+  OrgNodeDeleteImpact,
+  OrgNodeRow,
+} from '@/lib/services/org-board-service'
 import type {
   OrgNodeKindValue,
 } from '@/lib/validations/org-board'
@@ -67,16 +71,20 @@ interface OrgNodeMenuProps {
 export function OrgNodeMenu({ node, layout, triggerClassName }: OrgNodeMenuProps) {
   const [editOpen, setEditOpen] = useState(false)
   const [addKind, setAddKind] = useState<OrgNodeKindValue | null>(null)
-  const [deleteState, setDeleteState] = useState<null | {
-    descendantCount: number
-    positionsWithEmployeeCount: number
-  }>(null)
+  const [deleteState, setDeleteState] = useState<OrgNodeDeleteImpact | null>(
+    null,
+  )
   const [pending, startTransition] = useTransition()
+  const router = useRouter()
 
   function move(direction: 'up' | 'down' | 'left' | 'right') {
     startTransition(async () => {
       try {
         await moveOrgNodeAction(node.id, { direction })
+        // revalidatePath in the server action isn't enough — the
+        // shell holds `nodes` in a useMemo derived from props, and
+        // without a router refresh the client keeps the stale copy.
+        router.refresh()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to move')
       }
@@ -98,6 +106,7 @@ export function OrgNodeMenu({ node, layout, triggerClassName }: OrgNodeMenuProps
         await deleteOrgNodeAction(node.id)
         toast.success(`Removed "${node.label}"`)
         setDeleteState(null)
+        router.refresh()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to remove')
       }
@@ -211,6 +220,33 @@ export function OrgNodeMenu({ node, layout, triggerClassName }: OrgNodeMenuProps
                   }. This can't be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {deleteState && deleteState.sampleDescendants.length > 0 ? (
+            <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/30 px-3 py-2 text-xs">
+              <p className="mb-1 font-medium text-muted-foreground">
+                Includes:
+              </p>
+              <ul className="space-y-0.5">
+                {deleteState.sampleDescendants.map((d, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <span className="inline-flex rounded bg-muted px-1 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {d.kind.toLowerCase()}
+                    </span>
+                    <span className="truncate">{d.label}</span>
+                  </li>
+                ))}
+                {deleteState.hasMore ? (
+                  <li className="pt-1 text-[11px] italic text-muted-foreground">
+                    …and{' '}
+                    {deleteState.descendantCount -
+                      deleteState.sampleDescendants.length}{' '}
+                    more
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
+
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
             <AlertDialogAction

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Loader2, Plus, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -53,6 +54,7 @@ export function PositionAssignmentsPanel({
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [pending, startTransition] = useTransition()
+  const router = useRouter()
 
   const refresh = useCallback(() => {
     let cancelled = false
@@ -89,6 +91,7 @@ export function PositionAssignmentsPanel({
         await endPositionAssignmentAction(id, nodeId)
         toast.success(`Ended assignment for ${name}`)
         refresh()
+        router.refresh()
         onChange?.()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to end')
@@ -198,6 +201,7 @@ function AddAssignmentForm({
   const [notes, setNotes] = useState('')
   const [pending, startTransition] = useTransition()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const router = useRouter()
 
   useEffect(() => {
     if (picked) return
@@ -236,6 +240,7 @@ function AddAssignmentForm({
           notes: notes.trim() || null,
         })
         toast.success(`Assigned ${picked.name ?? picked.email}`)
+        router.refresh()
         onAdded()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to assign')

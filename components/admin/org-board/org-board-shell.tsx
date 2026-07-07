@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
@@ -273,12 +273,19 @@ function EmptyBoardPrimer({ revisionId }: { revisionId: string }) {
 
 function ViewSwitcher({ nodes }: { nodes: OrgNodeRow[] }) {
   // Persist the last chosen view between reloads. Not critical
-  // enough for URL state — localStorage is fine.
-  const [view, setView] = useState<'classic' | 'chart'>(() => {
-    if (typeof window === 'undefined') return 'classic'
-    return (localStorage.getItem('orgBoardView') as 'classic' | 'chart') ?? 'classic'
-  })
+  // enough for URL state — localStorage is fine. We always start
+  // at 'classic' so server-rendered and first-client-render HTML
+  // match; the stored value is applied in a mount effect below to
+  // avoid React #418 hydration warnings.
+  const [view, setView] = useState<'classic' | 'chart'>('classic')
   const [drawerNodeId, setDrawerNodeId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('orgBoardView')
+    if (stored === 'classic' || stored === 'chart') {
+      setView(stored)
+    }
+  }, [])
 
   function updateView(next: 'classic' | 'chart') {
     setView(next)
@@ -412,7 +419,29 @@ function FilterableChart({ nodes }: { nodes: OrgNodeRow[] }) {
           Vacant only
         </label>
       </div>
-      <TopLevelChart nodes={nodes} matchIds={matches} />
+      {matches && matches.size === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="No matches"
+          description={
+            vacantOnly
+              ? 'No nodes match this search + vacancy filter.'
+              : 'No nodes match this search.'
+          }
+        >
+          <Button
+            variant="outline"
+            onClick={() => {
+              setQuery('')
+              setVacantOnly(false)
+            }}
+          >
+            Clear filters
+          </Button>
+        </EmptyState>
+      ) : (
+        <TopLevelChart nodes={nodes} matchIds={matches} />
+      )}
     </div>
   )
 }
