@@ -142,6 +142,27 @@ export function EmployeeNameField({
             setShowResults(true)
           }}
           onFocus={() => setShowResults(true)}
+          onKeyDown={(e) => {
+            // Enter with the dropdown open should commit the typed
+            // name as-is and dismiss the suggestions, NOT submit the
+            // form. That matches the hint we show in the dropdown.
+            if (e.key === 'Enter' && showResults) {
+              e.preventDefault()
+              setShowResults(false)
+              setResults([])
+              return
+            }
+            if (e.key === 'Escape' && showResults) {
+              e.preventDefault()
+              setShowResults(false)
+            }
+            // Tab keeps its default focus-move behaviour, but we
+            // still want the dropdown to disappear so it doesn't
+            // linger over the next field.
+            if (e.key === 'Tab' && showResults) {
+              setShowResults(false)
+            }
+          }}
           placeholder="Type a name or search existing users"
           autoComplete="off"
           required
@@ -203,10 +224,20 @@ export function EmployeeNameField({
                 </li>
               ) : null}
               {q ? (
-                <li className="border-t bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
-                  Press Enter or Tab to use &ldquo;
-                  <span className="font-medium text-foreground">{q}</span>
-                  &rdquo; as a new employee
+                <li className="border-t bg-muted/30">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowResults(false)
+                      setResults([])
+                    }}
+                    disabled={disabled}
+                    className="w-full px-2.5 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                  >
+                    Continue with &ldquo;
+                    <span className="font-medium text-foreground">{q}</span>
+                    &rdquo; as a new employee
+                  </button>
                 </li>
               ) : null}
             </ul>
