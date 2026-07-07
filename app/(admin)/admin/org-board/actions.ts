@@ -22,15 +22,12 @@ function revalidate(nodeId?: string) {
 }
 
 /**
- * Search result shape used by the holder pickers. `kind: 'employee'`
- * results come with an Employee.id ready to store in
- * `OrgNode.employeeId`. `kind: 'user'` results are Users who don't
- * yet have an Employee record — picking one triggers a lazy upsert
- * via {@link resolveHolderToEmployeeAction} before the ID is used
- * in any mutation.
+ * Search result shape used by the holder pickers. Only Employees
+ * are returned — the org-board is intentionally downstream of the
+ * onboarding module. If nobody comes back for a query, the admin
+ * needs to add the person via /admin/onboarding first.
  */
 export interface AssignablePickerResult {
-  kind: 'employee' | 'user'
   id: string
   email: string
   name: string | null
@@ -43,96 +40,28 @@ export async function searchAssignableEmployeesAction(
   await requireAdmin()
   const q = query.trim()
   if (!q) return []
-
-  const [employees, users] = await Promise.all([
-    prisma.employee.findMany({
-      where: {
-        status: 'ACTIVE',
-        OR: [
-          { name: { contains: q, mode: 'insensitive' } },
-          { roleTitle: { contains: q, mode: 'insensitive' } },
-        ],
-      },
-      take: 6,
-      orderBy: [{ name: 'asc' }],
-      select: {
-        id: true,
-        name: true,
-        user: { select: { email: true, role: true } },
-      },
-    }),
-    // Users without an Employee row — picking one upserts an
-    // Employee on the fly. Users who already have an Employee are
-    // covered by the first query above.
-    prisma.user.findMany({
-      where: {
-        deletedAt: null,
-        employee: null,
-        OR: [
-          { name: { contains: q, mode: 'insensitive' } },
-          { email: { contains: q, mode: 'insensitive' } },
-        ],
-      },
-      take: 6,
-      orderBy: [{ name: 'asc' }],
-      select: { id: true, name: true, email: true, role: true },
-    }),
-  ])
-
-  return [
-    ...employees.map<AssignablePickerResult>((e) => ({
-      kind: 'employee',
-      id: e.id,
-      email: e.user?.email ?? '',
-      name: e.name,
-      role: (e.user?.role ?? 'TEAM') as 'ADMIN' | 'TEAM' | 'MEMBER',
-    })),
-    ...users.map<AssignablePickerResult>((u) => ({
-      kind: 'user',
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
-    })),
-  ]
-}
-
-/**
- * Turns a picker result into an Employee.id ready for
- * OrgNode.employeeId / PositionAssignment.employeeId. Employee
- * picks pass through; User picks trigger an idempotent upsert
- * (unique on `employees.user_id`) so a user linked to an Employee
- * stays that way even if the admin picks them twice.
- */
-export async function resolveHolderToEmployeeAction(
-  pick: { kind: 'employee' | 'user'; id: string },
-): Promise<string> {
-  await requireAdmin()
-  if (pick.kind === 'employee') return pick.id
-
-  const user = await prisma.user.findUnique({
-    where: { id: pick.id },
+  const employees = await prisma.employee.findMany({
+    where: {
+      status: 'ACTIVE',
+      OR: [
+        { name: { contains: q, mode: 'insensitive' } },
+        { roleTitle: { contains: q, mode: 'insensitive' } },
+      ],
+    },
+    take: 8,
+    orderBy: [{ name: 'asc' }],
     select: {
       id: true,
       name: true,
-      email: true,
-      employee: { select: { id: true } },
+      user: { select: { email: true, role: true } },
     },
   })
-  if (!user) throw new Error('User not found')
-  if (user.employee) return user.employee.id
-
-  const created = await prisma.employee.create({
-    data: {
-      userId: user.id,
-      name: user.name ?? user.email,
-      // Default title — admins can edit on the employee's onboarding
-      // profile page later.
-      roleTitle: 'Team Member',
-    },
-    select: { id: true },
-  })
-  return created.id
+  return employees.map((e) => ({
+    id: e.id,
+    email: e.user?.email ?? '',
+    name: e.name,
+    role: (e.user?.role ?? 'TEAM') as 'ADMIN' | 'TEAM' | 'MEMBER',
+  }))
 }
 
 export async function addOrgNodeAction(

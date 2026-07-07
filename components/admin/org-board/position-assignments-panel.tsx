@@ -26,7 +26,6 @@ import {
   addPositionAssignmentAction,
   endPositionAssignmentAction,
   listPositionAssignmentsAction,
-  resolveHolderToEmployeeAction,
   searchAssignableEmployeesAction,
 } from '@/app/(admin)/admin/org-board/actions'
 
@@ -38,8 +37,6 @@ interface PositionAssignmentsPanelProps {
 }
 
 interface EmployeeSearchRow {
-  /** See notes on the dialogs' EmployeeRef — same discriminator. */
-  kind: 'employee' | 'user'
   id: string
   email: string
   name: string | null
@@ -230,12 +227,8 @@ function AddAssignmentForm({
     if (!picked || pending) return
     startTransition(async () => {
       try {
-        const employeeId = await resolveHolderToEmployeeAction({
-          kind: picked.kind,
-          id: picked.id,
-        })
         await addPositionAssignmentAction(nodeId, {
-          employeeId,
+          employeeId: picked.id,
           employmentType:
             employmentType === NO_EMPLOYMENT_TYPE
               ? null
