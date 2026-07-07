@@ -261,17 +261,26 @@ export function OrgNodeEditDialog({
 // initial state.
 // ---------------------------------------------------------------------
 
+/**
+ * Where the new node should be created. `child` nests it under an
+ * existing node; `root` creates a top-level node in a revision
+ * (used by the empty-state primer when the whole board is blank).
+ */
+export type OrgNodeAddTarget =
+  | { mode: 'child'; parent: OrgNodeRow }
+  | { mode: 'root'; revisionId: string; label: string }
+
 interface OrgNodeAddDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  parent: OrgNodeRow
+  target: OrgNodeAddTarget
   childKind: OrgNodeKindValue | null
 }
 
 export function OrgNodeAddDialog({
   open,
   onOpenChange,
-  parent,
+  target,
   childKind,
 }: OrgNodeAddDialogProps) {
   const [label, setLabel] = useState('')
@@ -294,13 +303,18 @@ export function OrgNodeAddDialog({
 
   if (!childKind) return null
 
+  const revisionId =
+    target.mode === 'child' ? target.parent.revisionId : target.revisionId
+  const parentId = target.mode === 'child' ? target.parent.id : null
+  const parentLabel = target.mode === 'child' ? target.parent.label : target.label
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (pending) return
     startTransition(async () => {
       try {
-        await addOrgNodeAction(parent.revisionId, {
-          parentId: parent.id,
+        await addOrgNodeAction(revisionId, {
+          parentId,
           kind: childKind as OrgNodeKindValue,
           label: label.trim(),
           positionTitle: positionTitle.trim() || null,
@@ -316,7 +330,7 @@ export function OrgNodeAddDialog({
     })
   }
 
-  const heading = `Add ${ORG_NODE_KIND_LABELS[childKind].toLowerCase()} under "${parent.label}"`
+  const heading = `Add ${ORG_NODE_KIND_LABELS[childKind].toLowerCase()} under "${parentLabel}"`
 
   return (
     <Dialog open={open} onOpenChange={(v) => !pending && onOpenChange(v)}>

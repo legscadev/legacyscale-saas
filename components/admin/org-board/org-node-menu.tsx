@@ -184,7 +184,7 @@ export function OrgNodeMenu({ node, layout, triggerClassName }: OrgNodeMenuProps
       <OrgNodeAddDialog
         open={addKind !== null}
         onOpenChange={(v) => !v && setAddKind(null)}
-        parent={node}
+        target={{ mode: 'child', parent: node }}
         childKind={addKind}
       />
 

@@ -4,12 +4,21 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
-import { Network, Search } from 'lucide-react'
+import { Network, Plus, Search } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import type { OrgNodeKindValue } from '@/lib/validations/org-board'
 
 import { OrgFlowChart } from './org-flow-chart'
+import { OrgNodeAddDialog } from './org-node-dialogs'
 import { OrgNodeDrawer } from './org-node-drawer'
 
 import { PageHeader, EmptyState } from '@/components/shared'
@@ -152,47 +161,130 @@ export function OrgBoardShell({
           tree.revision.description ? ` · ${tree.revision.description}` : ''
         }`}
         actions={
-          revisions.length > 0 ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Revision
-              </span>
-              <Select
-                value={currentRevisionId}
-                onValueChange={(v) => pickRevision(v ?? '')}
-              >
-                <SelectTrigger className="h-9 min-w-[180px]">
-                  <SelectValue>
-                    {(v: string) => {
-                      const r = revisions.find((rev) => rev.id === v)
-                      if (!r) return 'Select revision'
-                      return `${r.name}${r.isCurrent ? ' · current' : ''}`
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {revisions.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name}
-                      {r.isCurrent ? ' · current' : ''}
-                      {r.publishedAt
-                        ? ` (${format(r.publishedAt, 'MMM d, yyyy')})`
-                        : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null
+          <div className="flex items-center gap-2">
+            <AddRootNodeButton revisionId={tree.revision.id} />
+            {revisions.length > 0 ? (
+              <>
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Revision
+                </span>
+                <Select
+                  value={currentRevisionId}
+                  onValueChange={(v) => pickRevision(v ?? '')}
+                >
+                  <SelectTrigger className="h-9 min-w-[180px]">
+                    <SelectValue>
+                      {(v: string) => {
+                        const r = revisions.find((rev) => rev.id === v)
+                        if (!r) return 'Select revision'
+                        return `${r.name}${r.isCurrent ? ' · current' : ''}`
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {revisions.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name}
+                        {r.isCurrent ? ' · current' : ''}
+                        {r.publishedAt
+                          ? ` (${format(r.publishedAt, 'MMM d, yyyy')})`
+                          : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            ) : null}
+          </div>
         }
       />
 
       {stats ? <OrgStatsStrip stats={stats} /> : null}
 
-      <ViewSwitcher nodes={tree.nodes} />
+      {tree.nodes.length === 0 ? (
+        <EmptyBoardPrimer revisionId={tree.revision.id} />
+      ) : (
+        <ViewSwitcher nodes={tree.nodes} />
+      )}
 
       {auditLogs.length > 0 ? <RecentActivity entries={auditLogs} /> : null}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Empty-state primer — shown when the whole revision has zero nodes,
+// which happens after a "delete all". Without this, there's no card
+// with a menu caret to click, so the admin has nowhere to start.
+// ---------------------------------------------------------------------
+
+function AddRootNodeButton({ revisionId }: { revisionId: string }) {
+  const [addKind, setAddKind] = useState<OrgNodeKindValue | null>(null)
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label="Add root node"
+          render={
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent"
+            />
+          }
+        >
+          <Plus className="size-4" />
+          Add root
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setAddKind('CROWN')}>
+            <Plus className="size-3.5" />
+            Top-level role (Founder / CEO)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setAddKind('DIVISION')}>
+            <Plus className="size-3.5" />
+            Division
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <OrgNodeAddDialog
+        open={addKind !== null}
+        onOpenChange={(v) => !v && setAddKind(null)}
+        target={{ mode: 'root', revisionId, label: 'the org board' }}
+        childKind={addKind}
+      />
+    </>
+  )
+}
+
+function EmptyBoardPrimer({ revisionId }: { revisionId: string }) {
+  const [addKind, setAddKind] = useState<OrgNodeKindValue | null>(null)
+  return (
+    <>
+      <EmptyState
+        icon={Network}
+        tone="brand"
+        title="No nodes yet"
+        description="Start by adding a top-level role (Founder / CEO) or the first Division."
+      >
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button onClick={() => setAddKind('CROWN')}>Add top-level role</Button>
+          <Button variant="outline" onClick={() => setAddKind('DIVISION')}>
+            Add Division
+          </Button>
+        </div>
+      </EmptyState>
+
+      <OrgNodeAddDialog
+        open={addKind !== null}
+        onOpenChange={(v) => !v && setAddKind(null)}
+        target={{
+          mode: 'root',
+          revisionId,
+          label: addKind === 'DIVISION' ? 'the org board' : 'the org board',
+        }}
+        childKind={addKind}
+      />
+    </>
   )
 }
 
