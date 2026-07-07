@@ -106,11 +106,15 @@ function summarize(
   totalItems: number,
   statuses: Array<{ status: ChecklistItemStatus }>,
 ) {
+  // NA rolls into okCount on purpose: "N/A" means the item doesn't
+  // apply to this hire, so it should count against the total the
+  // same way "Done" does. Otherwise a video editor whose 4 sales
+  // items are marked NA would always look 40% complete.
   let okCount = 0
   let pendingCount = 0
   let attentionCount = 0
   for (const s of statuses) {
-    if (s.status === 'OK') okCount++
+    if (s.status === 'OK' || s.status === 'NA') okCount++
     else if (s.status === 'PENDING') pendingCount++
     else if (s.status === 'ATTENTION') attentionCount++
   }

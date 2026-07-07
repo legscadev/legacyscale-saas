@@ -266,14 +266,18 @@ export function OnboardingShell({
           ) : null}
         </EmptyState>
       ) : (
-        <OnboardingMatrix
-          rows={rows}
-          items={initialItems}
-          tab={tab}
-          isPending={isPending}
-          onCellChange={handleCellStatusChange}
-          onNameClick={(id) => router.push(`/admin/onboarding/${id}`)}
-        />
+        <>
+          <SummaryCards rows={rows} totalItems={initialItems.length} />
+          <StatusLegend />
+          <OnboardingMatrix
+            rows={rows}
+            items={initialItems}
+            tab={tab}
+            isPending={isPending}
+            onCellChange={handleCellStatusChange}
+            onNameClick={(id) => router.push(`/admin/onboarding/${id}`)}
+          />
+        </>
       )}
 
       {anyAttention ? (
@@ -287,6 +291,91 @@ export function OnboardingShell({
       ) : null}
 
       <NewEmployeeDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Summary cards
+// ---------------------------------------------------------------------
+
+function SummaryCards({
+  rows,
+  totalItems,
+}: {
+  rows: EmployeeListItem[]
+  totalItems: number
+}) {
+  // Fully complete = every checklist item is either OK or NA. NA is
+  // rolled into the ok bucket by the summarize() helper, so this
+  // check compares against the global item total.
+  const fullyComplete = rows.filter(
+    (r) => totalItems > 0 && r.checklist.okCount >= totalItems,
+  ).length
+  const needsAttention = rows.filter((r) => r.checklist.attentionCount > 0).length
+
+  const cards = [
+    { label: 'In this view', value: rows.length },
+    { label: 'Fully complete', value: fullyComplete, tone: 'success' as const },
+    {
+      label: 'Needs attention',
+      value: needsAttention,
+      tone: needsAttention > 0 ? ('warning' as const) : undefined,
+    },
+    { label: 'Checklist items', value: totalItems },
+  ]
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {cards.map((card) => (
+        <div key={card.label} className="rounded-xl border bg-card p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {card.label}
+          </p>
+          <p
+            className={cn(
+              'mt-1.5 text-2xl font-semibold tabular-nums',
+              card.tone === 'success' && 'text-emerald-600',
+              card.tone === 'warning' && 'text-amber-600',
+            )}
+          >
+            {card.value}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Legend
+// ---------------------------------------------------------------------
+
+function StatusLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">Legend</span>
+      {STATUS_OPTIONS.map((s) => {
+        const { className, Icon } = CELL_STYLE[s]
+        return (
+          <span key={s} className="inline-flex items-center gap-1.5">
+            <span
+              className={cn(
+                'grid size-4 shrink-0 place-items-center rounded-full',
+                className,
+              )}
+            >
+              <Icon className="size-2.5" />
+            </span>
+            {CHECKLIST_STATUS_LABELS[s]}
+            {s === 'NA' ? (
+              <span className="text-muted-foreground/70">
+                (counts as done)
+              </span>
+            ) : null}
+          </span>
+        )
+      })}
     </div>
   )
 }
@@ -320,6 +409,10 @@ function OnboardingMatrix({
   // first column's natural width doesn't match the hard-coded left
   // offset of the second. Role is tucked under the name as a
   // subtitle so we don't lose that info.
+  //
+  // The sticky cell and its zebra variant use FULLY OPAQUE colours
+  // (bg-card / bg-secondary) rather than /XX-alpha tints — anything
+  // transparent lets the scrolling columns bleed through visibly.
   return (
     <div className="overflow-hidden rounded-xl border bg-card">
       <div className="overflow-x-auto">
@@ -328,13 +421,13 @@ function OnboardingMatrix({
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 z-20 min-w-[220px] border-b bg-muted/50 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground shadow-[1px_0_0_0_var(--tw-shadow-color)] shadow-border/60 backdrop-blur"
+                className="sticky left-0 z-20 min-w-[220px] border-b bg-muted px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground shadow-[1px_0_0_0_var(--tw-shadow-color)] shadow-border"
               >
                 Name
               </th>
               <th
                 scope="col"
-                className="border-b border-l bg-muted/50 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap"
+                className="border-b border-l bg-muted px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap"
               >
                 {tab === 'offboarded' ? 'Offboarded' : 'Onboarded'}
               </th>
@@ -342,7 +435,7 @@ function OnboardingMatrix({
                 <th
                   key={item.id}
                   scope="col"
-                  className="border-b border-l bg-muted/50 px-2 py-2 text-center text-[10px] font-medium uppercase tracking-tight text-muted-foreground whitespace-nowrap"
+                  className="border-b border-l bg-muted px-2 py-2 text-center text-[10px] font-medium uppercase tracking-tight text-muted-foreground whitespace-nowrap"
                   title={item.label}
                 >
                   <span className="inline-block max-w-[110px] truncate">
@@ -355,16 +448,19 @@ function OnboardingMatrix({
           <tbody>
             {rows.map((row, i) => {
               const zebra = i % 2 === 1
+              // Solid, opaque colours only — see the comment on the
+              // component. `bg-secondary` here is the shadcn token
+              // that renders as a light neutral in both themes.
+              const rowBg = zebra ? 'bg-secondary' : 'bg-card'
               return (
                 <tr key={row.id} className="group">
                   <td
                     className={cn(
-                      'sticky left-0 z-10 min-w-[220px] border-t px-3 py-2 shadow-[1px_0_0_0_var(--tw-shadow-color)] shadow-border/60',
-                      // Solid backgrounds are essential — the cell
-                      // has to fully occlude the non-sticky columns
-                      // that scroll underneath it.
-                      zebra ? 'bg-muted/30' : 'bg-card',
-                      'group-hover:bg-muted/40',
+                      'sticky left-0 z-10 min-w-[220px] border-t px-3 py-2 shadow-[1px_0_0_0_var(--tw-shadow-color)] shadow-border',
+                      rowBg,
+                      // Hover uses `bg-accent` — also opaque — so
+                      // the sticky cell never becomes translucent.
+                      'group-hover:bg-accent',
                     )}
                   >
                     <button
@@ -388,8 +484,8 @@ function OnboardingMatrix({
                   <td
                     className={cn(
                       'border-l border-t px-3 py-2 text-muted-foreground whitespace-nowrap',
-                      zebra && 'bg-muted/10',
-                      'group-hover:bg-muted/25',
+                      rowBg,
+                      'group-hover:bg-accent',
                     )}
                   >
                     {formatDate(
@@ -407,19 +503,21 @@ function OnboardingMatrix({
                       <td
                         key={item.id}
                         className={cn(
-                          'border-l border-t px-2 py-1.5 text-center',
-                          zebra && 'bg-muted/10',
-                          'group-hover:bg-muted/25',
+                          'border-l border-t px-2 py-1.5',
+                          rowBg,
+                          'group-hover:bg-accent',
                         )}
                       >
-                        <StatusCell
-                          current={current}
-                          label={item.label}
-                          disabled={isPending}
-                          onChange={(next) =>
-                            onCellChange(row.id, item.id, next, current)
-                          }
-                        />
+                        <div className="flex items-center justify-center">
+                          <StatusCell
+                            current={current}
+                            label={item.label}
+                            disabled={isPending}
+                            onChange={(next) =>
+                              onCellChange(row.id, item.id, next, current)
+                            }
+                          />
+                        </div>
                       </td>
                     )
                   })}
