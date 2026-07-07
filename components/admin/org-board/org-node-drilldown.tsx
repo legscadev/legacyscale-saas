@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import Link from 'next/link'
 
 import { PageHeader } from '@/components/shared'
@@ -7,6 +6,22 @@ import type {
   OrgBoardRevisionSummary,
   OrgNodeRow,
 } from '@/lib/services/org-board-service'
+
+import { OrgNodeMenu } from './org-node-menu'
+
+function buildChildrenIndex(subtree: OrgNodeRow[]): Map<string, OrgNodeRow[]> {
+  const map = new Map<string, OrgNodeRow[]>()
+  for (const n of subtree) {
+    if (!n.parentId) continue
+    const list = map.get(n.parentId) ?? []
+    list.push(n)
+    map.set(n.parentId, list)
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => a.orderIndex - b.orderIndex)
+  }
+  return map
+}
 
 interface OrgNodeDrilldownProps {
   revision: OrgBoardRevisionSummary
@@ -94,22 +109,10 @@ export function OrgNodeDrilldown({
   subtree,
 }: OrgNodeDrilldownProps) {
   const color = findDivisionColor(node, ancestors)
-
-  // Build a children lookup for the whole subtree so nested render
-  // stays O(1) per lookup.
-  const childrenOf = useMemo(() => {
-    const map = new Map<string, OrgNodeRow[]>()
-    for (const n of subtree) {
-      if (!n.parentId) continue
-      const list = map.get(n.parentId) ?? []
-      list.push(n)
-      map.set(n.parentId, list)
-    }
-    for (const list of map.values()) {
-      list.sort((a, b) => a.orderIndex - b.orderIndex)
-    }
-    return map
-  }, [subtree])
+  // Server component — computed once per request. `useMemo` was
+  // pointless here (each render is a fresh server pass) and it
+  // forced the file into client-component territory unnecessarily.
+  const childrenOf = buildChildrenIndex(subtree)
 
   const directChildren = childrenOf.get(node.id) ?? []
 
@@ -154,7 +157,20 @@ export function OrgNodeDrilldown({
 
       {/* Division / department header */}
       <div className="rounded-md">
-        <div className={cn('rounded-t-md px-4 py-2 text-center text-sm font-semibold', color.bg, color.text)}>
+        <div
+          className={cn(
+            'relative rounded-t-md px-4 py-2 text-center text-sm font-semibold',
+            color.bg,
+            color.text,
+          )}
+        >
+          <div className="absolute right-2 top-2">
+            <OrgNodeMenu
+              node={node}
+              layout={node.kind === 'DIVISION' ? 'column' : 'row'}
+              triggerClassName="text-white"
+            />
+          </div>
           {node.label}
         </div>
         {node.positionTitle ? (
@@ -234,12 +250,17 @@ function ColumnNode({
       )}
     >
       {/* Column header */}
-      <Link
-        href={`/admin/org-board/nodes/${node.id}`}
-        className="border-b border-white/20 px-3 py-2 text-center text-[11px] font-semibold uppercase leading-tight tracking-wide hover:underline"
-      >
-        {node.label}
-      </Link>
+      <div className="relative border-b border-white/20 px-3 py-2 text-center">
+        <div className="absolute right-1 top-1">
+          <OrgNodeMenu node={node} layout="column" triggerClassName="text-white" />
+        </div>
+        <Link
+          href={`/admin/org-board/nodes/${node.id}`}
+          className="block text-[11px] font-semibold uppercase leading-tight tracking-wide hover:underline"
+        >
+          {node.label}
+        </Link>
+      </div>
 
       {/* Director / manager row */}
       {node.positionTitle ? (
@@ -295,11 +316,16 @@ function NestedNode({
   const isHeader = node.kind === 'SECTION' || node.kind === 'UNIT'
 
   return (
-    <div style={{ marginLeft: depth === 0 ? 0 : depth * 8 }} className="space-y-0.5">
+    <div style={{ marginLeft: depth === 0 ? 0 : depth * 8 }} className="group space-y-0.5">
       {/* SECTION/UNIT bolded; POSITION plain */}
-      <p className={cn(isHeader ? 'text-[12px] font-semibold' : 'text-[12px]')}>
-        {node.label}
-      </p>
+      <div className="flex items-start justify-between gap-1">
+        <p className={cn('flex-1', isHeader ? 'text-[12px] font-semibold' : 'text-[12px]')}>
+          {node.label}
+        </p>
+        <div className="opacity-0 transition-opacity group-hover:opacity-100">
+          <OrgNodeMenu node={node} layout="row" triggerClassName="text-white" />
+        </div>
+      </div>
       {node.positionTitle ? (
         <p className="text-[11px] opacity-80">{node.positionTitle}</p>
       ) : null}

@@ -1,4 +1,4 @@
-import type { OrgNodeKind } from '@prisma/client'
+import type { OrgNodeKind, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
@@ -41,6 +41,34 @@ export interface OrgNodeRow {
 export interface OrgBoardTree {
   revision: OrgBoardRevisionSummary
   nodes: OrgNodeRow[]
+}
+
+export interface CreateOrgNodeArgs {
+  revisionId: string
+  parentId: string | null
+  kind: OrgNodeKind
+  label: string
+  positionTitle?: string | null
+  deptNumber?: number | null
+  color?: string | null
+  vfp?: string | null
+  employeeId?: string | null
+  freeTextHolder?: string | null
+}
+
+export interface UpdateOrgNodeArgs {
+  label?: string
+  positionTitle?: string | null
+  deptNumber?: number | null
+  color?: string | null
+  vfp?: string | null
+  employeeId?: string | null
+  freeTextHolder?: string | null
+}
+
+export interface OrgNodeDeleteImpact {
+  descendantCount: number
+  positionsWithEmployeeCount: number
 }
 
 function mapRow(row: {
@@ -219,6 +247,185 @@ class OrgBoardService {
     }
 
     return { node: seed, ancestors, subtree, revision }
+  }
+
+  // -----------------------------------------------------------------
+  // Mutations
+  // -----------------------------------------------------------------
+
+  async addNode(input: CreateOrgNodeArgs): Promise<OrgNodeRow> {
+    // Append at the end of the parent's children — matches the
+    // "Add Position" / "Add Section" expectation of showing up at
+    // the bottom of the current list.
+    const last = await prisma.orgNode.findFirst({
+      where: { revisionId: input.revisionId, parentId: input.parentId },
+      orderBy: { orderIndex: 'desc' },
+      select: { orderIndex: true },
+    })
+    const nextIndex = (last?.orderIndex ?? -1) + 1
+
+    // Cross-check that either employeeId or freeTextHolder is set,
+    // not both. Zod already covers callers going through the action
+    // layer; belt-and-braces for internal use.
+    if (input.employeeId && input.freeTextHolder) {
+      throw new Error('Pick either an employee or a placeholder, not both')
+    }
+
+    const row = await prisma.orgNode.create({
+      data: {
+        revisionId: input.revisionId,
+        parentId: input.parentId,
+        kind: input.kind,
+        label: input.label,
+        positionTitle: input.positionTitle ?? null,
+        deptNumber: input.deptNumber ?? null,
+        color: input.color ?? null,
+        vfp: input.vfp ?? null,
+        employeeId: input.employeeId ?? null,
+        freeTextHolder: input.freeTextHolder ?? null,
+        orderIndex: nextIndex,
+      },
+      include: { employee: { select: { id: true, name: true, roleTitle: true } } },
+    })
+    return mapRow(row)
+  }
+
+  async updateNode(
+    id: string,
+    input: UpdateOrgNodeArgs,
+  ): Promise<OrgNodeRow> {
+    if (input.employeeId && input.freeTextHolder) {
+      throw new Error('Pick either an employee or a placeholder, not both')
+    }
+    const data: Prisma.OrgNodeUpdateInput = {}
+    if (input.label !== undefined) data.label = input.label
+    if (input.positionTitle !== undefined) data.positionTitle = input.positionTitle
+    if (input.deptNumber !== undefined) data.deptNumber = input.deptNumber
+    if (input.color !== undefined) data.color = input.color
+    if (input.vfp !== undefined) data.vfp = input.vfp
+    if (input.employeeId !== undefined) {
+      data.employee = input.employeeId
+        ? { connect: { id: input.employeeId } }
+        : { disconnect: true }
+    }
+    if (input.freeTextHolder !== undefined) data.freeTextHolder = input.freeTextHolder
+
+    const row = await prisma.orgNode.update({
+      where: { id },
+      data,
+      include: { employee: { select: { id: true, name: true, roleTitle: true } } },
+    })
+    return mapRow(row)
+  }
+
+  /**
+   * Preview a delete before executing. Counts the whole subtree so
+   * the admin sees "removing this Division will delete 3 departments
+   * + 4 positions holding employees" style detail.
+   */
+  async deleteImpact(id: string): Promise<OrgNodeDeleteImpact> {
+    const target = await prisma.orgNode.findUnique({
+      where: { id },
+      select: { revisionId: true, id: true, parentId: true },
+    })
+    if (!target) throw new Error('Org node not found')
+    const all = await prisma.orgNode.findMany({
+      where: { revisionId: target.revisionId },
+      select: { id: true, parentId: true, employeeId: true },
+    })
+    const childrenOf = new Map<string, string[]>()
+    for (const n of all) {
+      if (!n.parentId) continue
+      const list = childrenOf.get(n.parentId) ?? []
+      list.push(n.id)
+      childrenOf.set(n.parentId, list)
+    }
+    const empById = new Map(all.map((n) => [n.id, n.employeeId]))
+    // BFS descendants (excluding the target itself for the count).
+    const visited: string[] = []
+    const queue: string[] = [target.id]
+    while (queue.length > 0) {
+      const cur = queue.shift()!
+      const kids = childrenOf.get(cur) ?? []
+      for (const k of kids) {
+        visited.push(k)
+        queue.push(k)
+      }
+    }
+    let empCount = 0
+    for (const idInSub of visited) {
+      if (empById.get(idInSub)) empCount++
+    }
+    // Also count the target itself if it's a POSITION holding an
+    // employee.
+    if (empById.get(target.id)) empCount++
+    return {
+      descendantCount: visited.length,
+      positionsWithEmployeeCount: empCount,
+    }
+  }
+
+  async deleteNode(id: string): Promise<void> {
+    // Cascade in schema handles descendants.
+    await prisma.orgNode.delete({ where: { id } })
+  }
+
+  /**
+   * Swap `orderIndex` with the previous or next sibling. "up" and
+   * "left" both step to the earlier sibling; "down" and "right" to
+   * the later one. If already at the boundary, no-op.
+   */
+  async moveNode(
+    id: string,
+    direction: 'up' | 'down' | 'left' | 'right',
+  ): Promise<void> {
+    const target = await prisma.orgNode.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        revisionId: true,
+        parentId: true,
+        orderIndex: true,
+      },
+    })
+    if (!target) throw new Error('Org node not found')
+
+    const forward = direction === 'down' || direction === 'right'
+    const sibling = forward
+      ? await prisma.orgNode.findFirst({
+          where: {
+            revisionId: target.revisionId,
+            parentId: target.parentId,
+            orderIndex: { gt: target.orderIndex },
+          },
+          orderBy: { orderIndex: 'asc' },
+        })
+      : await prisma.orgNode.findFirst({
+          where: {
+            revisionId: target.revisionId,
+            parentId: target.parentId,
+            orderIndex: { lt: target.orderIndex },
+          },
+          orderBy: { orderIndex: 'desc' },
+        })
+    if (!sibling) return
+
+    // Two-phase swap so we don't collide on any future
+    // (revisionId, parentId, orderIndex) uniqueness.
+    await prisma.$transaction([
+      prisma.orgNode.update({
+        where: { id: target.id },
+        data: { orderIndex: -1 * (target.orderIndex + 1) },
+      }),
+      prisma.orgNode.update({
+        where: { id: sibling.id },
+        data: { orderIndex: target.orderIndex },
+      }),
+      prisma.orgNode.update({
+        where: { id: target.id },
+        data: { orderIndex: sibling.orderIndex },
+      }),
+    ])
   }
 }
 

@@ -1,0 +1,488 @@
+'use client'
+
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { Loader2, Search, X } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
+import type { OrgNodeRow } from '@/lib/services/org-board-service'
+import {
+  ORG_NODE_KIND_LABELS,
+  type OrgNodeKindValue,
+} from '@/lib/validations/org-board'
+
+import {
+  addOrgNodeAction,
+  searchAssignableEmployeesAction,
+  updateOrgNodeAction,
+} from '@/app/(admin)/admin/org-board/actions'
+
+// ---------------------------------------------------------------------
+// Edit dialog — label, position title, employee (or free-text), VFP
+// ---------------------------------------------------------------------
+
+interface EmployeeRef {
+  id: string
+  name: string | null
+  email: string
+  role: 'ADMIN' | 'TEAM' | 'MEMBER'
+}
+
+interface OrgNodeEditDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  node: OrgNodeRow
+}
+
+export function OrgNodeEditDialog({
+  open,
+  onOpenChange,
+  node,
+}: OrgNodeEditDialogProps) {
+  const [label, setLabel] = useState(node.label)
+  const [positionTitle, setPositionTitle] = useState(node.positionTitle ?? '')
+  const [vfp, setVfp] = useState(node.vfp ?? '')
+  const [employee, setEmployee] = useState<EmployeeRef | null>(
+    node.employee
+      ? {
+          id: node.employee.id,
+          name: node.employee.name,
+          email: node.employee.roleTitle, // shim: we don't get email back
+          role: 'TEAM',
+        }
+      : null,
+  )
+  const [freeText, setFreeText] = useState(node.freeTextHolder ?? '')
+  const [pending, startTransition] = useTransition()
+
+  // Reset local state when the dialog opens against a fresh node.
+  // Wrapped in queueMicrotask so react-hooks/purity is satisfied
+  // (the lint rule flags synchronous setState inside effect body).
+  useEffect(() => {
+    if (!open) return
+    queueMicrotask(() => {
+      setLabel(node.label)
+      setPositionTitle(node.positionTitle ?? '')
+      setVfp(node.vfp ?? '')
+      setFreeText(node.freeTextHolder ?? '')
+      setEmployee(
+        node.employee
+          ? {
+              id: node.employee.id,
+              name: node.employee.name,
+              email: node.employee.roleTitle,
+              role: 'TEAM',
+            }
+          : null,
+      )
+    })
+  }, [open, node])
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (pending) return
+    startTransition(async () => {
+      try {
+        await updateOrgNodeAction(node.id, {
+          label: label.trim(),
+          positionTitle: positionTitle.trim() || null,
+          vfp: vfp.trim() || null,
+          // employee wins over freeText — the picker either has one
+          // or the other set.
+          employeeId: employee?.id ?? null,
+          freeTextHolder: employee ? null : freeText.trim() || null,
+        })
+        toast.success(`Updated "${label.trim() || node.label}"`)
+        onOpenChange(false)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to save')
+      }
+    })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !pending && onOpenChange(v)}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit {ORG_NODE_KIND_LABELS[node.kind]}</DialogTitle>
+          <DialogDescription>
+            Edit the label, role, holder, and VFP for this node.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-label">Label</Label>
+            <Input
+              id="org-node-label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-title">Role / Title</Label>
+            <Input
+              id="org-node-title"
+              value={positionTitle}
+              onChange={(e) => setPositionTitle(e.target.value)}
+              placeholder="e.g. Sales & Marketing Director"
+            />
+          </div>
+
+          <HolderPicker
+            employee={employee}
+            freeText={freeText}
+            onEmployeeChange={setEmployee}
+            onFreeTextChange={setFreeText}
+            disabled={pending}
+          />
+
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-vfp">VFP (Valuable Final Product)</Label>
+            <Textarea
+              id="org-node-vfp"
+              value={vfp}
+              onChange={(e) => setVfp(e.target.value)}
+              rows={3}
+              placeholder="What this seat produces when it's on target"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending || !label.trim()}>
+              {pending ? (
+                <>
+                  <Loader2 className="mr-1.5 size-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                'Save changes'
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Add child dialog — kind is fixed by the caller (comes from the menu
+// item, e.g. "Add Department"). Fields mirror Edit but with an empty
+// initial state.
+// ---------------------------------------------------------------------
+
+interface OrgNodeAddDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  parent: OrgNodeRow
+  childKind: OrgNodeKindValue | null
+}
+
+export function OrgNodeAddDialog({
+  open,
+  onOpenChange,
+  parent,
+  childKind,
+}: OrgNodeAddDialogProps) {
+  const [label, setLabel] = useState('')
+  const [positionTitle, setPositionTitle] = useState('')
+  const [vfp, setVfp] = useState('')
+  const [employee, setEmployee] = useState<EmployeeRef | null>(null)
+  const [freeText, setFreeText] = useState('')
+  const [pending, startTransition] = useTransition()
+
+  useEffect(() => {
+    if (!open) return
+    queueMicrotask(() => {
+      setLabel('')
+      setPositionTitle('')
+      setVfp('')
+      setEmployee(null)
+      setFreeText('')
+    })
+  }, [open])
+
+  if (!childKind) return null
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (pending) return
+    startTransition(async () => {
+      try {
+        await addOrgNodeAction(parent.revisionId, {
+          parentId: parent.id,
+          kind: childKind as OrgNodeKindValue,
+          label: label.trim(),
+          positionTitle: positionTitle.trim() || null,
+          vfp: vfp.trim() || null,
+          employeeId: employee?.id ?? null,
+          freeTextHolder: employee ? null : freeText.trim() || null,
+        })
+        toast.success(`Added "${label.trim()}"`)
+        onOpenChange(false)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to add')
+      }
+    })
+  }
+
+  const heading = `Add ${ORG_NODE_KIND_LABELS[childKind].toLowerCase()} under "${parent.label}"`
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !pending && onOpenChange(v)}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{heading}</DialogTitle>
+          <DialogDescription>
+            New nodes append at the end of the parent&apos;s current
+            children. You can reorder later.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-new-label">Label</Label>
+            <Input
+              id="org-node-new-label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g. Ads Manager"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-new-title">Role / Title (optional)</Label>
+            <Input
+              id="org-node-new-title"
+              value={positionTitle}
+              onChange={(e) => setPositionTitle(e.target.value)}
+              placeholder="e.g. Ads Manager"
+            />
+          </div>
+
+          <HolderPicker
+            employee={employee}
+            freeText={freeText}
+            onEmployeeChange={setEmployee}
+            onFreeTextChange={setFreeText}
+            disabled={pending}
+          />
+
+          <div className="space-y-1.5">
+            <Label htmlFor="org-node-new-vfp">VFP (optional)</Label>
+            <Textarea
+              id="org-node-new-vfp"
+              value={vfp}
+              onChange={(e) => setVfp(e.target.value)}
+              rows={2}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending || !label.trim()}>
+              {pending ? (
+                <>
+                  <Loader2 className="mr-1.5 size-4 animate-spin" />
+                  Adding…
+                </>
+              ) : (
+                'Add'
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------
+// HolderPicker — search Employee or enter a free-text placeholder.
+// Mutually exclusive: setting one clears the other.
+// ---------------------------------------------------------------------
+
+interface HolderPickerProps {
+  employee: EmployeeRef | null
+  freeText: string
+  onEmployeeChange: (v: EmployeeRef | null) => void
+  onFreeTextChange: (v: string) => void
+  disabled?: boolean
+}
+
+function HolderPicker({
+  employee,
+  freeText,
+  onEmployeeChange,
+  onFreeTextChange,
+  disabled,
+}: HolderPickerProps) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<EmployeeRef[]>([])
+  const [showResults, setShowResults] = useState(false)
+  const [pending, startTransition] = useTransition()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (employee) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    const q = query.trim()
+    debounceRef.current = setTimeout(() => {
+      if (!q) {
+        setResults([])
+        return
+      }
+      startTransition(async () => {
+        try {
+          const rows = await searchAssignableEmployeesAction(q)
+          setResults(rows)
+        } catch {
+          setResults([])
+        }
+      })
+    }, 250)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [query, employee])
+
+  function pick(row: EmployeeRef) {
+    onEmployeeChange(row)
+    onFreeTextChange('')
+    setQuery('')
+    setShowResults(false)
+  }
+
+  function unlink() {
+    onEmployeeChange(null)
+    setShowResults(true)
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label>Holder</Label>
+      {employee ? (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-2">
+          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            {(employee.name ?? employee.email).slice(0, 2).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">
+              {employee.name ?? employee.email}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {employee.role.toLowerCase()}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={unlink}
+            disabled={disabled}
+            aria-label="Clear holder"
+            className="grid size-7 place-items-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground disabled:opacity-40"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setShowResults(true)
+              }}
+              onFocus={() => setShowResults(true)}
+              placeholder="Search an existing employee…"
+              disabled={disabled}
+              className="pl-8"
+              autoComplete="off"
+            />
+            {pending ? (
+              <Loader2 className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
+            ) : null}
+          </div>
+          {showResults && (query.trim() || results.length > 0) ? (
+            <ul className="max-h-40 overflow-hidden rounded-md border">
+              {results.length === 0 && query.trim() && !pending ? (
+                <li className="px-2.5 py-2 text-xs text-muted-foreground">
+                  No matches — use the placeholder field below.
+                </li>
+              ) : null}
+              {results.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => pick(r)}
+                    className={cn(
+                      'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-muted',
+                    )}
+                  >
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-medium">
+                      {(r.name ?? r.email).slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">
+                        {r.name ?? r.email}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {r.email} · {r.role.toLowerCase()}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="pt-2">
+            <Label htmlFor="org-node-freetext" className="text-xs text-muted-foreground">
+              Or use a placeholder (e.g. &ldquo;To be hired&rdquo;)
+            </Label>
+            <Input
+              id="org-node-freetext"
+              value={freeText}
+              onChange={(e) => onFreeTextChange(e.target.value)}
+              placeholder="Free-text holder"
+              disabled={disabled}
+              className="mt-1"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
