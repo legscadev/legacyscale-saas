@@ -45,48 +45,41 @@ interface OrgNodeDrilldownProps {
 // Shared with the top-level view — kept in sync with seed palette.
 const DIVISION_COLORS: Record<
   string,
-  { bg: string; text: string; vfp: string; sub: string }
+  { bg: string; text: string; sub: string }
 > = {
   blue: {
     bg: 'bg-blue-600',
     text: 'text-white',
-    vfp: 'bg-blue-700',
     sub: 'bg-blue-700/70',
   },
   amber: {
     bg: 'bg-amber-500',
     text: 'text-white',
-    vfp: 'bg-amber-600',
     sub: 'bg-amber-600/70',
   },
   indigo: {
     bg: 'bg-indigo-700',
     text: 'text-white',
-    vfp: 'bg-indigo-800',
     sub: 'bg-indigo-800/70',
   },
   pink: {
     bg: 'bg-pink-400',
     text: 'text-white',
-    vfp: 'bg-pink-500',
     sub: 'bg-pink-500/70',
   },
   emerald: {
     bg: 'bg-emerald-700',
     text: 'text-white',
-    vfp: 'bg-emerald-800',
     sub: 'bg-emerald-800/70',
   },
   slate: {
     bg: 'bg-slate-500',
     text: 'text-white',
-    vfp: 'bg-slate-600',
     sub: 'bg-slate-600/70',
   },
   yellow: {
     bg: 'bg-yellow-500',
     text: 'text-white',
-    vfp: 'bg-yellow-600',
     sub: 'bg-yellow-600/70',
   },
 }
@@ -226,17 +219,6 @@ export function OrgNodeDrilldown({
         </p>
       )}
 
-      {/* Division-level VFP banner at bottom */}
-      {node.vfp ? (
-        <div
-          className={cn(
-            'rounded-md px-4 py-3 text-center text-sm font-medium text-white',
-            color.vfp,
-          )}
-        >
-          {node.vfp}
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -309,14 +291,6 @@ function ColumnNode({
           ))
         )}
       </div>
-
-      {/* Per-column VFP */}
-      {node.vfp ? (
-        <div className={cn('mt-auto px-3 py-2 text-[11px] font-medium', color.vfp)}>
-          VFP:
-          <p className="mt-1 whitespace-pre-line opacity-95">{node.vfp}</p>
-        </div>
-      ) : null}
     </div>
   )
 }

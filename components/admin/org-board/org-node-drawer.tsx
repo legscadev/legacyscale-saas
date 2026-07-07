@@ -128,15 +128,6 @@ export function OrgNodeDrawer({ node, open, onOpenChange }: OrgNodeDrawerProps) 
                 )}
               </section>
 
-              {node.vfp ? (
-                <section className="space-y-1.5">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    VFP
-                  </p>
-                  <p className="whitespace-pre-line text-sm">{node.vfp}</p>
-                </section>
-              ) : null}
-
               {node.functionText ? (
                 <section className="space-y-1.5">
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

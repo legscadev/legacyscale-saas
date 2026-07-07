@@ -50,49 +50,42 @@ interface OrgBoardShellProps {
 // stays UI-agnostic.
 const DIVISION_COLORS: Record<
   string,
-  { bg: string; ring: string; text: string; vfp: string }
+  { bg: string; ring: string; text: string }
 > = {
   blue: {
     bg: 'bg-blue-600',
     ring: 'ring-blue-700/50',
     text: 'text-white',
-    vfp: 'bg-blue-700',
   },
   amber: {
     bg: 'bg-amber-500',
     ring: 'ring-amber-600/50',
     text: 'text-white',
-    vfp: 'bg-amber-600',
   },
   indigo: {
     bg: 'bg-indigo-700',
     ring: 'ring-indigo-800/50',
     text: 'text-white',
-    vfp: 'bg-indigo-800',
   },
   pink: {
     bg: 'bg-pink-400',
     ring: 'ring-pink-500/50',
     text: 'text-white',
-    vfp: 'bg-pink-500',
   },
   emerald: {
     bg: 'bg-emerald-700',
     ring: 'ring-emerald-800/50',
     text: 'text-white',
-    vfp: 'bg-emerald-800',
   },
   slate: {
     bg: 'bg-slate-500',
     ring: 'ring-slate-600/50',
     text: 'text-white',
-    vfp: 'bg-slate-600',
   },
   yellow: {
     bg: 'bg-yellow-500',
     ring: 'ring-yellow-600/50',
     text: 'text-white',
-    vfp: 'bg-yellow-600',
   },
 }
 
@@ -441,19 +434,13 @@ function TopLevelChart({
     if (!matchIds) return ''
     return matchIds.has(nodeId) ? '' : 'opacity-25'
   }
-  const { crown, divisions, boardVfp, byParent } = useMemo(() => {
+  const { crown, divisions, byParent } = useMemo(() => {
     const crown = nodes
       .filter((n) => n.kind === 'CROWN')
       .sort((a, b) => a.orderIndex - b.orderIndex)
     const divisions = nodes
       .filter((n) => n.kind === 'DIVISION')
       .sort((a, b) => a.orderIndex - b.orderIndex)
-    // The overall VFP banner is stored as a root-level POSITION with
-    // a VFP string; anything else at that level with kind POSITION
-    // would count as a stray and we ignore it.
-    const boardVfp = nodes.find(
-      (n) => n.kind === 'POSITION' && n.parentId === null && n.vfp,
-    )
 
     // Index children by parentId for O(1) lookup while rendering.
     const byParent = new Map<string, OrgNodeRow[]>()
@@ -467,7 +454,7 @@ function TopLevelChart({
       list.sort((a, b) => a.orderIndex - b.orderIndex)
     }
 
-    return { crown, divisions, boardVfp, byParent }
+    return { crown, divisions, byParent }
   }, [nodes])
 
   const onlyOne = divisions.length === 1
@@ -563,12 +550,6 @@ function TopLevelChart({
         ) : null}
       </div>
 
-      {/* Board VFP banner */}
-      {boardVfp?.vfp ? (
-        <div className="mt-6 rounded-md bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-sm">
-          {boardVfp.vfp}
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -671,12 +652,6 @@ function DivisionColumn({
         )}
       </div>
 
-      {/* Optional per-division VFP footer */}
-      {node.vfp ? (
-        <div className={cn('px-3 py-2 text-[11px] font-medium text-white', style.vfp)}>
-          {node.vfp}
-        </div>
-      ) : null}
     </div>
   )
 }

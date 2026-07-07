@@ -32,7 +32,7 @@ import {
 import { PositionAssignmentsPanel } from './position-assignments-panel'
 
 // ---------------------------------------------------------------------
-// Edit dialog — label, position title, employee (or free-text), VFP
+// Edit dialog — label, position title, employee (or free-text)
 // ---------------------------------------------------------------------
 
 interface EmployeeRef {
@@ -55,7 +55,6 @@ export function OrgNodeEditDialog({
 }: OrgNodeEditDialogProps) {
   const [label, setLabel] = useState(node.label)
   const [positionTitle, setPositionTitle] = useState(node.positionTitle ?? '')
-  const [vfp, setVfp] = useState(node.vfp ?? '')
   const [functionText, setFunctionText] = useState(node.functionText ?? '')
   const [responsibilities, setResponsibilities] = useState(
     node.responsibilities.join('\n'),
@@ -83,7 +82,6 @@ export function OrgNodeEditDialog({
     queueMicrotask(() => {
       setLabel(node.label)
       setPositionTitle(node.positionTitle ?? '')
-      setVfp(node.vfp ?? '')
       setFunctionText(node.functionText ?? '')
       setResponsibilities(node.responsibilities.join('\n'))
       setNotes(node.notes ?? '')
@@ -110,7 +108,6 @@ export function OrgNodeEditDialog({
         await updateOrgNodeAction(node.id, {
           label: label.trim(),
           positionTitle: positionTitle.trim() || null,
-          vfp: vfp.trim() || null,
           functionText: functionText.trim() || null,
           responsibilities: responsibilities
             .split('\n')
@@ -137,7 +134,7 @@ export function OrgNodeEditDialog({
         <DialogHeader>
           <DialogTitle>Edit {ORG_NODE_KIND_LABELS[node.kind]}</DialogTitle>
           <DialogDescription>
-            Label, role, holder, VFP, function, responsibilities and notes.
+            Label, role, holder, function, responsibilities and notes.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -177,17 +174,6 @@ export function OrgNodeEditDialog({
             onFreeTextChange={setFreeText}
             disabled={pending}
           />
-
-          <div className="space-y-1.5">
-            <Label htmlFor="org-node-vfp">VFP (Valuable Final Product)</Label>
-            <Textarea
-              id="org-node-vfp"
-              value={vfp}
-              onChange={(e) => setVfp(e.target.value)}
-              rows={2}
-              placeholder="What this seat produces when it's on target"
-            />
-          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="org-node-function">Function</Label>
@@ -285,7 +271,6 @@ export function OrgNodeAddDialog({
 }: OrgNodeAddDialogProps) {
   const [label, setLabel] = useState('')
   const [positionTitle, setPositionTitle] = useState('')
-  const [vfp, setVfp] = useState('')
   const [employee, setEmployee] = useState<EmployeeRef | null>(null)
   const [freeText, setFreeText] = useState('')
   const [pending, startTransition] = useTransition()
@@ -295,7 +280,6 @@ export function OrgNodeAddDialog({
     queueMicrotask(() => {
       setLabel('')
       setPositionTitle('')
-      setVfp('')
       setEmployee(null)
       setFreeText('')
     })
@@ -318,7 +302,6 @@ export function OrgNodeAddDialog({
           kind: childKind as OrgNodeKindValue,
           label: label.trim(),
           positionTitle: positionTitle.trim() || null,
-          vfp: vfp.trim() || null,
           employeeId: employee?.id ?? null,
           freeTextHolder: employee ? null : freeText.trim() || null,
         })
@@ -371,16 +354,6 @@ export function OrgNodeAddDialog({
             onFreeTextChange={setFreeText}
             disabled={pending}
           />
-
-          <div className="space-y-1.5">
-            <Label htmlFor="org-node-new-vfp">VFP (optional)</Label>
-            <Textarea
-              id="org-node-new-vfp"
-              value={vfp}
-              onChange={(e) => setVfp(e.target.value)}
-              rows={2}
-            />
-          </div>
 
           <DialogFooter>
             <Button
