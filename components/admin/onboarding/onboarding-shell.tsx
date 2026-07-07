@@ -315,25 +315,34 @@ function OnboardingMatrix({
   ) => void
   onNameClick: (employeeId: string) => void
 }) {
+  // Single sticky column keeps the layering simple and avoids the
+  // pixel-offset overlap that two sticky columns produce when the
+  // first column's natural width doesn't match the hard-coded left
+  // offset of the second. Role is tucked under the name as a
+  // subtitle so we don't lose that info.
   return (
     <div className="overflow-hidden rounded-xl border bg-card">
       <div className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
-            <tr className="bg-muted/40">
-              <th className="sticky left-0 z-20 bg-muted/40 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th
+                scope="col"
+                className="sticky left-0 z-20 min-w-[220px] border-b bg-muted/50 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground shadow-[1px_0_0_0_var(--tw-shadow-color)] shadow-border/60 backdrop-blur"
+              >
                 Name
               </th>
-              <th className="sticky left-[180px] z-20 border-l bg-muted/40 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Role
-              </th>
-              <th className="border-l bg-muted/40 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+              <th
+                scope="col"
+                className="border-b border-l bg-muted/50 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap"
+              >
                 {tab === 'offboarded' ? 'Offboarded' : 'Onboarded'}
               </th>
               {items.map((item) => (
                 <th
                   key={item.id}
-                  className="border-l bg-muted/40 px-2 py-2 text-center text-[10px] font-medium uppercase tracking-tight text-muted-foreground whitespace-nowrap"
+                  scope="col"
+                  className="border-b border-l bg-muted/50 px-2 py-2 text-center text-[10px] font-medium uppercase tracking-tight text-muted-foreground whitespace-nowrap"
                   title={item.label}
                 >
                   <span className="inline-block max-w-[110px] truncate">
@@ -344,71 +353,79 @@ function OnboardingMatrix({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
-              <tr
-                key={row.id}
-                className={cn(
-                  'transition-colors',
-                  i % 2 === 1 ? 'bg-muted/10' : '',
-                  'hover:bg-muted/25',
-                )}
-              >
-                <td
-                  className={cn(
-                    'sticky left-0 z-10 border-t bg-card px-3 py-2 font-medium',
-                    i % 2 === 1 && 'bg-muted/10',
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onNameClick(row.id)}
-                    className="flex items-center gap-2 text-left hover:text-primary"
+            {rows.map((row, i) => {
+              const zebra = i % 2 === 1
+              return (
+                <tr key={row.id} className="group">
+                  <td
+                    className={cn(
+                      'sticky left-0 z-10 min-w-[220px] border-t px-3 py-2 shadow-[1px_0_0_0_var(--tw-shadow-color)] shadow-border/60',
+                      // Solid backgrounds are essential — the cell
+                      // has to fully occlude the non-sticky columns
+                      // that scroll underneath it.
+                      zebra ? 'bg-muted/30' : 'bg-card',
+                      'group-hover:bg-muted/40',
+                    )}
                   >
-                    <span className="truncate">{row.name}</span>
-                    {row.checklist.attentionCount > 0 ? (
-                      <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
-                    ) : null}
-                  </button>
-                </td>
-                <td
-                  className={cn(
-                    'sticky left-[180px] z-10 border-l border-t bg-card px-3 py-2 text-muted-foreground',
-                    i % 2 === 1 && 'bg-muted/10',
-                  )}
-                >
-                  <span className="block max-w-[180px] truncate">
-                    {row.roleTitle}
-                  </span>
-                </td>
-                <td className="border-l border-t px-3 py-2 text-muted-foreground whitespace-nowrap">
-                  {formatDate(
-                    tab === 'offboarded'
-                      ? row.offboardingDate
-                      : row.onboardingDate,
-                  )}
-                </td>
-                {items.map((item) => {
-                  const current =
-                    (row.statusByItemId[item.id] as ChecklistItemStatusValue | undefined) ??
-                    'PENDING'
-                  return (
-                    <td
-                      key={item.id}
-                      className="border-l border-t px-2 py-1.5 text-center"
+                    <button
+                      type="button"
+                      onClick={() => onNameClick(row.id)}
+                      className="flex w-full min-w-0 flex-col text-left"
                     >
-                      <StatusCell
-                        current={current}
-                        label={item.label}
-                        disabled={isPending}
-                        onChange={(next) =>
-                          onCellChange(row.id, item.id, next, current)
-                        }
-                      />
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate font-medium hover:text-primary">
+                          {row.name}
+                        </span>
+                        {row.checklist.attentionCount > 0 ? (
+                          <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                        ) : null}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {row.roleTitle}
+                      </span>
+                    </button>
+                  </td>
+                  <td
+                    className={cn(
+                      'border-l border-t px-3 py-2 text-muted-foreground whitespace-nowrap',
+                      zebra && 'bg-muted/10',
+                      'group-hover:bg-muted/25',
+                    )}
+                  >
+                    {formatDate(
+                      tab === 'offboarded'
+                        ? row.offboardingDate
+                        : row.onboardingDate,
+                    )}
+                  </td>
+                  {items.map((item) => {
+                    const current =
+                      (row.statusByItemId[item.id] as
+                        | ChecklistItemStatusValue
+                        | undefined) ?? 'PENDING'
+                    return (
+                      <td
+                        key={item.id}
+                        className={cn(
+                          'border-l border-t px-2 py-1.5 text-center',
+                          zebra && 'bg-muted/10',
+                          'group-hover:bg-muted/25',
+                        )}
+                      >
+                        <StatusCell
+                          current={current}
+                          label={item.label}
+                          disabled={isPending}
+                          onChange={(next) =>
+                            onCellChange(row.id, item.id, next, current)
+                          }
+                        />
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
