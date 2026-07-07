@@ -346,24 +346,94 @@ function RecentActivity({ entries }: { entries: AuditLogEntry[] }) {
             <span className="mt-0.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider">
               {e.action.replace(/_/g, ' ').toLowerCase()}
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 space-y-0.5">
               <p className="truncate">
                 {e.actor?.name ?? e.actor?.email ?? 'system'}{' '}
                 <span className="text-muted-foreground">·{' '}
                   {new Date(e.createdAt).toLocaleString()}
                 </span>
               </p>
-              {e.newValue && typeof e.newValue === 'object' && 'label' in (e.newValue as object) ? (
-                <p className="truncate text-xs text-muted-foreground">
-                  {(e.newValue as { label?: string }).label}
-                </p>
-              ) : null}
+              <ActivitySummary entry={e} />
             </div>
           </li>
         ))}
       </ul>
     </details>
   )
+}
+
+/** Labels a raw snapshot key for the activity feed. Anything not in
+ *  this map is skipped (id/orderIndex churn isn't useful to surface). */
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  label: 'Name',
+  positionTitle: 'Title',
+  parentId: 'Parent',
+  employeeId: 'Employee',
+  freeTextHolder: 'Placeholder',
+  color: 'Color',
+  functionText: 'Function',
+  kind: 'Kind',
+}
+
+function truncate(value: unknown, max = 40): string {
+  if (value === null || value === undefined || value === '') return '∅'
+  const str = String(value)
+  return str.length > max ? `${str.slice(0, max - 1)}…` : str
+}
+
+function ActivitySummary({ entry }: { entry: AuditLogEntry }) {
+  const oldObj =
+    entry.oldValue && typeof entry.oldValue === 'object'
+      ? (entry.oldValue as Record<string, unknown>)
+      : null
+  const newObj =
+    entry.newValue && typeof entry.newValue === 'object'
+      ? (entry.newValue as Record<string, unknown>)
+      : null
+
+  // NODE_CREATED / NODE_DELETED: show the affected node's label
+  if (entry.action === 'NODE_CREATED' && newObj?.label) {
+    return (
+      <p className="truncate text-xs text-muted-foreground">
+        Added <span className="font-medium text-foreground">{String(newObj.label)}</span>
+      </p>
+    )
+  }
+  if (entry.action === 'NODE_DELETED' && oldObj?.label) {
+    return (
+      <p className="truncate text-xs text-muted-foreground">
+        Removed <span className="font-medium text-foreground">{String(oldObj.label)}</span>
+      </p>
+    )
+  }
+
+  // NODE_UPDATED: diff the interesting fields
+  if (oldObj && newObj) {
+    const changes: Array<{ field: string; from: unknown; to: unknown }> = []
+    for (const [key, label] of Object.entries(AUDIT_FIELD_LABELS)) {
+      if (!(key in oldObj) && !(key in newObj)) continue
+      const from = oldObj[key]
+      const to = newObj[key]
+      if (from !== to) changes.push({ field: label, from, to })
+    }
+    if (changes.length === 0) return null
+    return (
+      <ul className="space-y-0.5 text-xs text-muted-foreground">
+        {changes.slice(0, 3).map((c, i) => (
+          <li key={i} className="truncate">
+            <span className="font-medium text-foreground">{c.field}:</span>{' '}
+            <span className="line-through opacity-60">{truncate(c.from)}</span>{' '}
+            → <span className="text-foreground">{truncate(c.to)}</span>
+          </li>
+        ))}
+        {changes.length > 3 ? (
+          <li className="italic">…and {changes.length - 3} more</li>
+        ) : null}
+      </ul>
+    )
+  }
+
+  return null
 }
 
 // ---------------------------------------------------------------------
