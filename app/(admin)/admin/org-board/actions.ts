@@ -5,7 +5,6 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/auth/get-user'
 import { orgBoardService } from '@/lib/services/org-board-service'
 import { prisma } from '@/lib/prisma'
-import { seedOrgBoard } from '@/prisma/seed-org-board'
 import {
   addPositionAssignmentSchema,
   createOrgNodeSchema,
@@ -40,16 +39,6 @@ export async function createBlankOrgBoardRevisionAction() {
       publishedAt: new Date(),
     },
   })
-  revalidate()
-}
-
-/**
- * Seed the default Hubbard 7-division scaffold. Idempotent inside
- * seedOrgBoard() — safe to click on an already-populated board (it
- * no-ops). */
-export async function seedDefaultOrgBoardAction() {
-  await requireAdmin()
-  await seedOrgBoard(prisma)
   revalidate()
 }
 
