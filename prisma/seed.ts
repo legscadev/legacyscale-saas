@@ -4,6 +4,7 @@ import pg from 'pg'
 import { config } from 'dotenv'
 
 import { seedOnboarding } from './seed-onboarding'
+import { seedOrgBoard } from './seed-org-board'
 
 config({ path: '.env.local' })
 
@@ -169,6 +170,7 @@ async function main() {
   console.log('✅ Sample announcement created:', announcement.title)
 
   await seedOnboarding(prisma)
+  await seedOrgBoard(prisma)
 
   console.log('🌱 Seed completed!')
 }
