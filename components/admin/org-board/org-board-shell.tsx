@@ -123,7 +123,7 @@ export function OrgBoardShell({
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Org Board"
+          title="Organization Board"
           description="Hubbard-style organizing chart for the internal team."
         />
         <NoRevisionPrimer />
@@ -134,7 +134,7 @@ export function OrgBoardShell({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Org Board"
+        title="Organization Board"
         description={`${tree.revision.name}${
           tree.revision.description ? ` · ${tree.revision.description}` : ''
         }`}
