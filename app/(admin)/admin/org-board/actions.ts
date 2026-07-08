@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/auth/get-user'
 import { orgBoardService } from '@/lib/services/org-board-service'
 import { prisma } from '@/lib/prisma'
+import { seedOrgBoard } from '@/prisma/seed-org-board'
 import {
   addPositionAssignmentSchema,
   createOrgNodeSchema,
@@ -19,6 +20,37 @@ import {
 function revalidate(nodeId?: string) {
   revalidatePath('/admin/org-board')
   if (nodeId) revalidatePath(`/admin/org-board/nodes/${nodeId}`)
+}
+
+/**
+ * Create a blank revision so the admin can build the tree from
+ * scratch. Refuses if any revision already exists — the empty state
+ * is the only surface that should call this. */
+export async function createBlankOrgBoardRevisionAction() {
+  await requireAdmin()
+  const existing = await prisma.orgBoardRevision.findFirst()
+  if (existing) {
+    throw new Error('An org board revision already exists')
+  }
+  await prisma.orgBoardRevision.create({
+    data: {
+      name: 'v1',
+      description: null,
+      isCurrent: true,
+      publishedAt: new Date(),
+    },
+  })
+  revalidate()
+}
+
+/**
+ * Seed the default Hubbard 7-division scaffold. Idempotent inside
+ * seedOrgBoard() — safe to click on an already-populated board (it
+ * no-ops). */
+export async function seedDefaultOrgBoardAction() {
+  await requireAdmin()
+  await seedOrgBoard(prisma)
+  revalidate()
 }
 
 /**

@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
-import { Network, Plus, Search } from 'lucide-react'
+import { Loader2, Network, Plus, Search, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { OrgNodeKindValue } from '@/lib/validations/org-board'
+
+import {
+  createBlankOrgBoardRevisionAction,
+  seedDefaultOrgBoardAction,
+} from '@/app/(admin)/admin/org-board/actions'
 
 import { OrgFlowChart } from './org-flow-chart'
 import { OrgNodeAddDialog } from './org-node-dialogs'
@@ -123,12 +129,7 @@ export function OrgBoardShell({
           title="Org Board"
           description="Hubbard-style organizing chart for the internal team."
         />
-        <EmptyState
-          icon={Network}
-          tone="brand"
-          title="No org board yet"
-          description="Seed the default revision or create one via the API."
-        />
+        <NoRevisionPrimer />
       </div>
     )
   }
@@ -237,6 +238,69 @@ function AddRootNodeButton({ revisionId }: { revisionId: string }) {
         childKind={addKind}
       />
     </>
+  )
+}
+
+/**
+ * Zero-state before any revision exists (fresh prod DB, or a wipe).
+ * Offers two entry points: seed the Hubbard scaffold for a fast start,
+ * or spin up a blank revision when the admin wants full control.
+ */
+function NoRevisionPrimer() {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [action, setAction] = useState<'seed' | 'blank' | null>(null)
+
+  function run(kind: 'seed' | 'blank') {
+    setAction(kind)
+    startTransition(async () => {
+      try {
+        if (kind === 'seed') {
+          await seedDefaultOrgBoardAction()
+          toast.success('Default Hubbard scaffold seeded')
+        } else {
+          await createBlankOrgBoardRevisionAction()
+          toast.success('Blank revision created')
+        }
+        router.refresh()
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to create revision',
+        )
+      } finally {
+        setAction(null)
+      }
+    })
+  }
+
+  return (
+    <EmptyState
+      icon={Network}
+      tone="brand"
+      title="No org board yet"
+      description="Start with the Hubbard 7-division scaffold, or begin with a blank revision and build the tree yourself."
+    >
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button onClick={() => run('seed')} disabled={pending}>
+          {pending && action === 'seed' ? (
+            <Loader2 className="mr-1.5 size-4 animate-spin" />
+          ) : (
+            <Sparkles className="mr-1.5 size-4" />
+          )}
+          Seed Hubbard template
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => run('blank')}
+          disabled={pending}
+        >
+          {pending && action === 'blank' ? (
+            <Loader2 className="mr-1.5 size-4 animate-spin" />
+          ) : null}
+          Create blank
+        </Button>
+      </div>
+    </EmptyState>
   )
 }
 
