@@ -1,7 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef } from 'react'
-import { useTheme } from 'next-themes'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -30,6 +29,27 @@ import { AssignmentBadge, HolderText } from './holder-text'
 interface OrgFlowChartProps {
   nodes: OrgNodeRow[]
   onNodeClick?: (nodeId: string) => void
+}
+
+/**
+ * Tracks whether `<html>` has the `dark` class — the app uses a
+ * localStorage + class-toggle scheme (see root layout) rather than
+ * next-themes, so we can't lean on useTheme() here. Watching the
+ * attribute lets ReactFlow's colorMode react to a runtime toggle
+ * without a page reload.
+ */
+function useHtmlColorMode(): ColorMode {
+  const [mode, setMode] = useState<ColorMode>('light')
+  useEffect(() => {
+    const root = document.documentElement
+    const read = () =>
+      setMode(root.classList.contains('dark') ? 'dark' : 'light')
+    read()
+    const observer = new MutationObserver(read)
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
+  return mode
 }
 
 // ---------------------------------------------------------------------
@@ -195,12 +215,7 @@ const NODE_TYPES = { orgNode: OrgNodeCard }
 export function OrgFlowChart({ nodes, onNodeClick }: OrgFlowChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const { flowNodes, flowEdges } = useMemo(() => layoutNodes(nodes), [nodes])
-  // Feed the resolved theme to ReactFlow so the built-in Controls
-  // switch to their dark palette. Without this the +/- buttons stay
-  // white-on-white when the app is in dark mode.
-  const { resolvedTheme } = useTheme()
-  const colorMode: ColorMode =
-    resolvedTheme === 'dark' ? 'dark' : 'light'
+  const colorMode = useHtmlColorMode()
 
   const handleNodeClick = useCallback(
     (_: unknown, node: Node) => {
