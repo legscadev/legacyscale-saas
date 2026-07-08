@@ -15,6 +15,10 @@ import {
 export interface MembersQueryState {
   search: string
   role: Role | null
+  /** When the page hard-locks a set of roles (e.g. Team page →
+   *  ADMIN + TEAM), this is set. Ignored when the user picks a
+   *  single role via the toolbar. */
+  roles?: Role[] | null
   status: MemberStatusFilter | null
   sort: MemberSortField
   direction: SortDirection
@@ -41,6 +45,7 @@ export async function fetchMembers(
     memberService.list({
       search: state.search || undefined,
       role: state.role,
+      roles: state.roles ?? null,
       status: state.status,
       sort: state.sort,
       direction: state.direction,

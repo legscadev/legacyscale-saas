@@ -8,7 +8,12 @@ export type SortDirection = 'asc' | 'desc'
 
 interface ListMembersOptions {
   search?: string
+  /** Single role filter — mutually exclusive with `roles`. */
   role?: Role | null
+  /** Multi-role filter — used by the Team page to lump ADMIN + TEAM
+   *  under one view. If both `role` and `roles` are set, `role`
+   *  wins (single-role is the more specific of the two). */
+  roles?: Role[] | null
   status?: MemberStatusFilter | null
   sort?: MemberSortField
   direction?: SortDirection
@@ -19,7 +24,7 @@ interface ListMembersOptions {
 const DEFAULT_PAGE_SIZE = 10
 
 function buildWhere(opts: ListMembersOptions): Prisma.UserWhereInput {
-  const { search, role, status } = opts
+  const { search, role, roles, status } = opts
 
   // The archived view explicitly pulls soft-deleted rows; every other
   // view excludes them.
@@ -30,6 +35,7 @@ function buildWhere(opts: ListMembersOptions): Prisma.UserWhereInput {
 
   const filters: Prisma.UserWhereInput = {}
   if (role) filters.role = role
+  else if (roles && roles.length > 0) filters.role = { in: roles }
   if (status === 'active') filters.isActive = true
   if (status === 'suspended') filters.isActive = false
 
