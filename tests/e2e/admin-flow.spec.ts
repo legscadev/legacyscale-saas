@@ -148,6 +148,89 @@ test.describe('Admin flow', () => {
   })
 
   /**
+   * Statistics tracker smoke. Verifies the revamped layout:
+   *   - Group picker + New-group in the header
+   *   - Search + Only-mine filter bar
+   *   - Date range inputs + preset chips (7d / 30d / 90d / YTD)
+   *   - New-group / New-metric dialogs open cleanly
+   * Doesn't submit either dialog to keep the DB clean.
+   */
+  test('admin statistics page + New-group, New-metric, filter + date range', async ({
+    page,
+  }) => {
+    await page.goto('/admin/stats')
+    await expect(page).toHaveURL(/\/admin\/stats/)
+    await expect(
+      page.getByRole('heading', { name: 'Statistics', level: 1 }),
+    ).toBeVisible()
+
+    // New group button.
+    const newGroup = page.getByRole('button', { name: /^new group$/i })
+    await expect(newGroup).toBeVisible()
+
+    // Open the New group dialog + close it.
+    await newGroup.click()
+    const groupDialog = page.getByRole('dialog', { name: /new group/i })
+    await expect(groupDialog).toBeVisible()
+    await expect(groupDialog.getByLabel(/^Name$/)).toBeVisible()
+    await expect(groupDialog.getByLabel(/short label/i)).toBeVisible()
+    await groupDialog.getByRole('button', { name: /cancel/i }).click()
+    await expect(groupDialog).toBeHidden()
+
+    // Empty-state vs group-picker branch. If no groups exist yet,
+    // only the empty state renders and the filter bar is skipped.
+    const groupPicker = page.getByRole('combobox', { name: /^group$/i })
+    const emptyState = page.getByText(/no groups yet/i)
+    const eitherPresent = await Promise.race([
+      groupPicker
+        .waitFor({ state: 'visible', timeout: 3_000 })
+        .then(() => 'picker'),
+      emptyState
+        .waitFor({ state: 'visible', timeout: 3_000 })
+        .then(() => 'empty'),
+    ]).catch(() => null)
+    expect(eitherPresent).not.toBeNull()
+
+    if (eitherPresent === 'picker') {
+      // Filter bar: search input + Only-mine checkbox.
+      await expect(page.getByPlaceholder(/^search/i)).toBeVisible()
+      await expect(page.getByLabel(/only mine/i)).toBeVisible()
+
+      // Date range: From/To inputs + preset chips.
+      const fromInput = page.getByLabel(/from date/i)
+      const toInput = page.getByLabel(/to date/i)
+      await expect(fromInput).toBeVisible()
+      await expect(toInput).toBeVisible()
+      const preset30d = page.getByRole('button', { name: /^30d$/ })
+      await expect(preset30d).toBeVisible()
+
+      // 30d preset should fill both date inputs.
+      await preset30d.click()
+      await expect(fromInput).not.toHaveValue('')
+      await expect(toInput).not.toHaveValue('')
+
+      // Clear chip appears after any date is set and empties them.
+      await page.getByRole('button', { name: /^clear$/i }).click()
+      await expect(fromInput).toHaveValue('')
+      await expect(toInput).toHaveValue('')
+
+      // New metric dialog opens cleanly.
+      await page.getByRole('button', { name: /^new metric$/i }).click()
+      const metricDialog = page.getByRole('dialog', { name: /new metric/i })
+      await expect(metricDialog).toBeVisible()
+      await expect(metricDialog.getByLabel(/^Name$/)).toBeVisible()
+      await expect(
+        metricDialog.getByRole('combobox', { name: /^group$/i }),
+      ).toBeVisible()
+      await expect(
+        metricDialog.getByRole('combobox', { name: /^unit$/i }),
+      ).toBeVisible()
+      await metricDialog.getByRole('button', { name: /cancel/i }).click()
+      await expect(metricDialog).toBeHidden()
+    }
+  })
+
+  /**
    * Role-swap top-bar button. Admin should see "View as member" on
    * admin routes → clicking it lands on the member dashboard, where
    * the mirror "Back to admin" button appears.
@@ -173,21 +256,56 @@ test.describe('Admin flow', () => {
    * storageState) and archives every course whose title starts
    * with the E2E prefix. Failures never fail the suite — orphan
    * rows are visible by name and easy to bulk-delete manually.
+   *
+   * Bounded by an outer soft-cap so slow-to-hydrate dev servers
+   * can't blow through Playwright's 30s hook budget. If we run
+   * out of time we log + bail; leftover courses are still
+   * identifiable by their [E2E] prefix.
    */
+  const CLEANUP_SOFT_CAP_MS = 20_000
+
   test.afterAll(async ({ browser }) => {
+    await Promise.race([
+      runCleanup(browser),
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          console.warn(
+            `[E2E cleanup] soft-cap of ${CLEANUP_SOFT_CAP_MS}ms hit — bailing`,
+          )
+          resolve()
+        }, CLEANUP_SOFT_CAP_MS),
+      ),
+    ])
+  })
+
+  async function runCleanup(
+    browser: import('@playwright/test').Browser,
+  ): Promise<void> {
     const context = await browser.newContext({
       storageState: '.auth/admin.json',
     })
     const page = await context.newPage()
+    // Tight internal timeouts so a stalled navigation surfaces fast
+    // instead of eating the whole soft cap.
+    page.setDefaultTimeout(6_000)
+    page.setDefaultNavigationTimeout(6_000)
+
     try {
-      await page.goto('/admin/courses')
+      await page.goto('/admin/courses', { waitUntil: 'domcontentloaded' })
+      const initialCount = await page
+        .locator('a', { hasText: new RegExp(`^\\${E2E_PREFIX}`) })
+        .count()
+      // Fast path: nothing to clean, don't do further navigation
+      // and don't burn the timeout on empty work.
+      if (initialCount === 0) return
+
       const targets = await page
         .locator('a', { hasText: new RegExp(`^\\${E2E_PREFIX}`) })
         .all()
       for (const link of targets) {
         try {
           await link.click()
-          await page.waitForURL(/\/admin\/courses\/[^/]+/, { timeout: 5_000 })
+          await page.waitForURL(/\/admin\/courses\/[^/]+/, { timeout: 4_000 })
           const more = page
             .getByRole('button', { name: /open actions|more/i })
             .first()
@@ -204,7 +322,7 @@ test.describe('Admin flow', () => {
               if ((await confirm.count()) > 0) await confirm.click()
             }
           }
-          await page.goto('/admin/courses')
+          await page.goto('/admin/courses', { waitUntil: 'domcontentloaded' })
         } catch (err) {
           console.warn('[E2E cleanup] could not delete a course:', err)
         }
@@ -214,5 +332,5 @@ test.describe('Admin flow', () => {
     } finally {
       await context.close()
     }
-  })
+  }
 })

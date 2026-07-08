@@ -213,6 +213,8 @@ model User {
   certsRevoked          CertificateIssuance[]  @relation("CertsRevoked")
   nudgesReceived        Nudge[]                @relation("NudgeRecipient")
   nudgesAuthored        Nudge[]                @relation("NudgeAuthor")
+  statMetricsAssigned   StatMetric[]           @relation("StatMetricAssignee")
+  statDataPointsAdded   StatDataPoint[]        @relation("StatDataPointAuthor")
   employee              Employee?              @relation("EmployeeUser")
   orgBoardRevisions     OrgBoardRevision[]     @relation("OrgBoardRevisionAuthor")
   orgAuditLogs          OrgNodeAuditLog[]      @relation("OrgAuditActor")
@@ -1107,4 +1109,92 @@ model OrgNodeAuditLog {
   @@index([revisionId, createdAt])
   @@index([nodeId, createdAt])
   @@map("org_node_audit_logs")
+}
+
+// ============================================
+// STATISTICS TRACKER
+// ============================================
+
+/// Unit of measurement stamped on a metric — informs how values are
+/// formatted in the UI (e.g. "$1,234" vs "1,234" vs "82%"). Kept
+/// small on purpose; edge cases can render raw counts.
+enum StatMetricUnit {
+  COUNT
+  CURRENCY
+  PERCENT
+}
+
+/// Divisions are the top-level grouping in the Hubbard-style stats
+/// board (HCO, Marketing, Treasury, etc.). Admin-configurable so
+/// each team can shape the taxonomy without a code change.
+model StatDivision {
+  id          String    @id @default(uuid())
+  name        String
+  /// Optional short label ("Div 1", "2A") shown above the name in
+  /// tabs. Null falls back to a numeric position.
+  shortLabel  String?   @map("short_label")
+  description String?
+  orderIndex  Int       @default(0) @map("order_index")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  metrics StatMetric[]
+
+  @@index([orderIndex])
+  @@index([deletedAt])
+  @@map("stat_divisions")
+}
+
+/// A single metric card — one KPI tracked over time. Belongs to a
+/// division and (optionally) has an assigned owner. The assigned
+/// user + admins can add data points; everyone with admin/stat
+/// access can view.
+model StatMetric {
+  id          String         @id @default(uuid())
+  divisionId  String         @map("division_id")
+  name        String
+  description String?
+  unit        StatMetricUnit @default(COUNT)
+  /// User accountable for the metric. Null = unassigned (still
+  /// admin-editable). SetNull on user delete so history survives.
+  assignedToId String?       @map("assigned_to_id")
+  orderIndex  Int            @default(0) @map("order_index")
+  /// Optional target value drawn as a horizontal reference line on
+  /// the chart. Nullable — a lot of stats don't have hard targets.
+  targetValue Decimal?       @map("target_value") @db.Decimal(18, 4)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  deletedAt   DateTime?      @map("deleted_at")
+
+  division   StatDivision    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  assignedTo User?           @relation("StatMetricAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  dataPoints StatDataPoint[]
+
+  @@index([divisionId, orderIndex])
+  @@index([assignedToId])
+  @@index([deletedAt])
+  @@map("stat_metrics")
+}
+
+/// One recorded value on a metric's time-series. recordedAt stores
+/// the point-in-time this value represents (typically the end of a
+/// week). (metricId, recordedAt) is unique so a per-week grain never
+/// double-records — updating an existing week goes through upsert.
+model StatDataPoint {
+  id          String   @id @default(uuid())
+  metricId    String   @map("metric_id")
+  value       Decimal  @db.Decimal(18, 4)
+  recordedAt  DateTime @map("recorded_at") @db.Date
+  note        String?
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  metric    StatMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  createdBy User?      @relation("StatDataPointAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([metricId, recordedAt])
+  @@index([metricId, recordedAt])
+  @@map("stat_data_points")
 }
