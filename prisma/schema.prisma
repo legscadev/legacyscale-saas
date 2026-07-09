@@ -172,6 +172,11 @@ model User {
   isActive                Boolean   @default(true) @map("is_active")
   emailVerified           Boolean   @default(false) @map("email_verified")
   lastLoginAt             DateTime? @map("last_login_at")
+  /// Stamped by getUser() on every authenticated page request,
+  /// debounced to once per 15 minutes per user. Powers the "Last
+  /// active" column on /admin/team and /admin/members so the value
+  /// reflects any URL access, not just explicit sign-in.
+  lastActiveAt            DateTime? @map("last_active_at")
   /**
    * When the member last opened the announcements feed. Powers the
    * "New since your last visit" divider; updated server-side when
