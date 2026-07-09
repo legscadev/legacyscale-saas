@@ -50,13 +50,17 @@ interface MemberEditDialogProps {
   /** Block role edit when admin is editing themselves (server enforces too). */
   canChangeRole: boolean
   onSaved: () => void
+  /** Restrict the picker to a subset of roles. Falls back to every
+   *  role for legacy call sites. */
+  allowedRoles?: Role[]
 }
 
-const ROLES: { value: Role; label: string }[] = [
-  { value: 'MEMBER', label: 'Member' },
-  { value: 'TEAM', label: 'Team — sees internal courses' },
-  { value: 'ADMIN', label: 'Admin' },
-]
+const ROLE_LABELS: Record<Role, string> = {
+  MEMBER: 'Member',
+  TEAM: 'Internal Team',
+  ADMIN: 'Admin',
+}
+const ROLE_ORDER: Role[] = ['MEMBER', 'TEAM', 'ADMIN']
 
 function RequiredMark() {
   return (
@@ -73,7 +77,17 @@ export function MemberEditDialog({
   categories,
   canChangeRole,
   onSaved,
+  allowedRoles,
 }: MemberEditDialogProps) {
+  // Filter the role list to the page's lens but always include the
+  // member's current role so it can't disappear from its own edit
+  // dialog.
+  const roleOptions = ROLE_ORDER.filter((r) =>
+    allowedRoles
+      ? allowedRoles.includes(r) || r === member.role
+      : true,
+  )
+  const showRoleField = roleOptions.length > 1
   const [name, setName] = useState(member.name ?? '')
   const [role, setRole] = useState<Role>(member.role)
   const [categoryId, setCategoryId] = useState<string | null>(
@@ -234,34 +248,38 @@ export function MemberEditDialog({
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="edit-role">Role</Label>
-            <Select
-              value={role}
-              onValueChange={(v) => setRole((v as Role) ?? 'MEMBER')}
-              disabled={!canChangeRole}
-            >
-              <SelectTrigger className="w-full" id="edit-role">
-                <SelectValue>
-                  {(v: string) =>
-                    ROLES.find((r) => r.value === v)?.label ?? 'Member'
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!canChangeRole && (
-              <p className="text-xs text-muted-foreground">
-                You can&apos;t change your own role.
-              </p>
-            )}
-          </div>
+          {showRoleField ? (
+            <div className="space-y-2">
+              <Label htmlFor="edit-role">Role</Label>
+              <Select
+                value={role}
+                onValueChange={(v) => setRole((v as Role) ?? member.role)}
+                disabled={!canChangeRole}
+              >
+                <SelectTrigger className="w-full" id="edit-role">
+                  <SelectValue>
+                    {(v: string) => ROLE_LABELS[v as Role] ?? ROLE_LABELS.MEMBER}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!canChangeRole && (
+                <p className="text-xs text-muted-foreground">
+                  You can&apos;t change your own role.
+                </p>
+              )}
+            </div>
+          ) : (
+            // Locked lens (e.g. /admin/members) — role stays what it
+            // already is; the picker isn't rendered.
+            <input type="hidden" name="role" value={role} />
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="edit-category">Category</Label>

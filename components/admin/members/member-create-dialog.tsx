@@ -39,13 +39,21 @@ interface MemberCreateDialogProps {
   categories: MemberCategoryOption[]
   /** Fires after a member is successfully created. */
   onCreated: () => void
+  /** Restrict the role picker to a subset (e.g. Team page uses
+   *  [ADMIN, TEAM]). When the array collapses to a single role the
+   *  picker is hidden entirely. Defaults to every role. */
+  allowedRoles?: Role[]
+  /** Which role to pre-select. Defaults to the first entry in
+   *  allowedRoles, or MEMBER. */
+  defaultRole?: Role
 }
 
-const ROLES: { value: Role; label: string }[] = [
-  { value: 'MEMBER', label: 'Member' },
-  { value: 'TEAM', label: 'Team — sees internal courses' },
-  { value: 'ADMIN', label: 'Admin' },
-]
+const ROLE_LABELS: Record<Role, string> = {
+  MEMBER: 'Member',
+  TEAM: 'Internal Team',
+  ADMIN: 'Admin',
+}
+const ROLE_ORDER: Role[] = ['MEMBER', 'TEAM', 'ADMIN']
 
 function RequiredMark() {
   return (
@@ -60,10 +68,21 @@ export function MemberCreateDialog({
   onOpenChange,
   categories,
   onCreated,
+  allowedRoles,
+  defaultRole,
 }: MemberCreateDialogProps) {
+  const roleOptions = ROLE_ORDER.filter((r) =>
+    allowedRoles ? allowedRoles.includes(r) : true,
+  )
+  const initialRole: Role =
+    defaultRole && roleOptions.includes(defaultRole)
+      ? defaultRole
+      : (roleOptions[0] ?? 'MEMBER')
+  const showRoleField = roleOptions.length > 1
+
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<Role>('MEMBER')
+  const [role, setRole] = useState<Role>(initialRole)
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +91,7 @@ export function MemberCreateDialog({
   const reset = () => {
     setName('')
     setEmail('')
-    setRole('MEMBER')
+    setRole(initialRole)
     setCategoryId(null)
     setError(null)
     setFieldErrors({})
@@ -212,28 +231,32 @@ export function MemberCreateDialog({
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="member-role">Role</Label>
-            <Select
-              value={role}
-              onValueChange={(v) => setRole((v as Role) ?? 'MEMBER')}
-            >
-              <SelectTrigger className="w-full" id="member-role">
-                <SelectValue>
-                  {(v: string) =>
-                    ROLES.find((r) => r.value === v)?.label ?? 'Member'
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {showRoleField ? (
+            <div className="space-y-2">
+              <Label htmlFor="member-role">Role</Label>
+              <Select
+                value={role}
+                onValueChange={(v) => setRole((v as Role) ?? initialRole)}
+              >
+                <SelectTrigger className="w-full" id="member-role">
+                  <SelectValue>
+                    {(v: string) => ROLE_LABELS[v as Role] ?? ROLE_LABELS.MEMBER}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            // Single-role lens (e.g. /admin/members) — role is
+            // decided by the page context; don't ask the admin.
+            <input type="hidden" name="role" value={role} />
+          )}
 
           {role === 'MEMBER' ? (
             <div className="space-y-2">

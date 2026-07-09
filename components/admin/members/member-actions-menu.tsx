@@ -45,6 +45,9 @@ interface MemberActionsMenuProps {
   isArchived: boolean
   isSelf: boolean
   onRefetch: () => void
+  /** Restrict the edit dialog's role picker. Falls through from
+   *  the page-level lens (Members = MEMBER only, Team = ADMIN+TEAM). */
+  allowedRoles?: ('ADMIN' | 'TEAM' | 'MEMBER')[]
 }
 
 export function MemberActionsMenu({
@@ -58,6 +61,7 @@ export function MemberActionsMenu({
   isArchived,
   isSelf,
   onRefetch,
+  allowedRoles,
 }: MemberActionsMenuProps) {
   const [confirmingSuspend, setConfirmingSuspend] = useState(false)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
@@ -315,6 +319,7 @@ export function MemberActionsMenu({
         categories={categories}
         canChangeRole={!isSelf}
         onSaved={onRefetch}
+        allowedRoles={allowedRoles}
       />
 
       <NudgeDialog
