@@ -21,6 +21,7 @@ import {
 } from '@/lib/services/course-structure-service'
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withTenantPrefix } from '@/lib/tenancy/storage-path'
 import {
   createChapterSchema,
   createLessonSchema,
@@ -464,7 +465,7 @@ export async function prepareResourceUploadAction(
   // the file path leaf, so the bucket file is addressable even if
   // commit fails (a sweep can still find the orphan).
   const resourceId = crypto.randomUUID()
-  const path = `${lessonId}/${resourceId}`
+  const path = await withTenantPrefix(`${lessonId}/${resourceId}`)
 
   const supabase = createAdminClient()
   const { data, error } = await supabase.storage

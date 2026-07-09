@@ -120,9 +120,14 @@ scoped.
    their current top-level role.
 3. **NOT NULL** — after backfill verifies 0 nulls per table, flip
    each column to NOT NULL in a follow-up migration.
-4. **Storage** — background job moves existing thumbnails / covers /
-   certificate PDFs into `<companyId>/…` prefix. Old paths kept as a
-   fallback for one deploy so signed URLs already issued don't break.
+4. **Storage** — Phase 2.5 wired `withTenantPrefix()` through every
+   upload (course thumbnails/covers, lesson resources, certificate
+   PDFs). New writes land at `<companyId>/<old-path>` when the flag
+   is on; reads use the DB row's stored path directly so legacy
+   files keep working. Phase 7 rollout runs a one-shot file-mover
+   script that moves every existing bucket file to the seed-tenant
+   prefix and rewrites the URL columns in the DB, so nothing sits
+   at the un-prefixed path once we flip the flag prod-wide.
 5. **RLS switchover** — session variable set on every request; RLS
    policies rewritten. Cross-tenant E2E must be green before this
    gets merged past the feature flag.

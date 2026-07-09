@@ -28,6 +28,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withTenantPrefix } from '@/lib/tenancy/storage-path'
 
 const CERTIFICATE_BUCKET = 'course-certificates'
 const SIGNED_URL_TTL_SEC = 60 * 10 // 10 min — plenty for click-to-download
@@ -190,7 +191,7 @@ export async function getCertificatePdfBytes(
   if (!issuance) return null
 
   const supabase = createAdminClient()
-  const certPath = `${issuance.id}.pdf`
+  const certPath = await withTenantPrefix(`${issuance.id}.pdf`)
 
   const { data: existing } = await supabase.storage
     .from(CERTIFICATE_BUCKET)
@@ -356,7 +357,7 @@ async function ensureAndSignPdf(
   ctx: RenderContext & { issuanceId: string },
 ): Promise<CertificateDownloadResult | CertificateDownloadError> {
   const supabase = createAdminClient()
-  const certPath = `${ctx.issuanceId}.pdf`
+  const certPath = await withTenantPrefix(`${ctx.issuanceId}.pdf`)
 
   const { data: existing } = await supabase.storage
     .from(CERTIFICATE_BUCKET)

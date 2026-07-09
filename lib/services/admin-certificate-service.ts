@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/resend'
 import { getCertificatePdfBytes } from '@/lib/services/certificate-service'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withTenantPrefix } from '@/lib/tenancy/storage-path'
 
 const CERTIFICATE_BUCKET = 'course-certificates'
 const SIGNED_URL_TTL_SEC = 60 * 10
@@ -337,9 +338,10 @@ export async function getAdminCertificateDownload(
 
   const supabase = createAdminClient()
   const filename = safeFilename(issuance.module.title)
+  const certPath = await withTenantPrefix(`${issuanceId}.pdf`)
   const { data, error } = await supabase.storage
     .from(CERTIFICATE_BUCKET)
-    .createSignedUrl(`${issuanceId}.pdf`, SIGNED_URL_TTL_SEC, {
+    .createSignedUrl(certPath, SIGNED_URL_TTL_SEC, {
       download: filename,
     })
   if (error || !data) {
