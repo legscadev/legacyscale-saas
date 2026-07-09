@@ -101,6 +101,7 @@ export function getMemberColumns(
   onRefetch: () => void,
   sparklines: Record<string, number[]> = {},
   categories: MemberCategoryOption[] = [],
+  allowedRoles?: ('ADMIN' | 'TEAM' | 'MEMBER')[],
 ): ColumnDef<MemberListItem>[] {
   return [
     {
@@ -300,6 +301,7 @@ export function getMemberColumns(
             isArchived={!!row.original.deletedAt}
             isSelf={row.original.id === currentUserId}
             onRefetch={onRefetch}
+            allowedRoles={allowedRoles}
           />
         </div>
       ),

@@ -191,10 +191,18 @@ export function MembersShell({
 
   const refetch = useCallback(() => setRefetchKey((k) => k + 1), [])
 
+  const editAllowedRoles =
+    lockedRoles ?? (defaultRole ? [defaultRole] : undefined)
   const columns = useMemo(
     () =>
-      getMemberColumns(currentUserId, refetch, data.sparklines, categories),
-    [currentUserId, refetch, data.sparklines, categories],
+      getMemberColumns(
+        currentUserId,
+        refetch,
+        data.sparklines,
+        categories,
+        editAllowedRoles,
+      ),
+    [currentUserId, refetch, data.sparklines, categories, editAllowedRoles],
   )
 
   const selectedIds = Object.keys(rowSelection)
@@ -302,6 +310,11 @@ export function MembersShell({
         onOpenChange={setCreateOpen}
         categories={categories}
         onCreated={refetch}
+        allowedRoles={
+          lockedRoles ??
+          (defaultRole ? [defaultRole] : undefined)
+        }
+        defaultRole={defaultRole}
       />
     </div>
   )
