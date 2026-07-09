@@ -58,6 +58,7 @@ export const adminNav: NavSection[] = [
     label: 'Internal',
     items: [
       { label: 'Team', href: '/admin/team', icon: Users },
+      { label: 'Trainings', href: '/admin/trainings', icon: GraduationCap },
       { label: 'Statistics', href: '/admin/stats', icon: BarChart3 },
       { label: 'Organization Board', href: '/admin/org-board', icon: Network },
       { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus },

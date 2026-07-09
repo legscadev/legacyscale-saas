@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import type { CourseStatus } from '@prisma/client'
+import type { CourseAudience, CourseStatus } from '@prisma/client'
 import { z } from 'zod'
 
 import { requireAdmin } from '@/lib/auth/get-user'
@@ -67,6 +67,9 @@ export interface CoursesQueryState {
   search: string
   status: CourseStatus | null
   view: CourseView
+  /** Lens set by the page: /admin/courses uses [MEMBERS, BOTH] and
+   *  /admin/trainings uses [INTERNAL, BOTH]. Undefined = no filter. */
+  audiences?: CourseAudience[] | null
   sort: CourseSortField
   direction: SortDirection
   page: number
@@ -87,11 +90,12 @@ export async function fetchCourses(
   await requireAdmin()
 
   const [counts, result] = await Promise.all([
-    courseService.counts(),
+    courseService.counts(state.audiences ?? undefined),
     courseService.list({
       search: state.search || undefined,
       status: state.status,
       view: state.view,
+      audiences: state.audiences ?? undefined,
       sort: state.sort,
       direction: state.direction,
       page: state.page,
