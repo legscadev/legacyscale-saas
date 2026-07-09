@@ -6,6 +6,8 @@ import { Building2, Check, ChevronDown, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { cn } from '@/lib/utils'
+import Link from 'next/link'
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -136,6 +138,13 @@ export function CompanySwitcher({
         {currentUserIsSuperAdmin ? (
           <>
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2"
+              render={<Link href="/super/companies" />}
+            >
+              <ShieldCheck className="size-4 text-brand-500" />
+              <span className="flex-1">Manage all companies</span>
+            </DropdownMenuItem>
             <div className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-muted-foreground">
               <ShieldCheck className="size-3.5 text-brand-400" />
               Super-admin — you can enter any company
