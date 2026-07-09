@@ -49,6 +49,10 @@ interface MembersToolbarProps {
   columnVisibility: VisibilityState
   columns: ColumnDef<MemberListItem, unknown>[]
   onColumnVisibilityChange: (state: VisibilityState) => void
+  /** When true, the role dropdown is not rendered (the parent page
+   *  hard-locks the role scope, e.g. Members = students only,
+   *  Team = admin + team only). */
+  hideRoleFilter?: boolean
 }
 
 export function MembersToolbar({
@@ -63,6 +67,7 @@ export function MembersToolbar({
   columnVisibility,
   columns,
   onColumnVisibilityChange,
+  hideRoleFilter = false,
 }: MembersToolbarProps) {
   // Local search state with debounce so we don't refetch on every keystroke.
   const [draft, setDraft] = useState(search)
@@ -104,27 +109,29 @@ export function MembersToolbar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={roleValue}
-          onValueChange={(v) =>
-            onRoleChange(!v || v === 'all' ? null : (v as Role))
-          }
-        >
-          <SelectTrigger className="h-9 w-[140px]">
-            <SelectValue>
-              {(v: string) =>
-                ROLES.find((r) => r.value === v)?.label ?? 'Any role'
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {ROLES.map((r) => (
-              <SelectItem key={r.value} value={r.value}>
-                {r.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {hideRoleFilter ? null : (
+          <Select
+            value={roleValue}
+            onValueChange={(v) =>
+              onRoleChange(!v || v === 'all' ? null : (v as Role))
+            }
+          >
+            <SelectTrigger className="h-9 w-[140px]">
+              <SelectValue>
+                {(v: string) =>
+                  ROLES.find((r) => r.value === v)?.label ?? 'Any role'
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {ROLES.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  {r.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         <Select
           value={statusValue}

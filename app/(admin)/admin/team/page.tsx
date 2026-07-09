@@ -1,17 +1,18 @@
 import { requireAdmin } from '@/lib/auth/get-user'
 import { categoryService } from '@/lib/services/category-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
-import { fetchMembers } from './actions'
+import { fetchMembers } from '../members/actions'
 
-export default async function AdminMembersPage() {
+export default async function AdminTeamPage() {
   const admin = await requireAdmin()
-  // Members lives under Community in the sidebar → default to
-  // students only. Ruby can still switch the role filter in the
-  // toolbar to see staff if she needs to.
+  // Team lens: ADMIN + TEAM only. Categories still load so the shared
+  // MembersShell renders correctly, even though category assignment
+  // is a student concept (staff rows have no category badge).
   const [initialData, categoriesRaw] = await Promise.all([
     fetchMembers({
       search: '',
-      role: 'MEMBER',
+      role: null,
+      roles: ['ADMIN', 'TEAM'],
       status: null,
       sort: 'createdAt',
       direction: 'desc',
@@ -27,7 +28,9 @@ export default async function AdminMembersPage() {
       currentUserId={admin.id}
       initialData={initialData}
       categories={categories}
-      defaultRole="MEMBER"
+      lockedRoles={['ADMIN', 'TEAM']}
+      pageTitle="Team"
+      pageDescription="Admins, staff, and everyone with a role behind the scenes."
     />
   )
 }

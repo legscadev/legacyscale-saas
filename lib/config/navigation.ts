@@ -1,5 +1,6 @@
 import {
   Award,
+  BarChart3,
   Bell,
   BookOpen,
   GraduationCap,
@@ -34,21 +35,11 @@ export const adminNav: NavSection[] = [
     items: [{ label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard }],
   },
   {
-    label: 'Content',
+    label: 'Learning',
     items: [
       { label: 'Courses', href: '/admin/courses', icon: GraduationCap },
       { label: 'Categories', href: '/admin/categories', icon: Tag },
-      { label: 'Announcements', href: '/admin/announcements', icon: Megaphone },
       { label: 'Certificates', href: '/admin/certificates', icon: Award },
-    ],
-  },
-  {
-    label: 'People',
-    items: [{ label: 'Members', href: '/admin/members', icon: Users }],
-  },
-  {
-    label: 'Insights',
-    items: [
       {
         label: 'Progress Tracker',
         href: '/admin/progress',
@@ -57,10 +48,20 @@ export const adminNav: NavSection[] = [
     ],
   },
   {
+    label: 'Community',
+    items: [
+      { label: 'Members', href: '/admin/members', icon: Users },
+      { label: 'Announcements', href: '/admin/announcements', icon: Megaphone },
+    ],
+  },
+  {
     label: 'Internal',
     items: [
+      { label: 'Team', href: '/admin/team', icon: Users },
+      { label: 'Trainings', href: '/admin/trainings', icon: GraduationCap },
+      { label: 'Statistics', href: '/admin/stats', icon: BarChart3 },
+      { label: 'Organization Board', href: '/admin/org-board', icon: Network },
       { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus },
-      { label: 'Org Board', href: '/admin/org-board', icon: Network },
     ],
   },
   {

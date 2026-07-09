@@ -53,14 +53,33 @@ interface MembersShellProps {
   currentUserId: string
   initialData: MembersData
   categories: MemberCategoryOption[]
+  /** Optional lens: pre-selects the role filter so the Community
+   *  page opens on students and the Internal Team page opens on
+   *  staff. Undefined = no default lens. */
+  defaultRole?: 'ADMIN' | 'TEAM' | 'MEMBER'
+  /** Lock the role filter to a set of roles (used by the Team page
+   *  which needs to show ADMIN + TEAM together). When set, the
+   *  toolbar role dropdown is hidden. */
+  lockedRoles?: ('ADMIN' | 'TEAM' | 'MEMBER')[]
+  /** Override the page header. Defaults to "Members". */
+  pageTitle?: string
+  pageDescription?: string
 }
 
 export function MembersShell({
   currentUserId,
   initialData,
   categories,
+  defaultRole,
+  lockedRoles,
+  pageTitle,
+  pageDescription,
 }: MembersShellProps) {
-  const [query, setQuery] = useState<MembersQueryState>(DEFAULT_QUERY_STATE)
+  const [query, setQuery] = useState<MembersQueryState>({
+    ...DEFAULT_QUERY_STATE,
+    role: defaultRole ?? null,
+    roles: lockedRoles ?? null,
+  })
   const [data, setData] = useState<MembersData>(initialData)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -141,8 +160,15 @@ export function MembersShell({
   }, [])
 
   const clearFilters = useCallback(() => {
-    setQuery(DEFAULT_QUERY_STATE)
-  }, [])
+    // Preserve the page-level lens when clearing search/status. The
+    // sidebar decided which population Ruby is looking at; the
+    // toolbar's Clear-all shouldn't silently switch to a mixed view.
+    setQuery({
+      ...DEFAULT_QUERY_STATE,
+      role: defaultRole ?? null,
+      roles: lockedRoles ?? null,
+    })
+  }, [defaultRole, lockedRoles])
 
   // TanStack sorting state ↔ our server-side sort/direction pair.
   const sorting: SortingState = useMemo(
@@ -180,10 +206,13 @@ export function MembersShell({
   return (
     <div className="space-y-6" data-pending={isLoading}>
       <PageHeader
-        title="Members"
-        description={`Manage ${data.counts.all.toLocaleString()} ${
-          data.counts.all === 1 ? 'person' : 'people'
-        } across your platform.`}
+        title={pageTitle ?? 'Members'}
+        description={
+          pageDescription ??
+          `Manage ${data.counts.all.toLocaleString()} ${
+            data.counts.all === 1 ? 'person' : 'people'
+          } across your platform.`
+        }
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
@@ -207,6 +236,9 @@ export function MembersShell({
           columnVisibility={columnVisibility}
           columns={columns}
           onColumnVisibilityChange={setColumnVisibility}
+          hideRoleFilter={
+            defaultRole !== undefined || (lockedRoles?.length ?? 0) > 0
+          }
         />
 
         {showEmpty ? (

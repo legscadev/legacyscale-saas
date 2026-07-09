@@ -1,4 +1,4 @@
-import { Prisma, type CourseStatus } from '@prisma/client'
+import { Prisma, type CourseAudience, type CourseStatus } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { ensureUniqueSlug, slugify } from '@/lib/utils/slug'
@@ -15,6 +15,10 @@ interface ListCoursesOptions {
   search?: string
   status?: CourseStatus | null
   view?: CourseView
+  /** Restrict results to a subset of audiences. Used by /admin/courses
+   *  (MEMBERS + BOTH) and /admin/trainings (INTERNAL + BOTH) so each
+   *  page shows only its slice. Undefined = no filter. */
+  audiences?: CourseAudience[]
   sort?: CourseSortField
   direction?: SortDirection
   page: number
@@ -24,13 +28,14 @@ interface ListCoursesOptions {
 const DEFAULT_PAGE_SIZE = 10
 
 function buildWhere(opts: ListCoursesOptions): Prisma.CourseWhereInput {
-  const { search, status, view = 'active' } = opts
+  const { search, status, view = 'active', audiences } = opts
 
   const baseWhere: Prisma.CourseWhereInput =
     view === 'deleted' ? { deletedAt: { not: null } } : { deletedAt: null }
 
   const filters: Prisma.CourseWhereInput = {}
   if (status) filters.status = status
+  if (audiences && audiences.length > 0) filters.audience = { in: audiences }
 
   const searchWhere: Prisma.CourseWhereInput | undefined = search?.trim()
     ? {
@@ -127,14 +132,20 @@ async function listCourses(options: ListCoursesOptions) {
 }
 
 /** Counts used by the filter chips. One round trip. */
-async function getCounts() {
+async function getCounts(audiences?: CourseAudience[]) {
+  const activeWhere: Prisma.CourseWhereInput = { deletedAt: null }
+  const deletedWhere: Prisma.CourseWhereInput = { deletedAt: { not: null } }
+  if (audiences && audiences.length > 0) {
+    activeWhere.audience = { in: audiences }
+    deletedWhere.audience = { in: audiences }
+  }
   const [groups, deleted] = await Promise.all([
     prisma.course.groupBy({
       by: ['status'],
-      where: { deletedAt: null },
+      where: activeWhere,
       _count: { _all: true },
     }),
-    prisma.course.count({ where: { deletedAt: { not: null } } }),
+    prisma.course.count({ where: deletedWhere }),
   ])
 
   const totals = { all: 0, draft: 0, published: 0, archived: 0, deleted }

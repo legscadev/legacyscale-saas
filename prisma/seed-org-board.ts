@@ -212,7 +212,7 @@ export async function seedOrgBoard(prisma: PrismaClient): Promise<void> {
   const revision = await prisma.orgBoardRevision.create({
     data: {
       name: 'v1',
-      description: 'Initial Hubbard 7-division scaffold',
+      description: 'Current organizing chart',
       isCurrent: true,
       publishedAt: new Date(),
     },

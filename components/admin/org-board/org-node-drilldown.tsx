@@ -118,7 +118,7 @@ export function OrgNodeDrilldown({
     .find((a) => a.kind === 'CROWN')
 
   const breadcrumbs = [
-    { label: 'Org Board', href: '/admin/org-board' },
+    { label: 'Organization Board', href: '/admin/org-board' },
     ...ancestors
       .filter((a) => a.kind === 'DIVISION' || a.kind === 'DEPARTMENT')
       .map((a) => ({ label: a.label, href: `/admin/org-board/nodes/${a.id}` })),

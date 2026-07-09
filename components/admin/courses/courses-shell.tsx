@@ -30,6 +30,7 @@ import type {
   CourseSortField,
   SortDirection,
 } from '@/lib/services/course-service'
+import type { CourseAudience } from '@prisma/client'
 
 export const DEFAULT_QUERY_STATE: CoursesQueryState = {
   search: '',
@@ -44,10 +45,42 @@ const PAGE_SIZE = 10
 
 interface CoursesShellProps {
   initialData: CoursesData
+  /** Audience lens — locks the list to this set. Undefined = show
+   *  every course regardless of audience (legacy behaviour). */
+  audiences?: CourseAudience[]
+  /** Override page title (defaults to "Courses"). */
+  pageTitle?: string
+  /** Override page subtitle. Defaults to "Manage N courses…". */
+  pageDescription?: string
+  /** Copy on the primary create button (defaults to "Create course"). */
+  createLabel?: string
+  /** Where the create button navigates (defaults to
+   *  /admin/courses/new). Trainings pass an audience query so the
+   *  form defaults to INTERNAL. */
+  createHref?: string
+  /** Copy for the empty-state title (defaults to "No courses yet"). */
+  emptyTitle?: string
+  emptyDescription?: string
+  /** Singular / plural noun used in stats + empty copy. */
+  noun?: { singular: string; plural: string }
 }
 
-export function CoursesShell({ initialData }: CoursesShellProps) {
-  const [query, setQuery] = useState<CoursesQueryState>(DEFAULT_QUERY_STATE)
+export function CoursesShell({
+  initialData,
+  audiences,
+  pageTitle,
+  pageDescription,
+  createLabel,
+  createHref,
+  emptyTitle,
+  emptyDescription,
+  noun,
+}: CoursesShellProps) {
+  const lensDefaults: CoursesQueryState = {
+    ...DEFAULT_QUERY_STATE,
+    audiences: audiences ?? null,
+  }
+  const [query, setQuery] = useState<CoursesQueryState>(lensDefaults)
   const [data, setData] = useState<CoursesData>(initialData)
   const [isPending, startTransition] = useTransition()
   const [refetchKey, setRefetchKey] = useState(0)
@@ -81,8 +114,10 @@ export function CoursesShell({ initialData }: CoursesShellProps) {
   }, [])
 
   const clearFilters = useCallback(() => {
-    setQuery(DEFAULT_QUERY_STATE)
-  }, [])
+    // Preserve the audience lens on Clear-all so the page doesn't
+    // silently escape into a different population.
+    setQuery({ ...DEFAULT_QUERY_STATE, audiences: audiences ?? null })
+  }, [audiences])
 
   const sorting: SortingState = useMemo(
     () => [{ id: query.sort, desc: query.direction === 'desc' }],
@@ -115,14 +150,19 @@ export function CoursesShell({ initialData }: CoursesShellProps) {
   return (
     <div className="space-y-6" data-pending={isPending}>
       <PageHeader
-        title="Courses"
-        description={`Manage ${data.counts.all.toLocaleString()} ${
-          data.counts.all === 1 ? 'course' : 'courses'
-        } across your platform.`}
+        title={pageTitle ?? 'Courses'}
+        description={
+          pageDescription ??
+          `Manage ${data.counts.all.toLocaleString()} ${
+            data.counts.all === 1
+              ? (noun?.singular ?? 'course')
+              : (noun?.plural ?? 'courses')
+          } across your platform.`
+        }
         actions={
-          <Button render={<Link href="/admin/courses/new" />}>
+          <Button render={<Link href={createHref ?? '/admin/courses/new'} />}>
             <Plus className="size-4" />
-            Create course
+            {createLabel ?? 'Create course'}
           </Button>
         }
       />
@@ -146,23 +186,24 @@ export function CoursesShell({ initialData }: CoursesShellProps) {
             icon={GraduationCap}
             title={
               hasActiveFilters
-                ? 'No courses match these filters'
+                ? `No ${noun?.plural ?? 'courses'} match these filters`
                 : noCoursesAtAll
-                  ? 'No courses yet'
+                  ? (emptyTitle ?? `No ${noun?.plural ?? 'courses'} yet`)
                   : 'No results'
             }
             description={
               hasActiveFilters
                 ? 'Try widening your search or clearing filters.'
                 : noCoursesAtAll
-                  ? 'Create your first course to get started.'
-                  : 'Courses will appear here when they match these filters.'
+                  ? (emptyDescription ??
+                    `Create your first ${noun?.singular ?? 'course'} to get started.`)
+                  : `${(noun?.plural ?? 'Courses').charAt(0).toUpperCase() + (noun?.plural ?? 'Courses').slice(1)} will appear here when they match these filters.`
             }
           >
             {noCoursesAtAll && !hasActiveFilters ? (
-              <Button render={<Link href="/admin/courses/new" />}>
+              <Button render={<Link href={createHref ?? '/admin/courses/new'} />}>
                 <Plus className="size-4" />
-                Create course
+                {createLabel ?? 'Create course'}
               </Button>
             ) : null}
           </EmptyState>

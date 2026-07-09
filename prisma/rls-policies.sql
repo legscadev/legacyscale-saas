@@ -47,6 +47,9 @@ ALTER TABLE lesson_progress    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notes              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE certificate_issuances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE nudges                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stat_divisions        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stat_metrics          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stat_data_points      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE announcements      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE announcement_reads ENABLE ROW LEVEL SECURITY;
 
@@ -332,6 +335,83 @@ CREATE POLICY "certificate_issuances_select_own"
 
 CREATE POLICY "certificate_issuances_admin_all"
   ON certificate_issuances FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+-- ============================================================
+-- STATISTICS TRACKER  (admin config; assigned staff + admins write)
+-- ============================================================
+-- The stats tracker is an admin-facing tool. Any signed-in staff
+-- (ADMIN + TEAM) can read the whole board. Only admins configure
+-- divisions and metrics. Data points can be added by the metric's
+-- assigned user OR by an admin. All writes still flow through the
+-- server layer (service-role client), but we scope the policies
+-- so accidental client-role queries stay safe.
+DROP POLICY IF EXISTS "stat_divisions_read"      ON stat_divisions;
+DROP POLICY IF EXISTS "stat_divisions_admin_all" ON stat_divisions;
+
+CREATE POLICY "stat_divisions_read"
+  ON stat_divisions FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "stat_divisions_admin_all"
+  ON stat_divisions FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+DROP POLICY IF EXISTS "stat_metrics_read"      ON stat_metrics;
+DROP POLICY IF EXISTS "stat_metrics_admin_all" ON stat_metrics;
+
+CREATE POLICY "stat_metrics_read"
+  ON stat_metrics FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "stat_metrics_admin_all"
+  ON stat_metrics FOR ALL
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+
+DROP POLICY IF EXISTS "stat_data_points_read"              ON stat_data_points;
+DROP POLICY IF EXISTS "stat_data_points_assignee_write"    ON stat_data_points;
+DROP POLICY IF EXISTS "stat_data_points_assignee_update"   ON stat_data_points;
+DROP POLICY IF EXISTS "stat_data_points_admin_all"         ON stat_data_points;
+
+CREATE POLICY "stat_data_points_read"
+  ON stat_data_points FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "stat_data_points_assignee_write"
+  ON stat_data_points FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM stat_metrics m
+      WHERE m.id = metric_id
+        AND m.assigned_to_id = public.current_user_id()
+    )
+  );
+
+CREATE POLICY "stat_data_points_assignee_update"
+  ON stat_data_points FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM stat_metrics m
+      WHERE m.id = metric_id
+        AND m.assigned_to_id = public.current_user_id()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM stat_metrics m
+      WHERE m.id = metric_id
+        AND m.assigned_to_id = public.current_user_id()
+    )
+  );
+
+CREATE POLICY "stat_data_points_admin_all"
+  ON stat_data_points FOR ALL
   USING (is_admin())
   WITH CHECK (is_admin());
 
