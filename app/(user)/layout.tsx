@@ -6,6 +6,11 @@ import { NudgeBanner } from '@/components/member/nudge-banner'
 import { requireActiveUser } from '@/lib/auth'
 import { announcementService } from '@/lib/services/announcement-service'
 import { listActiveNudgesForUser } from '@/lib/services/nudge-service'
+import {
+  getActiveCompany,
+  listCompaniesForUser,
+} from '@/lib/tenancy/active-company'
+import { isTenancyEnabled } from '@/lib/tenancy/feature-flag'
 
 export default async function UserLayout({
   children,
@@ -34,6 +39,30 @@ export default async function UserLayout({
     console.error('listActiveNudgesForUser failed:', err)
   }
 
+  // Tenancy props — undefined when the flag is off.
+  let tenancy:
+    | {
+        activeCompanyId: string | null
+        companies: { id: string; name: string; isAgency: boolean }[]
+        currentUserIsSuperAdmin: boolean
+      }
+    | undefined
+  if (isTenancyEnabled()) {
+    const [active, companies] = await Promise.all([
+      getActiveCompany(),
+      listCompaniesForUser(user),
+    ])
+    tenancy = {
+      activeCompanyId: active?.id ?? null,
+      companies: companies.map((c) => ({
+        id: c.id,
+        name: c.name,
+        isAgency: c.isAgency,
+      })),
+      currentUserIsSuperAdmin: user.isSuperAdmin,
+    }
+  }
+
   return (
     <AppShell
       role="member"
@@ -45,6 +74,7 @@ export default async function UserLayout({
         avatarUrl: user.avatarUrl,
         role: user.role,
       }}
+      tenancy={tenancy}
     >
       <div className="mx-auto w-full max-w-7xl space-y-4">
         {nudges.length > 0 ? <NudgeBanner nudges={nudges} /> : null}

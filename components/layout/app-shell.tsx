@@ -7,11 +7,18 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { adminNav, memberNav } from '@/lib/config/navigation'
 import { BrandMark } from './brand-mark'
+import { CompanySwitcher } from './company-switcher'
 import { PageTransition } from './page-transition'
 import { SidebarNav } from './sidebar-nav'
 import { SidebarProvider, useSidebar } from './sidebar-context'
 import { TopBar } from './top-bar'
 import { UserMenu, type ShellUser } from './user-menu'
+
+interface AppShellCompanyOption {
+  id: string
+  name: string
+  isAgency: boolean
+}
 
 interface AppShellProps {
   role: 'admin' | 'member'
@@ -21,6 +28,15 @@ interface AppShellProps {
   /** Count of published announcements the current user hasn't
    *  opened — surfaces as a numeric pill on the Bell. */
   unreadAnnouncements?: number
+  /** Optional multi-tenancy context. When present, the sidebar
+   *  renders a company switcher above the nav. Undefined means the
+   *  tenancy feature flag is off — the sidebar looks exactly as it
+   *  did pre-refactor. */
+  tenancy?: {
+    activeCompanyId: string | null
+    companies: AppShellCompanyOption[]
+    currentUserIsSuperAdmin: boolean
+  }
   children: React.ReactNode
 }
 
@@ -29,6 +45,7 @@ export function AppShell({
   user,
   defaultCollapsed = false,
   unreadAnnouncements = 0,
+  tenancy,
   children,
 }: AppShellProps) {
   return (
@@ -37,6 +54,7 @@ export function AppShell({
         role={role}
         user={user}
         unreadAnnouncements={unreadAnnouncements}
+        tenancy={tenancy}
       >
         {children}
       </AppShellInner>
@@ -48,6 +66,7 @@ function AppShellInner({
   role,
   user,
   unreadAnnouncements = 0,
+  tenancy,
   children,
 }: Omit<AppShellProps, 'defaultCollapsed'>) {
   const { collapsed } = useSidebar()
@@ -86,6 +105,21 @@ function AppShellInner({
             <BrandMark context={context} compact={collapsed} />
           </Link>
         </div>
+        {tenancy ? (
+          <div
+            className={cn(
+              'border-t border-white/[0.06]',
+              collapsed ? 'flex justify-center p-2' : 'px-3 py-2',
+            )}
+          >
+            <CompanySwitcher
+              activeCompanyId={tenancy.activeCompanyId}
+              companies={tenancy.companies}
+              currentUserIsSuperAdmin={tenancy.currentUserIsSuperAdmin}
+              collapsed={collapsed}
+            />
+          </div>
+        ) : null}
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-3">
           <SidebarNav sections={sections} collapsed={collapsed} />
         </div>
@@ -131,6 +165,15 @@ function AppShellInner({
                 <X />
               </Button>
             </div>
+            {tenancy ? (
+              <div className="border-t border-white/[0.06] px-3 py-2">
+                <CompanySwitcher
+                  activeCompanyId={tenancy.activeCompanyId}
+                  companies={tenancy.companies}
+                  currentUserIsSuperAdmin={tenancy.currentUserIsSuperAdmin}
+                />
+              </div>
+            ) : null}
             <div className="flex-1 overflow-y-auto py-3">
               <SidebarNav
                 sections={sections}

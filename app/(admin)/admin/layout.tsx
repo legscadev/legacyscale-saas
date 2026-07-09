@@ -4,6 +4,11 @@ import { AppShell } from '@/components/layout'
 import { SIDEBAR_COOKIE } from '@/components/layout/sidebar-cookie'
 import { requireAdmin } from '@/lib/auth'
 import { announcementService } from '@/lib/services/announcement-service'
+import {
+  getActiveCompany,
+  listCompaniesForUser,
+} from '@/lib/tenancy/active-company'
+import { isTenancyEnabled } from '@/lib/tenancy/feature-flag'
 
 export default async function AdminLayout({
   children,
@@ -24,6 +29,31 @@ export default async function AdminLayout({
     console.error('getUnreadCount (admin layout) failed:', err)
   }
 
+  // Tenancy props — undefined when the flag is off so the sidebar
+  // renders exactly as it did pre-refactor.
+  let tenancy:
+    | {
+        activeCompanyId: string | null
+        companies: { id: string; name: string; isAgency: boolean }[]
+        currentUserIsSuperAdmin: boolean
+      }
+    | undefined
+  if (isTenancyEnabled()) {
+    const [active, companies] = await Promise.all([
+      getActiveCompany(),
+      listCompaniesForUser(user),
+    ])
+    tenancy = {
+      activeCompanyId: active?.id ?? null,
+      companies: companies.map((c) => ({
+        id: c.id,
+        name: c.name,
+        isAgency: c.isAgency,
+      })),
+      currentUserIsSuperAdmin: user.isSuperAdmin,
+    }
+  }
+
   return (
     <AppShell
       role="admin"
@@ -35,6 +65,7 @@ export default async function AdminLayout({
         avatarUrl: user.avatarUrl,
         role: user.role,
       }}
+      tenancy={tenancy}
     >
       {children}
     </AppShell>

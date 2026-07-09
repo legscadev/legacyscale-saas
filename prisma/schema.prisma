@@ -22,6 +22,21 @@ enum Role {
   MEMBER
 }
 
+// ============================================
+// MULTI-TENANCY (Phase 1 — see docs/multi-tenancy.md)
+// ============================================
+//
+// Role a user carries inside a specific Company. Distinct from
+// User.role (which is being phased out — will be dropped in Phase 7).
+// Per-company scope: one user can be OWNER in Company A and MEMBER
+// in Company B.
+enum CompanyRole {
+  OWNER   // Full control of the company; can invite ADMINs, change branding, delete the company
+  ADMIN   // Everything except deleting the company + swapping the owner
+  TEAM    // Internal team member — same as today's TEAM role
+  MEMBER  // Student — same as today's MEMBER role
+}
+
 enum CourseStatus {
   DRAFT
   PUBLISHED
@@ -168,7 +183,14 @@ model User {
   email                   String    @unique
   name                    String?
   avatarUrl               String?   @map("avatar_url")
+  /// Legacy global role. Being phased out in favour of
+  /// CompanyMembership.role once every code path reads the active
+  /// company's membership. Kept for Phase 1 so nothing else breaks.
   role                    Role      @default(MEMBER)
+  /// Global super-admin flag. Grants the ability to enter any
+  /// Company as a super-admin (Keanu at the agency level).
+  /// Independent of memberships — the master key.
+  isSuperAdmin            Boolean   @default(false) @map("is_super_admin")
   isActive                Boolean   @default(true) @map("is_active")
   emailVerified           Boolean   @default(false) @map("email_verified")
   lastLoginAt             DateTime? @map("last_login_at")
@@ -223,11 +245,69 @@ model User {
   employee              Employee?              @relation("EmployeeUser")
   orgBoardRevisions     OrgBoardRevision[]     @relation("OrgBoardRevisionAuthor")
   orgAuditLogs          OrgNodeAuditLog[]      @relation("OrgAuditActor")
+  companyMemberships    CompanyMembership[]
 
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
+  @@index([isSuperAdmin])
   @@map("users")
+}
+
+// ============================================
+// COMPANIES  (multi-tenancy — see docs/multi-tenancy.md)
+// ============================================
+
+/// A tenant. Every company sees only its own courses, members,
+/// stats, certificates, etc. Users can belong to many companies
+/// via CompanyMembership.
+///
+/// The seed row on migration is "Kondense" — all existing data is
+/// backfilled to belong to it, so pre-tenancy accounts land
+/// exactly where they were before.
+model Company {
+  id           String    @id @default(uuid())
+  slug         String    @unique
+  name         String
+  /// True only for the Kondense parent row today. Not load-bearing
+  /// for auth (super-admin is a global flag on User); reserved for
+  /// future cross-tenant analytics anchoring.
+  isAgency     Boolean   @default(false) @map("is_agency")
+  /// White-label config: logo, favicon, primary + accent colors,
+  /// product name shown in the sidebar, email `from` name, etc.
+  /// Shape validated at the application layer (Phase 5).
+  brand        Json?
+  /// Custom domain e.g. "stephenagency.com". Nullable while a
+  /// tenant is still on a subdomain. Verified + issued via Vercel
+  /// in Phase 6.
+  customDomain String?   @unique @map("custom_domain")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  memberships CompanyMembership[]
+
+  @@index([deletedAt])
+  @@map("companies")
+}
+
+/// Join row between User and Company. Carries the user's role
+/// inside that specific company. One user can be OWNER in A,
+/// MEMBER in B, ADMIN in C.
+model CompanyMembership {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  companyId   String      @map("company_id")
+  role        CompanyRole @default(MEMBER)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId, role])
+  @@map("company_memberships")
 }
 
 // ============================================
