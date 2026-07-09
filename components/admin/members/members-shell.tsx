@@ -221,7 +221,16 @@ export function MembersShell({
         }
       />
 
-      <MembersMetrics counts={data.counts} />
+      <MembersMetrics
+        counts={data.counts}
+        lens={
+          lockedRoles?.every((r) => r === 'ADMIN' || r === 'TEAM')
+            ? 'team'
+            : defaultRole === 'MEMBER'
+              ? 'members'
+              : 'mixed'
+        }
+      />
 
       <div className="space-y-4">
         <MembersToolbar

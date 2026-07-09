@@ -118,20 +118,30 @@ async function listMembers(options: ListMembersOptions) {
   }
 }
 
-/** Returns counts used by the KPI cards in one round trip. */
-async function getCounts() {
+/** Returns counts used by the KPI cards in one round trip. When
+ *  `roles` is provided (e.g. Team page passes [ADMIN, TEAM]) the
+ *  totals scope to just that population so the strip matches the
+ *  table under it. Undefined = every user. */
+async function getCounts(roles?: Role[]) {
+  const scopedActive: Prisma.UserWhereInput = { deletedAt: null }
+  const scopedArchived: Prisma.UserWhereInput = { deletedAt: { not: null } }
+  if (roles && roles.length > 0) {
+    scopedActive.role = { in: roles }
+    scopedArchived.role = { in: roles }
+  }
   const [groups, archived] = await Promise.all([
     prisma.user.groupBy({
       by: ['role', 'isActive'],
-      where: { deletedAt: null },
+      where: scopedActive,
       _count: { _all: true },
     }),
-    prisma.user.count({ where: { deletedAt: { not: null } } }),
+    prisma.user.count({ where: scopedArchived }),
   ])
 
   const totals = {
     all: 0,
     admins: 0,
+    team: 0,
     members: 0,
     active: 0,
     suspended: 0,
@@ -141,6 +151,7 @@ async function getCounts() {
     const n = g._count._all
     totals.all += n
     if (g.role === 'ADMIN') totals.admins += n
+    if (g.role === 'TEAM') totals.team += n
     if (g.role === 'MEMBER') totals.members += n
     if (g.isActive) totals.active += n
     else totals.suspended += n

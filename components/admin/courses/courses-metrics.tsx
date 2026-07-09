@@ -5,12 +5,41 @@ import type { CourseCounts } from '@/lib/services/course-service'
 
 interface CoursesMetricsProps {
   counts: CourseCounts
+  /** Noun used in the labels ("courses" vs "trainings"). Falls back
+   *  to "course/courses" so /admin/courses is unchanged. */
+  noun?: { singular: string; plural: string }
+  /** Which surface the strip is being rendered on. Drives the
+   *  description copy so "Published" reads correctly:
+   *    - members  → "Live for members"
+   *    - internal → "Live for the internal team"
+   *    - mixed    → "Live"
+   *  Falls back to the previous mixed copy. */
+  lens?: 'members' | 'internal' | 'mixed'
 }
 
-export function CoursesMetrics({ counts }: CoursesMetricsProps) {
+export function CoursesMetrics({
+  counts,
+  noun,
+  lens = 'members',
+}: CoursesMetricsProps) {
+  const plural = noun?.plural ?? 'courses'
+  const totalLabel = `Total ${plural}`
+  const publishedDesc =
+    lens === 'internal'
+      ? 'Live for the internal team'
+      : lens === 'members'
+        ? 'Live for members'
+        : 'Live'
+  const archivedDesc =
+    lens === 'internal'
+      ? 'Hidden from the internal team'
+      : lens === 'members'
+        ? 'Hidden from members'
+        : 'Hidden'
+
   const cells: StatStripCell[] = [
     {
-      label: 'Total courses',
+      label: totalLabel.charAt(0).toUpperCase() + totalLabel.slice(1),
       value: counts.all.toLocaleString(),
       description: 'Across all statuses',
       icon: GraduationCap,
@@ -18,7 +47,7 @@ export function CoursesMetrics({ counts }: CoursesMetricsProps) {
     {
       label: 'Published',
       value: counts.published.toLocaleString(),
-      description: 'Live for members',
+      description: publishedDesc,
       icon: Send,
     },
     {
@@ -30,7 +59,7 @@ export function CoursesMetrics({ counts }: CoursesMetricsProps) {
     {
       label: 'Archived',
       value: counts.archived.toLocaleString(),
-      description: 'Hidden from members',
+      description: archivedDesc,
       icon: Archive,
     },
   ]

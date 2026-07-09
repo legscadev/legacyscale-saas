@@ -40,8 +40,14 @@ export async function fetchMembers(
 ): Promise<MembersData> {
   await requireAdmin()
 
+  // Scope the KPI strip to the same population the table shows.
+  // Single-role picks (from the toolbar) narrow further; the
+  // locked-roles set (Team page) wins if the toolbar isn't in play.
+  const countRoles: Role[] | undefined = state.role
+    ? [state.role]
+    : state.roles ?? undefined
   const [counts, result] = await Promise.all([
-    memberService.counts(),
+    memberService.counts(countRoles),
     memberService.list({
       search: state.search || undefined,
       role: state.role,

@@ -167,7 +167,17 @@ export function CoursesShell({
         }
       />
 
-      <CoursesMetrics counts={data.counts} />
+      <CoursesMetrics
+        counts={data.counts}
+        noun={noun}
+        lens={
+          audiences?.includes('INTERNAL') && !audiences?.includes('MEMBERS')
+            ? 'internal'
+            : audiences?.includes('MEMBERS') && !audiences?.includes('INTERNAL')
+              ? 'members'
+              : 'mixed'
+        }
+      />
 
       <div className="space-y-4">
         <CoursesToolbar
