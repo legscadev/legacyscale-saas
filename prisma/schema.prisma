@@ -325,7 +325,7 @@ model AppSetting {
   updatedById String?  @map("updated_by_id")
   updatedBy   User?    @relation("AppSettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
 
-  companyId String? @map("company_id")
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@map("app_settings")
 }
@@ -351,7 +351,7 @@ model Invite {
   // dead and the "Invite invalid" screen takes over.
   usedAt        DateTime? @map("used_at")
   createdAt     DateTime  @default(now()) @map("created_at")
-  companyId     String?   @map("company_id")
+  companyId     String    @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([userId])
   @@index([token])
@@ -427,7 +427,7 @@ model Course {
   categories           CourseCategory[]
   certificateIssuances CertificateIssuance[]
   nudges               Nudge[]
-  companyId            String?               @map("company_id")
+  companyId            String                @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([status])
   @@index([deletedAt])
@@ -450,7 +450,7 @@ model Category {
   courses CourseCategory[]
   members User[]
 
-  companyId String? @map("company_id")
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@map("categories")
 }
@@ -465,7 +465,7 @@ model CourseCategory {
 
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   category  Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  companyId String?  @map("company_id")
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@id([courseId, categoryId])
   @@index([categoryId])
@@ -490,7 +490,7 @@ model Module {
   course               Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
   chapters             Chapter[]
   certificateIssuances CertificateIssuance[]
-  companyId            String?               @map("company_id")
+  companyId            String                @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([courseId, orderIndex])
   @@index([deletedAt])
@@ -516,7 +516,7 @@ model Chapter {
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   module    Module?  @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   lessons   Lesson[]
-  companyId String?  @map("company_id")
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([courseId, orderIndex])
   @@index([moduleId, orderIndex])
@@ -553,7 +553,7 @@ model Lesson {
   quizAttempts   QuizAttempt[]
   notes          Note[]
   resources      LessonResource[]
-  companyId      String?          @map("company_id")
+  companyId      String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([chapterId, orderIndex])
   @@index([type])
@@ -575,8 +575,8 @@ model LessonResource {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  lesson    Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  companyId String? @map("company_id")
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([lessonId, createdAt])
   @@map("lesson_resources")
@@ -599,8 +599,8 @@ model QuizQuestion {
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
   // Relations
-  lesson    Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  companyId String? @map("company_id")
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([lessonId, orderIndex])
   @@map("quiz_questions")
@@ -617,9 +617,9 @@ model QuizAttempt {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson    Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  companyId String? @map("company_id")
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([userId, lessonId, createdAt])
   @@map("quiz_attempts")
@@ -644,9 +644,9 @@ model Enrollment {
   revokedReason   String?          @map("revoked_reason")
 
   // Relations
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course    Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  companyId String? @map("company_id")
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, courseId])
   @@index([userId, status])
@@ -668,9 +668,9 @@ model LessonProgress {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson    Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  companyId String? @map("company_id")
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, lessonId])
   @@index([userId, completed])
@@ -710,12 +710,12 @@ model CertificateIssuance {
   revokedById   String?   @map("revoked_by_id")
   revokedReason String?   @map("revoked_reason")
 
-  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module           Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  course           Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  manuallyIssuedBy User?   @relation("CertsManuallyIssued", fields: [manuallyIssuedById], references: [id], onDelete: SetNull)
-  revokedBy        User?   @relation("CertsRevoked", fields: [revokedById], references: [id], onDelete: SetNull)
-  companyId        String? @map("company_id")
+  user             User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module           Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  course           Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  manuallyIssuedBy User?  @relation("CertsManuallyIssued", fields: [manuallyIssuedById], references: [id], onDelete: SetNull)
+  revokedBy        User?  @relation("CertsRevoked", fields: [revokedById], references: [id], onDelete: SetNull)
+  companyId        String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, moduleId])
   @@index([userId, issuedAt])
@@ -753,7 +753,7 @@ model Nudge {
   user      User    @relation("NudgeRecipient", fields: [userId], references: [id], onDelete: Cascade)
   course    Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
   createdBy User    @relation("NudgeAuthor", fields: [createdById], references: [id], onDelete: Restrict)
-  companyId String? @map("company_id")
+  companyId String  @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([userId, dismissedAt])
   @@index([createdAt])
@@ -773,9 +773,9 @@ model Note {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson    Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  companyId String? @map("company_id")
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, lessonId])
   @@map("notes")
@@ -820,7 +820,7 @@ model Announcement {
   reactions     AnnouncementReaction[]
   auditLogs     AnnouncementAuditLog[]
   createdByUser User?                  @relation("AnnouncementAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
-  companyId     String?                @map("company_id")
+  companyId     String                 @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([status])
   @@index([deletedAt])
@@ -840,7 +840,7 @@ model AnnouncementRead {
   // Relations
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
-  companyId    String?      @map("company_id")
+  companyId    String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, announcementId])
   @@index([userId])
@@ -862,7 +862,7 @@ model AnnouncementComment {
   // Relations
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyId    String?      @map("company_id")
+  companyId    String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([announcementId, createdAt])
   @@index([userId])
@@ -886,7 +886,7 @@ model AnnouncementReaction {
   // Relations
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyId    String?      @map("company_id")
+  companyId    String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([announcementId, userId, emoji])
   @@index([announcementId])
@@ -914,7 +914,7 @@ model AnnouncementAuditLog {
   // Relations
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  companyId    String?      @map("company_id")
+  companyId    String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([announcementId, createdAt])
   @@index([userId])
@@ -989,7 +989,7 @@ model Employee {
   checklistStatuses   EmployeeChecklistItemStatus[]
   orgAssignments      OrgNode[]                     @relation("OrgNodeEmployee")
   positionAssignments PositionAssignment[]          @relation("EmployeePositionAssignments")
-  companyId           String?                       @map("company_id")
+  companyId           String                        @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([status])
   @@index([roleTitle])
@@ -1014,7 +1014,7 @@ model OnboardingChecklistItem {
 
   statuses EmployeeChecklistItemStatus[]
 
-  companyId String? @map("company_id")
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@map("onboarding_checklist_items")
 }
@@ -1034,7 +1034,7 @@ model EmployeeChecklistItemStatus {
 
   employee  Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   item      OnboardingChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  companyId String?                 @map("company_id")
+  companyId String                  @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([employeeId, itemId])
   @@index([employeeId])
@@ -1066,7 +1066,7 @@ model OrgBoardRevision {
 
   nodes     OrgNode[]
   auditLogs OrgNodeAuditLog[]
-  companyId String?           @map("company_id")
+  companyId String            @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([isCurrent])
   @@map("org_board_revisions")
@@ -1126,7 +1126,7 @@ model OrgNode {
   positionDetail PositionDetail?
   assignments    PositionAssignment[]
   auditLogs      OrgNodeAuditLog[]
-  companyId      String?              @map("company_id")
+  companyId      String               @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([revisionId])
   @@index([parentId])
@@ -1165,7 +1165,7 @@ model PositionDetail {
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
   node      OrgNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  companyId String? @map("company_id")
+  companyId String  @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([code])
   @@map("position_details")
@@ -1188,7 +1188,7 @@ model PositionAssignment {
 
   node      OrgNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   employee  Employee @relation("EmployeePositionAssignments", fields: [employeeId], references: [id], onDelete: Cascade)
-  companyId String?  @map("company_id")
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([nodeId, endedAt])
   @@index([employeeId, endedAt])
@@ -1221,7 +1221,7 @@ model OrgNodeAuditLog {
   revision  OrgBoardRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
   node      OrgNode?         @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   actor     User?            @relation("OrgAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
-  companyId String?          @map("company_id")
+  companyId String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([revisionId, createdAt])
   @@index([nodeId, createdAt])
@@ -1257,7 +1257,7 @@ model StatDivision {
   deletedAt   DateTime? @map("deleted_at")
 
   metrics   StatMetric[]
-  companyId String?      @map("company_id")
+  companyId String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([orderIndex])
   @@index([deletedAt])
@@ -1288,7 +1288,7 @@ model StatMetric {
   division   StatDivision    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   assignedTo User?           @relation("StatMetricAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   dataPoints StatDataPoint[]
-  companyId  String?         @map("company_id")
+  companyId  String          @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([divisionId, orderIndex])
   @@index([assignedToId])
@@ -1312,7 +1312,7 @@ model StatDataPoint {
 
   metric    StatMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
   createdBy User?      @relation("StatDataPointAuthor", fields: [createdById], references: [id], onDelete: SetNull)
-  companyId String?    @map("company_id")
+  companyId String     @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([metricId, recordedAt])
   @@index([metricId, recordedAt])
