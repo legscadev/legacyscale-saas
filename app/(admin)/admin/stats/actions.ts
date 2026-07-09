@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/auth/get-user'
 import { requireActiveUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { memberTenantScope } from '@/lib/tenancy/request-company'
 import {
   archiveDivision,
   archiveMetric,
@@ -166,6 +167,7 @@ export async function listAssigneesForStats(): Promise<AssigneePickerOption[]> {
       isActive: true,
       deletedAt: null,
       role: { in: ['ADMIN', 'TEAM'] },
+      ...(await memberTenantScope()),
     },
     orderBy: [{ name: 'asc' }, { email: 'asc' }],
     select: { id: true, name: true, email: true, role: true },

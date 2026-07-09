@@ -1,20 +1,7 @@
 import type { Prisma, Role } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { getRequestCompanyId } from '@/lib/tenancy/request-company'
-
-/**
- * Users are global (not tenant-scoped), so the extension can't
- * fill in a companyId filter for us. Member views instead ask
- * "which users hold a membership in the active company?" — that's
- * this helper. Returns undefined when the flag is off so callers
- * degrade to the pre-refactor path.
- */
-async function memberTenantFilter(): Promise<Prisma.UserWhereInput | undefined> {
-  const companyId = await getRequestCompanyId()
-  if (!companyId) return undefined
-  return { companyMemberships: { some: { companyId } } }
-}
+import { memberTenantScope } from '@/lib/tenancy/request-company'
 
 export type MemberStatusFilter = 'active' | 'suspended' | 'archived'
 export type MemberSortField = 'name' | 'createdAt' | 'lastLoginAt' | 'lastActiveAt'
@@ -87,7 +74,7 @@ function buildOrderBy(
 
 async function listMembers(options: ListMembersOptions) {
   const { page, limit } = options
-  const tenantFilter = await memberTenantFilter()
+  const tenantFilter = await memberTenantScope()
   const where = buildWhere(options, tenantFilter)
   const orderBy = buildOrderBy(options)
   const skip = (page - 1) * limit
@@ -146,7 +133,7 @@ async function listMembers(options: ListMembersOptions) {
  *  totals scope to just that population so the strip matches the
  *  table under it. Undefined = every user. */
 async function getCounts(roles?: Role[]) {
-  const tenantFilter = await memberTenantFilter()
+  const tenantFilter = await memberTenantScope()
   const scopedActive: Prisma.UserWhereInput = {
     deletedAt: null,
     ...tenantFilter,

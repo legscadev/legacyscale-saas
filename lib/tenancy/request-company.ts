@@ -52,3 +52,22 @@ export const getRequestCompanyId = cache(async (): Promise<string | null> => {
 export function runAsSuperAdmin<T>(fn: () => Promise<T>): Promise<T> {
   return bypassStore.run({ superAdmin: true }, fn)
 }
+
+/**
+ * Users are global (not tenant-scoped), so the Prisma extension
+ * can't fill in a companyId filter. Any list-style user query in
+ * an admin surface asks "which users hold a membership in the
+ * active company?" — that's this helper. Returns undefined when
+ * the flag is off so callers degrade to the pre-refactor path.
+ *
+ * Callers spread this into their `where` clause:
+ *   const tenantFilter = await memberTenantScope()
+ *   prisma.user.findMany({ where: { ...tenantFilter, ... } })
+ */
+export async function memberTenantScope(): Promise<
+  { companyMemberships: { some: { companyId: string } } } | undefined
+> {
+  const companyId = await getRequestCompanyId()
+  if (!companyId) return undefined
+  return { companyMemberships: { some: { companyId } } }
+}

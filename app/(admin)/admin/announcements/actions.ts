@@ -17,6 +17,7 @@ import {
   createAnnouncementSchema,
   updateAnnouncementSchema,
 } from '@/lib/validations/announcement'
+import { memberTenantScope } from '@/lib/tenancy/request-company'
 import { htmlToPlainText } from '@/lib/utils'
 import { prisma } from '@/lib/prisma'
 import { sendAnnouncementEmail } from '@/lib/resend'
@@ -66,6 +67,7 @@ async function blastAnnouncementEmail(announcement: {
         isActive: true,
         deletedAt: null,
         notifyAnnouncementEmail: true,
+        ...(await memberTenantScope()),
       },
       select: { email: true },
     })
