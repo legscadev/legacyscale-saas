@@ -252,19 +252,26 @@ export function getMemberColumns(
       ),
     },
     {
-      accessorKey: 'lastLoginAt',
+      accessorKey: 'lastActiveAt',
       meta: { label: 'Last active' },
       header: ({ column }) => (
         <SortHeader column={column}>Last active</SortHeader>
       ),
-      cell: ({ row }) => (
-        <span
-          className="text-sm text-muted-foreground"
-          suppressHydrationWarning
-        >
-          {formatRelative(row.original.lastLoginAt)}
-        </span>
-      ),
+      cell: ({ row }) => {
+        // Prefer the continuous-activity ping; fall back to the
+        // last explicit login for pre-feature rows that haven't
+        // been pinged yet.
+        const ts =
+          row.original.lastActiveAt ?? row.original.lastLoginAt
+        return (
+          <span
+            className="text-sm text-muted-foreground"
+            suppressHydrationWarning
+          >
+            {formatRelative(ts)}
+          </span>
+        )
+      },
     },
     {
       id: 'activity',

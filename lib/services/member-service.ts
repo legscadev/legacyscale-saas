@@ -3,7 +3,7 @@ import type { Prisma, Role } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 export type MemberStatusFilter = 'active' | 'suspended' | 'archived'
-export type MemberSortField = 'name' | 'createdAt' | 'lastLoginAt'
+export type MemberSortField = 'name' | 'createdAt' | 'lastLoginAt' | 'lastActiveAt'
 export type SortDirection = 'asc' | 'desc'
 
 interface ListMembersOptions {
@@ -59,6 +59,7 @@ function buildOrderBy(
   const { sort = 'createdAt', direction = 'desc' } = opts
   if (sort === 'name') return { name: direction }
   if (sort === 'lastLoginAt') return { lastLoginAt: direction }
+  if (sort === 'lastActiveAt') return { lastActiveAt: direction }
   return { createdAt: direction }
 }
 
@@ -83,6 +84,7 @@ async function listMembers(options: ListMembersOptions) {
         isActive: true,
         createdAt: true,
         lastLoginAt: true,
+        lastActiveAt: true,
         deletedAt: true,
         categoryId: true,
         category: { select: { id: true, name: true } },
