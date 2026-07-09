@@ -5,6 +5,8 @@ import {
   ADMIN_PASSWORD,
   MEMBER_EMAIL,
   MEMBER_PASSWORD,
+  TENANT_A_ADMIN_EMAIL,
+  TENANT_A_ADMIN_PASSWORD,
   signIn,
 } from './helpers'
 
@@ -18,6 +20,7 @@ import {
 
 export const ADMIN_STORAGE = '.auth/admin.json'
 export const MEMBER_STORAGE = '.auth/member.json'
+export const TENANT_A_ADMIN_STORAGE = '.auth/tenant-a-admin.json'
 
 setup('authenticate as admin', async ({ page }) => {
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD)
@@ -27,4 +30,9 @@ setup('authenticate as admin', async ({ page }) => {
 setup('authenticate as member', async ({ page }) => {
   await signIn(page, MEMBER_EMAIL, MEMBER_PASSWORD)
   await page.context().storageState({ path: MEMBER_STORAGE })
+})
+
+setup('authenticate as tenant-a admin', async ({ page }) => {
+  await signIn(page, TENANT_A_ADMIN_EMAIL, TENANT_A_ADMIN_PASSWORD)
+  await page.context().storageState({ path: TENANT_A_ADMIN_STORAGE })
 })
