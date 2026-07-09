@@ -29,7 +29,7 @@ interface TopBarProps {
   onMenuClick: () => void
   user: ShellUser
   profileHref: string
-  role: 'admin' | 'member'
+  role: 'admin' | 'member' | 'super'
   /** Number of published announcements the current user hasn't
    *  opened yet. Rendered as a numeric pill on the Bell when > 0. */
   unreadAnnouncements?: number

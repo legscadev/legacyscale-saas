@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { adminNav, memberNav } from '@/lib/config/navigation'
+import { adminNav, memberNav, superNav } from '@/lib/config/navigation'
 import { BrandMark } from './brand-mark'
 import { CompanySwitcher } from './company-switcher'
 import { PageTransition } from './page-transition'
@@ -21,7 +21,7 @@ interface AppShellCompanyOption {
 }
 
 interface AppShellProps {
-  role: 'admin' | 'member'
+  role: 'admin' | 'member' | 'super'
   user: ShellUser
   /** Server-rendered initial collapsed state from cookie. */
   defaultCollapsed?: boolean
@@ -72,11 +72,21 @@ function AppShellInner({
   const { collapsed } = useSidebar()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const isAdmin = role === 'admin'
-  const sections = isAdmin ? adminNav : memberNav
-  const context = isAdmin ? 'Admin Console' : 'Member'
-  const homeHref = isAdmin ? '/admin/dashboard' : '/dashboard'
-  const profileHref = isAdmin ? '/admin/profile' : '/profile'
+  const sections =
+    role === 'super' ? superNav : role === 'admin' ? adminNav : memberNav
+  const context =
+    role === 'super'
+      ? 'Super Admin'
+      : role === 'admin'
+        ? 'Admin Console'
+        : 'Member'
+  const homeHref =
+    role === 'super'
+      ? '/super'
+      : role === 'admin'
+        ? '/admin/dashboard'
+        : '/dashboard'
+  const profileHref = role === 'member' ? '/profile' : '/admin/profile'
 
   return (
     <div

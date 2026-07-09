@@ -3,12 +3,14 @@ import {
   BarChart3,
   Bell,
   BookOpen,
+  Building2,
   GraduationCap,
   LayoutDashboard,
   type LucideIcon,
   Megaphone,
   Network,
   Settings,
+  ShieldCheck,
   Tag,
   TrendingUp,
   User,
@@ -67,6 +69,35 @@ export const adminNav: NavSection[] = [
   {
     label: 'System',
     items: [{ label: 'Settings', href: '/admin/settings', icon: Settings }],
+  },
+]
+
+export const superNav: NavSection[] = [
+  {
+    items: [
+      {
+        label: 'Overview',
+        href: '/super',
+        icon: LayoutDashboard,
+        exact: true,
+      },
+    ],
+  },
+  {
+    label: 'Platform',
+    items: [
+      { label: 'Companies', href: '/super/companies', icon: Building2 },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      {
+        label: 'Return to admin',
+        href: '/admin/dashboard',
+        icon: ShieldCheck,
+      },
+    ],
   },
 ]
 

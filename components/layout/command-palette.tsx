@@ -6,20 +6,26 @@ import { ArrowRight, Search } from 'lucide-react'
 
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { adminNav, memberNav, type NavItem } from '@/lib/config/navigation'
+import {
+  adminNav,
+  memberNav,
+  superNav,
+  type NavItem,
+} from '@/lib/config/navigation'
 
 interface CommandPaletteProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  role: 'admin' | 'member'
+  role: 'admin' | 'member' | 'super'
 }
 
 interface FlatItem extends NavItem {
   section?: string
 }
 
-function flatten(role: 'admin' | 'member'): FlatItem[] {
-  const sections = role === 'admin' ? adminNav : memberNav
+function flatten(role: 'admin' | 'member' | 'super'): FlatItem[] {
+  const sections =
+    role === 'super' ? superNav : role === 'admin' ? adminNav : memberNav
   return sections.flatMap((s) =>
     s.items.map((item) => ({ ...item, section: s.label })),
   )
