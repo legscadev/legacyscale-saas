@@ -1,0 +1,54 @@
+// Resolver that the Prisma extension consults on every scoped
+// query. Returns:
+//
+//   null  → do not filter (flag off, no request context, or an
+//           explicit super-admin bypass is in effect).
+//   uuid  → filter reads + stamp writes with this company id.
+//
+// The bypass path uses Node's AsyncLocalStorage so super-admin
+// cross-tenant flows (Phase 3) can run a callback whose Prisma
+// queries touch every tenant. Preferred to a thread-local because
+// Next.js server actions + route handlers all run on the same
+// worker.
+
+import { AsyncLocalStorage } from 'node:async_hooks'
+import { cache } from 'react'
+
+import { getActiveCompany } from './active-company'
+import { isTenancyEnabled } from './feature-flag'
+
+/** Cross-tenant escape hatch used by withSuperAdminContext. */
+const bypassStore = new AsyncLocalStorage<{ superAdmin: true }>()
+
+/**
+ * Read the active company for the current request. Cached per
+ * request via React's cache() so all Prisma queries in one request
+ * share a single lookup. Returns null on:
+ *   - tenancy flag off
+ *   - no request context (seed scripts, background jobs)
+ *   - inside a runAsSuperAdmin() callback
+ */
+export const getRequestCompanyId = cache(async (): Promise<string | null> => {
+  if (!isTenancyEnabled()) return null
+  if (bypassStore.getStore()) return null
+
+  try {
+    const company = await getActiveCompany()
+    return company?.id ?? null
+  } catch {
+    // getActiveCompany() reads cookies + auth, both of which throw
+    // outside a request context. Falling back to null preserves the
+    // pre-refactor behavior for CLI + job callers.
+    return null
+  }
+})
+
+/**
+ * Run a callback with the tenant filter disabled — every scoped
+ * Prisma query in the callback sees every tenant. Callers are
+ * responsible for ensuring this only runs behind a super-admin
+ * auth check (Phase 3 super-admin console).
+ */
+export function runAsSuperAdmin<T>(fn: () => Promise<T>): Promise<T> {
+  return bypassStore.run({ superAdmin: true }, fn)
+}
