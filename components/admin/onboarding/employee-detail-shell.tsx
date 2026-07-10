@@ -20,6 +20,7 @@ import {
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared'
+import { fmtCalendarDate, toCalendarDateInput } from '@/lib/format'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,18 +109,17 @@ function StatusPill({ status }: { status: ChecklistItemStatusValue }) {
   )
 }
 
+// Both helpers delegate to UTC-anchored formatters so viewers in
+// different timezones see the same calendar day. Pre-fix, Gillian
+// (viewer in a UTC-negative zone) would see "Jul 10" for a row Ruel
+// (Manila) had inputted as "Jul 11", because format() from date-fns
+// applies the viewer's local TZ shift.
 function formatDate(date: Date | null | undefined) {
-  if (!date) return '—'
-  const d = date instanceof Date ? date : new Date(date)
-  if (Number.isNaN(d.getTime())) return '—'
-  return format(d, 'MMM d, yyyy')
+  return fmtCalendarDate(date)
 }
 
 function isoDateString(date: Date | null): string {
-  if (!date) return ''
-  const d = date instanceof Date ? date : new Date(date)
-  if (Number.isNaN(d.getTime())) return ''
-  return format(d, 'yyyy-MM-dd')
+  return toCalendarDateInput(date)
 }
 
 export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
