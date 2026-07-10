@@ -1,9 +1,16 @@
-// Manage the User.isSuperAdmin flag from a UI surface instead of
-// hand-rolled SQL. Users are a global table (not tenant-scoped), so
-// there's no runAsSuperAdmin dance needed here — the Prisma tenancy
-// extension only intercepts scoped models.
+// Manage super-admin grants — Phase 4.4 rewrite.
+//
+// The source of truth is the super_admin_grants table (one row per
+// grant/revoke event over time; the active grant per user is the
+// row where revoked_at IS NULL). The User.isSuperAdmin boolean is
+// kept in sync as a hot-path cache so every gate check stays a
+// column read instead of a JOIN; the column drops in Phase 7 once
+// every reader has moved off it.
+//
+// Every grant + revoke runs inside a Prisma transaction so the
+// table and the cached boolean never drift.
 
-import type { User } from '@prisma/client'
+import type { SuperAdminRole, User } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { syncUserToDatabase } from '@/lib/auth/sync-user'
@@ -16,10 +23,20 @@ export interface SuperAdminRow {
   avatarUrl: string | null
   createdAt: Date
   lastActiveAt: Date | null
-  /** True when this row IS the caller. The UI uses this to disable
+  /** Active grant metadata — from the super_admin_grants row where
+   *  revoked_at IS NULL. */
+  grant: {
+    id: string
+    role: SuperAdminRole
+    grantedAt: Date
+    expiresAt: Date | null
+    notes: string | null
+    grantedBy: { id: string; name: string | null; email: string } | null
+  }
+  /** True when this row IS the caller. UI uses this to disable
    *  the "Revoke" button on your own row so you can't accidentally
-   *  lock yourself out — the last-super-admin guard below already
-   *  covers the "no super-admins left" edge case, this is just UX. */
+   *  lock yourself out — the last-super-admin guard covers the
+   *  edge case, this is just UX. */
   isSelf: boolean
 }
 
@@ -44,90 +61,165 @@ export class UserNotFoundError extends Error {
   }
 }
 
-/** Every user currently carrying the master key. Sorted by name so
- *  the display stays stable across page loads. `isSelf` is set
- *  relative to `callerId`. */
+/** Every user with an active grant. Sorted by name so the UI
+ *  order stays stable. `isSelf` is set relative to `callerId`.
+ *  Excludes grants whose expires_at has already passed. */
 export async function listSuperAdmins(
   callerId: string,
 ): Promise<SuperAdminRow[]> {
-  const rows = await prisma.user.findMany({
-    where: { isSuperAdmin: true, deletedAt: null },
-    orderBy: [{ name: 'asc' }, { email: 'asc' }],
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      avatarUrl: true,
-      createdAt: true,
-      lastActiveAt: true,
+  const now = new Date()
+  const grants = await prisma.superAdminGrant.findMany({
+    where: {
+      revokedAt: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      user: { deletedAt: null },
+    },
+    orderBy: [
+      { user: { name: 'asc' } },
+      { user: { email: 'asc' } },
+    ],
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatarUrl: true,
+          createdAt: true,
+          lastActiveAt: true,
+        },
+      },
+      grantedBy: {
+        select: { id: true, name: true, email: true },
+      },
     },
   })
-  return rows.map((u) => ({ ...u, isSelf: u.id === callerId }))
+
+  return grants.map((g) => ({
+    id: g.user.id,
+    email: g.user.email,
+    name: g.user.name,
+    avatarUrl: g.user.avatarUrl,
+    createdAt: g.user.createdAt,
+    lastActiveAt: g.user.lastActiveAt,
+    grant: {
+      id: g.id,
+      role: g.role,
+      grantedAt: g.grantedAt,
+      expiresAt: g.expiresAt,
+      notes: g.notes,
+      grantedBy: g.grantedBy
+        ? {
+            id: g.grantedBy.id,
+            name: g.grantedBy.name,
+            email: g.grantedBy.email,
+          }
+        : null,
+    },
+    isSelf: g.user.id === callerId,
+  }))
+}
+
+export interface GrantInput {
+  email: string
+  name?: string
+  role?: SuperAdminRole
+  expiresAt?: Date | null
+  notes?: string | null
+  grantedById?: string | null
 }
 
 /**
- * Grant super-admin to a user by email. If the email is already
- * registered we flip the flag; otherwise we mint a fresh Supabase
- * auth user + local users row (via the same syncUserToDatabase path
- * member provisioning uses) and flip the flag on the fresh row.
+ * Grant super-admin to a user by email. If the user is already
+ * registered we insert a new grant row + flip the cached boolean.
+ * Otherwise we mint a Supabase auth user + local users row first,
+ * then grant. Idempotent on re-grant (already active → returns
+ * the existing grant).
  *
  * Callers upstream must verify the requester is themselves a
  * super-admin before invoking this — the service does not gate.
  */
-export async function grantSuperAdmin(input: {
-  email: string
-  name?: string
-}): Promise<{ user: User; wasNewlyCreated: boolean }> {
+export async function grantSuperAdmin(
+  input: GrantInput,
+): Promise<{ user: User; wasNewlyCreated: boolean }> {
   const email = input.email.trim().toLowerCase()
   if (!email) throw new Error('Email is required')
+  const role: SuperAdminRole = input.role ?? 'MASTER'
 
-  const existing = await prisma.user.findUnique({ where: { email } })
-  if (existing) {
-    if (existing.isSuperAdmin) {
-      // Idempotent — treat a re-grant as a successful no-op so a
-      // double-click doesn't error out.
-      return { user: existing, wasNewlyCreated: false }
+  // Ensure the user exists BEFORE opening the transaction so we
+  // never leave a Supabase auth account without a matching grant.
+  let user = await prisma.user.findUnique({ where: { email } })
+  let wasNewlyCreated = false
+
+  if (!user) {
+    const admin = createAdminClient()
+    const displayName = input.name?.trim() || email
+    const { data: created, error: createErr } =
+      await admin.auth.admin.createUser({
+        email,
+        password: randomPassword(),
+        email_confirm: true,
+        user_metadata: { name: displayName },
+      })
+    if (createErr || !created.user) {
+      throw new Error(
+        `Failed to create Supabase auth user: ${createErr?.message ?? 'unknown'}`,
+      )
     }
-    const updated = await prisma.user.update({
-      where: { id: existing.id },
+    user = await syncUserToDatabase(created.user, {
+      suppressWelcomeEmail: true,
+    })
+    wasNewlyCreated = true
+  }
+
+  const targetUserId = user.id
+
+  await prisma.$transaction(async (tx) => {
+    // Idempotency — if the user already has an active grant, just
+    // no-op. Prevents duplicate rows on a double-click.
+    const existing = await tx.superAdminGrant.findFirst({
+      where: {
+        userId: targetUserId,
+        revokedAt: null,
+      },
+      select: { id: true },
+    })
+    if (!existing) {
+      await tx.superAdminGrant.create({
+        data: {
+          userId: targetUserId,
+          role,
+          grantedById: input.grantedById ?? null,
+          expiresAt: input.expiresAt ?? null,
+          notes: input.notes ?? null,
+        },
+      })
+    }
+    // Sync the hot-path cache. Every reader today still gates on
+    // this column, so this keeps the flip visible immediately.
+    await tx.user.update({
+      where: { id: targetUserId },
       data: { isSuperAdmin: true },
     })
-    return { user: updated, wasNewlyCreated: false }
-  }
+  })
 
-  // Fresh account — mint via Supabase auth, then flip the flag.
-  const admin = createAdminClient()
-  const displayName = input.name?.trim() || email
-  const { data: created, error: createErr } =
-    await admin.auth.admin.createUser({
-      email,
-      password: randomPassword(),
-      email_confirm: true,
-      user_metadata: { name: displayName },
-    })
-  if (createErr || !created.user) {
-    throw new Error(
-      `Failed to create Supabase auth user: ${createErr?.message ?? 'unknown'}`,
-    )
-  }
-  const synced = await syncUserToDatabase(created.user, {
-    suppressWelcomeEmail: true,
+  const refreshed = await prisma.user.findUniqueOrThrow({
+    where: { id: targetUserId },
   })
-  const updated = await prisma.user.update({
-    where: { id: synced.id },
-    data: { isSuperAdmin: true },
-  })
-  return { user: updated, wasNewlyCreated: true }
+  return { user: refreshed, wasNewlyCreated }
 }
 
 /**
- * Revoke the flag on a user. Two guards:
- *   1. The caller can't revoke themselves — the UI already disables
- *      the button, but repeating server-side prevents a race where
- *      someone bookmarks the URL.
- *   2. You can't drop below one super-admin platform-wide. If this
- *      IS the last one, we throw LastSuperAdminError so the caller
- *      can render a clear message.
+ * Revoke the active grant on a user. Two guards:
+ *   1. The caller can't revoke themselves — the UI disables the
+ *      button, but the server enforces it too so a bookmarked
+ *      URL can't lock them out.
+ *   2. You can't drop below one active MASTER super-admin
+ *      platform-wide. If this IS the last one, LastSuperAdminError
+ *      is thrown so the caller can render a clear message.
+ *
+ * "Revoke" is a soft-delete on the grant row — we set revoked_at
+ * + revoked_by_id so the audit trail keeps the row. Never DELETE.
  */
 export async function revokeSuperAdmin(input: {
   userId: string
@@ -137,25 +229,56 @@ export async function revokeSuperAdmin(input: {
 
   const target = await prisma.user.findUnique({
     where: { id: input.userId },
-    select: { id: true, isSuperAdmin: true },
+    select: { id: true },
   })
   if (!target) throw new UserNotFoundError()
-  if (!target.isSuperAdmin) {
-    // Idempotent — already non-super-admin, nothing to do.
-    const passthrough = await prisma.user.findUniqueOrThrow({
-      where: { id: input.userId },
+
+  await prisma.$transaction(async (tx) => {
+    const activeGrant = await tx.superAdminGrant.findFirst({
+      where: { userId: input.userId, revokedAt: null },
+      select: { id: true, role: true },
     })
-    return passthrough
-  }
+    // Idempotent — no active grant means already revoked; keep
+    // the cached boolean in sync just in case it drifted and
+    // return.
+    if (!activeGrant) {
+      await tx.user.update({
+        where: { id: input.userId },
+        data: { isSuperAdmin: false },
+      })
+      return
+    }
 
-  const count = await prisma.user.count({
-    where: { isSuperAdmin: true, deletedAt: null },
+    // Guard: refuse to drop below one active MASTER platform-wide.
+    // MASTER is the only role that opens /super today; the SUPPORT
+    // + AUDITOR seats can't grant new super-admins, so leaving the
+    // platform with only those roles would be a lockout.
+    const activeMasterCount = await tx.superAdminGrant.count({
+      where: {
+        revokedAt: null,
+        role: 'MASTER',
+        user: { deletedAt: null },
+      },
+    })
+    if (activeGrant.role === 'MASTER' && activeMasterCount <= 1) {
+      throw new LastSuperAdminError()
+    }
+
+    await tx.superAdminGrant.update({
+      where: { id: activeGrant.id },
+      data: {
+        revokedAt: new Date(),
+        revokedById: input.callerId,
+      },
+    })
+    await tx.user.update({
+      where: { id: input.userId },
+      data: { isSuperAdmin: false },
+    })
   })
-  if (count <= 1) throw new LastSuperAdminError()
 
-  return prisma.user.update({
+  return prisma.user.findUniqueOrThrow({
     where: { id: input.userId },
-    data: { isSuperAdmin: false },
   })
 }
 

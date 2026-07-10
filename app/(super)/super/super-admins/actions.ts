@@ -38,11 +38,14 @@ export async function grantSuperAdminAction(input: {
   email: string
   name?: string
 }): Promise<GrantSuperAdminResult> {
-  await assertSuperAdmin()
+  const caller = await assertSuperAdmin()
   try {
     const { wasNewlyCreated } = await grantSuperAdmin({
       email: input.email,
       name: input.name,
+      // Attribute the grant to the caller — powers the "Granted by"
+      // column on /super/super-admins and the future audit view.
+      grantedById: caller.id,
     })
     return { ok: true, wasNewlyCreated }
   } catch (err) {
