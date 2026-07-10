@@ -1,0 +1,149 @@
+'use client'
+
+import type { Column, ColumnDef } from '@tanstack/react-table'
+import { formatDistanceToNow } from 'date-fns'
+import {
+  ArrowRight,
+  ArrowUpDown,
+  Building2,
+  ChevronDown,
+  ChevronUp,
+  Globe2,
+} from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+import { enterCompanyAction } from '@/app/(super)/super/companies/actions'
+import type { CompanyDirectoryRow } from '@/app/(super)/super/companies/types'
+
+function SortHeader({
+  column,
+  children,
+  align,
+}: {
+  column: Column<CompanyDirectoryRow, unknown>
+  children: React.ReactNode
+  align?: 'left' | 'right'
+}) {
+  const sorted = column.getIsSorted()
+  return (
+    <button
+      type="button"
+      onClick={() => column.toggleSorting(sorted === 'asc')}
+      className={cn(
+        'inline-flex items-center gap-1.5 transition-colors',
+        align === 'right' && 'flex-row-reverse',
+        sorted ? 'text-foreground' : 'hover:text-foreground',
+      )}
+    >
+      {children}
+      {sorted === 'desc' ? (
+        <ChevronDown className="size-3.5" />
+      ) : sorted === 'asc' ? (
+        <ChevronUp className="size-3.5" />
+      ) : (
+        <ArrowUpDown className="size-3.5 opacity-50" />
+      )}
+    </button>
+  )
+}
+
+export const companyColumns: ColumnDef<CompanyDirectoryRow, unknown>[] = [
+  {
+    id: 'name',
+    accessorKey: 'name',
+    header: ({ column }) => <SortHeader column={column}>Name</SortHeader>,
+    cell: ({ row }) => {
+      const c = row.original
+      return (
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-brand-500/10 text-brand-600">
+            <Building2 className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate font-medium">{c.name}</span>
+              {c.isAgency ? (
+                <span className="rounded bg-brand-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-600">
+                  Agency
+                </span>
+              ) : null}
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              {c.slug}
+            </div>
+          </div>
+        </div>
+      )
+    },
+  },
+  {
+    id: 'owner',
+    accessorKey: 'ownerName',
+    header: 'Owner',
+    cell: ({ row }) => (
+      <span className="text-muted-foreground">
+        {row.original.ownerName ?? '—'}
+      </span>
+    ),
+  },
+  {
+    id: 'members',
+    accessorKey: 'memberCount',
+    header: ({ column }) => (
+      <SortHeader column={column} align="right">
+        Members
+      </SortHeader>
+    ),
+    cell: ({ row }) => (
+      <div className="text-right tabular-nums">{row.original.memberCount}</div>
+    ),
+    meta: { className: 'text-right' },
+  },
+  {
+    id: 'domain',
+    accessorKey: 'customDomain',
+    header: 'Custom domain',
+    cell: ({ row }) => {
+      const d = row.original.customDomain
+      if (!d) return <span className="text-muted-foreground">—</span>
+      return (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <Globe2 className="size-3.5" />
+          {d}
+        </span>
+      )
+    },
+  },
+  {
+    id: 'createdAt',
+    accessorKey: 'createdAt',
+    header: ({ column }) => <SortHeader column={column}>Created</SortHeader>,
+    cell: ({ row }) => (
+      <span className="text-muted-foreground">
+        {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
+      </span>
+    ),
+  },
+  {
+    id: 'action',
+    header: () => <span className="sr-only">Enter</span>,
+    cell: ({ row }) => (
+      <form action={enterCompanyAction} className="text-right">
+        <input type="hidden" name="companyId" value={row.original.id} />
+        <Button
+          type="submit"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+        >
+          Enter
+          <ArrowRight className="size-3.5" />
+        </Button>
+      </form>
+    ),
+    meta: { className: 'text-right', stopRowClick: true },
+    enableSorting: false,
+  },
+]

@@ -87,7 +87,7 @@ export default async function SuperLandingPage() {
   ]
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
       <PageHeader
         title="Super Admin"
         description="A read of every tenant on the platform. Numbers are live — no cache."
