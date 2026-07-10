@@ -162,7 +162,13 @@ export function CompanyRowActions({
                 disabled={running}
               >
                 <SelectTrigger id="snapshot-source-row">
-                  <SelectValue />
+                  <SelectValue placeholder="Pick a tenant">
+                    {(() => {
+                      const s = sources.find((x) => x.id === selectedSource)
+                      if (!s) return 'Pick a tenant'
+                      return `${s.name}${s.isAgency ? ' · Agency' : ''}`
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {sources.map((s) => (

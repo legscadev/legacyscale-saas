@@ -267,7 +267,13 @@ export function CreateCompanyForm({
               disabled={pending}
             >
               <SelectTrigger id="snapshot-source">
-                <SelectValue placeholder="Pick a tenant to clone from" />
+                <SelectValue placeholder="Pick a tenant to clone from">
+                  {(() => {
+                    const s = snapshotSources.find((x) => x.id === snapshotSource)
+                    if (!s) return 'Pick a tenant to clone from'
+                    return `${s.name}${s.isAgency ? ' · Agency' : ''}`
+                  })()}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {snapshotSources.map((s) => (

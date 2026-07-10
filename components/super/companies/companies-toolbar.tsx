@@ -79,9 +79,14 @@ export function CompaniesToolbar({
         />
       </div>
 
-      <Select value={kind} onValueChange={(v) => onKindChange(v as CompanyKindFilter)}>
+      <Select
+        value={kind}
+        onValueChange={(v) => onKindChange((v ?? 'all') as CompanyKindFilter)}
+      >
         <SelectTrigger className="w-40">
-          <SelectValue placeholder="All tenants" />
+          <SelectValue placeholder="All tenants">
+            {KINDS.find((k) => k.value === kind)?.label ?? 'All tenants'}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {KINDS.map((k) => (
