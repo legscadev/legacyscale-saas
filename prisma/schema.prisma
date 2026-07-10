@@ -247,11 +247,68 @@ model User {
   orgAuditLogs          OrgNodeAuditLog[]      @relation("OrgAuditActor")
   companyMemberships    CompanyMembership[]
 
+  // Super-admin grants — Phase 4.4 replaced the User.isSuperAdmin
+  // boolean with a proper table so we get an audit trail + tiered
+  // roles + expiration. The boolean column stays for now as a hot-
+  // path cache; every grant/revoke writes to both places.
+  superAdminGrantsHeld    SuperAdminGrant[] @relation("SuperAdminGrantTarget")
+  superAdminGrantsIssued  SuperAdminGrant[] @relation("SuperAdminGrantGrantedBy")
+  superAdminGrantsRevoked SuperAdminGrant[] @relation("SuperAdminGrantRevokedBy")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
   @@index([isSuperAdmin])
   @@map("users")
+}
+
+// ============================================
+// SUPER-ADMIN GRANTS
+// ============================================
+
+enum SuperAdminRole {
+  /// Full platform power. Master key. Can create/delete companies,
+  /// grant + revoke other super-admins, enter any tenant.
+  MASTER
+  /// Read-write inside any tenant, but cannot delete companies or
+  /// grant super-admin. Future — used for Kondense support staff.
+  SUPPORT
+  /// Read-only across every tenant. Future — analytics + audit
+  /// personas that need visibility without action.
+  AUDITOR
+}
+
+/// Grants the super-admin master key to a user. One user can have
+/// many rows over time (grant → revoke → re-grant); only one row
+/// with revokedAt IS NULL is legal at any given moment.
+///
+/// The User.isSuperAdmin boolean is kept in sync as a hot-path
+/// cache — gate checks read the boolean, not this table. Phase 7
+/// drops the boolean once every reader has been switched over.
+model SuperAdminGrant {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  role        SuperAdminRole @default(MASTER)
+  /// Who granted the flag. Null when the row was seeded via SQL
+  /// during a migration (pre-4.4 backfill, break-glass).
+  grantedById String?        @map("granted_by_id")
+  grantedAt   DateTime       @default(now()) @map("granted_at")
+  /// Optional expiry — after this instant the grant is treated as
+  /// revoked by the hot-path check. Null = never expires.
+  expiresAt   DateTime?      @map("expires_at")
+  revokedAt   DateTime?      @map("revoked_at")
+  revokedById String?        @map("revoked_by_id")
+  /// Free-form justification: ticket #, requester name, etc. Kept
+  /// short (255 char cap enforced app-side).
+  notes       String?
+
+  user      User  @relation("SuperAdminGrantTarget", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("SuperAdminGrantGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  revokedBy User? @relation("SuperAdminGrantRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("super_admin_grants")
 }
 
 // ============================================
