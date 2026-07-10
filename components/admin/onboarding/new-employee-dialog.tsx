@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import type { LinkableUser } from '@/lib/services/employee-service'
 
 import { createEmployeeAction } from '@/app/(admin)/admin/onboarding/actions'
@@ -40,6 +41,8 @@ export function NewEmployeeDialog({
   const [linkedUser, setLinkedUser] = useState<LinkableUser | null>(null)
   const [roleTitle, setRoleTitle] = useState('')
   const [onboardingDate, setOnboardingDate] = useState('')
+  const [dateStarted, setDateStarted] = useState('')
+  const [notes, setNotes] = useState('')
   const [access, setAccess] = useState<AccessState>(INITIAL_ACCESS)
   const [pending, startTransition] = useTransition()
 
@@ -48,6 +51,8 @@ export function NewEmployeeDialog({
     setLinkedUser(null)
     setRoleTitle('')
     setOnboardingDate('')
+    setDateStarted('')
+    setNotes('')
     setAccess(INITIAL_ACCESS)
   }
 
@@ -82,6 +87,8 @@ export function NewEmployeeDialog({
           name,
           roleTitle,
           onboardingDate: onboardingDate || null,
+          dateStarted: dateStarted || null,
+          notes: notes.trim() ? notes.trim() : null,
           // Linked user takes precedence; access.enabled is ignored
           // when a user is already linked.
           linkUserId: linkedUser?.id ?? null,
@@ -116,7 +123,7 @@ export function NewEmployeeDialog({
         if (!pending) onOpenChange(v)
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add employee</DialogTitle>
           <DialogDescription>
@@ -133,7 +140,7 @@ export function NewEmployeeDialog({
             disabled={pending}
           />
           <div className="space-y-1.5">
-            <Label htmlFor="employee-role">Role</Label>
+            <Label htmlFor="employee-role">Role title</Label>
             <Input
               id="employee-role"
               value={roleTitle}
@@ -142,13 +149,34 @@ export function NewEmployeeDialog({
               required
             />
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="employee-onboarding-date">Onboarding date</Label>
+              <Input
+                id="employee-onboarding-date"
+                type="date"
+                value={onboardingDate}
+                onChange={(e) => setOnboardingDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="employee-date-started">Date started</Label>
+              <Input
+                id="employee-date-started"
+                type="date"
+                value={dateStarted}
+                onChange={(e) => setDateStarted(e.target.value)}
+              />
+            </div>
+          </div>
           <div className="space-y-1.5">
-            <Label htmlFor="employee-onboarding-date">Onboarding date</Label>
-            <Input
-              id="employee-onboarding-date"
-              type="date"
-              value={onboardingDate}
-              onChange={(e) => setOnboardingDate(e.target.value)}
+            <Label htmlFor="employee-notes">Notes</Label>
+            <Textarea
+              id="employee-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Anything relevant — reporting line, tenure, comments…"
+              rows={4}
             />
           </div>
 
