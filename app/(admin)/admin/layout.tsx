@@ -66,6 +66,7 @@ export default async function AdminLayout({
         role: user.role,
       }}
       tenancy={tenancy}
+      isSuperAdmin={user.isSuperAdmin}
     >
       {children}
     </AppShell>

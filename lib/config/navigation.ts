@@ -87,6 +87,7 @@ export const superNav: NavSection[] = [
     label: 'Platform',
     items: [
       { label: 'Companies', href: '/super/companies', icon: Building2 },
+      { label: 'Super admins', href: '/super/super-admins', icon: ShieldCheck },
     ],
   },
   {

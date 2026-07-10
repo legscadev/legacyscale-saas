@@ -28,6 +28,10 @@ interface AppShellProps {
   /** Count of published announcements the current user hasn't
    *  opened — surfaces as a numeric pill on the Bell. */
   unreadAnnouncements?: number
+  /** Server-resolved super-admin flag. Powers the "Super Admin"
+   *  shortcut in the admin top bar so a super-admin never has to
+   *  hunt for the /super entry point. */
+  isSuperAdmin?: boolean
   /** Optional multi-tenancy context. When present, the sidebar
    *  renders a company switcher above the nav. Undefined means the
    *  tenancy feature flag is off — the sidebar looks exactly as it
@@ -46,6 +50,7 @@ export function AppShell({
   defaultCollapsed = false,
   unreadAnnouncements = 0,
   tenancy,
+  isSuperAdmin = false,
   children,
 }: AppShellProps) {
   return (
@@ -55,6 +60,7 @@ export function AppShell({
         user={user}
         unreadAnnouncements={unreadAnnouncements}
         tenancy={tenancy}
+        isSuperAdmin={isSuperAdmin}
       >
         {children}
       </AppShellInner>
@@ -67,6 +73,7 @@ function AppShellInner({
   user,
   unreadAnnouncements = 0,
   tenancy,
+  isSuperAdmin = false,
   children,
 }: Omit<AppShellProps, 'defaultCollapsed'>) {
   const { collapsed } = useSidebar()
@@ -214,6 +221,7 @@ function AppShellInner({
           profileHref={profileHref}
           role={role}
           unreadAnnouncements={unreadAnnouncements}
+          isSuperAdmin={isSuperAdmin}
         />
         <main className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">

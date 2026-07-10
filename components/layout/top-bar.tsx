@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  ShieldCheck,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,10 @@ interface TopBarProps {
   /** Number of published announcements the current user hasn't
    *  opened yet. Rendered as a numeric pill on the Bell when > 0. */
   unreadAnnouncements?: number
+  /** When true and role='admin', the top bar shows a "Super Admin"
+   *  shortcut that jumps to /super. Members never see it, and it's
+   *  redundant when the caller is already inside /super. */
+  isSuperAdmin?: boolean
 }
 
 export function TopBar({
@@ -40,6 +45,7 @@ export function TopBar({
   user,
   profileHref,
   role,
+  isSuperAdmin = false,
   unreadAnnouncements = 0,
 }: TopBarProps) {
   const { collapsed, toggle } = useSidebar()
@@ -144,6 +150,33 @@ export function TopBar({
         </Button>
 
         <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+          {/* Super-admin shortcut — visible in /admin/* only when
+              the caller carries the master key. Renders as a small
+              red pill so it doesn't blend into the regular topbar
+              chrome; matches the "you're wearing your other hat"
+              posture of the View-as-member button beside it. */}
+          {role === 'admin' && isSuperAdmin ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label="Open super-admin console"
+                    className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                    render={<Link href="/super" />}
+                  >
+                    <ShieldCheck className="size-4" />
+                    <span className="hidden sm:inline">Super Admin</span>
+                  </Button>
+                }
+              />
+              <TooltipContent side="bottom">
+                Jump to the platform-owner console
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
           {/* Role swap. Admins can jump from the admin shell into
               their own member experience (and back) so they can see
               courses/announcements the way a member does without
