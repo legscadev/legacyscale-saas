@@ -266,7 +266,7 @@ export function CreateCompanyForm({
               onValueChange={(v) => setSnapshotSource(v ?? NONE_SOURCE)}
               disabled={pending}
             >
-              <SelectTrigger id="snapshot-source">
+              <SelectTrigger id="snapshot-source" className="w-full">
                 <SelectValue placeholder="Pick a tenant to clone from">
                   {(() => {
                     const s = snapshotSources.find((x) => x.id === snapshotSource)
