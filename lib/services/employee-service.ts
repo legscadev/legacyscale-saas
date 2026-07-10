@@ -59,6 +59,8 @@ export interface CreateEmployeeInput {
   roleTitle: string
   onboardingDate?: Date | null
   dateStarted?: Date | null
+  /** Free-form context saved to Employee.notes. Optional. */
+  notes?: string | null
   /**
    * When true, the caller also provisions a SaaS account (Supabase
    * auth user + Invite + welcome email) and links it via
@@ -322,6 +324,7 @@ class EmployeeService {
         roleTitle: input.roleTitle,
         onboardingDate: input.onboardingDate ?? null,
         dateStarted: input.dateStarted ?? null,
+        notes: input.notes ?? null,
         userId,
       },
     })

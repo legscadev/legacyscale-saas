@@ -54,6 +54,9 @@ export const createEmployeeSchema = z
     roleTitle: z.string().trim().min(1, 'Role is required').max(120),
     onboardingDate: optionalDate.optional(),
     dateStarted: optionalDate.optional(),
+    // Free-form context field parallel to the Edit dialog's Notes.
+    // Optional on create so pre-existing callers keep working.
+    notes: z.string().max(4000).nullable().optional(),
     /**
      * When true, the admin also wants this hire to have SaaS login
      * access — we'll create a User account with `accessRole`, issue
