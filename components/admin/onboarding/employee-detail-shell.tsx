@@ -20,7 +20,9 @@ import {
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared'
-import { fmtCalendarDate, toCalendarDateInput } from '@/lib/format'
+import { fmtCalendarDate } from '@/lib/format'
+
+import { EditEmployeeDialog } from './edit-employee-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,7 +64,6 @@ import {
   offboardEmployeeAction,
   reactivateEmployeeAction,
   updateChecklistItemStatusAction,
-  updateEmployeeAction,
 } from '@/app/(admin)/admin/onboarding/actions'
 
 interface EmployeeDetailShellProps {
@@ -109,17 +110,13 @@ function StatusPill({ status }: { status: ChecklistItemStatusValue }) {
   )
 }
 
-// Both helpers delegate to UTC-anchored formatters so viewers in
-// different timezones see the same calendar day. Pre-fix, Gillian
-// (viewer in a UTC-negative zone) would see "Jul 10" for a row Ruel
-// (Manila) had inputted as "Jul 11", because format() from date-fns
-// applies the viewer's local TZ shift.
+// Delegates to UTC-anchored formatter so viewers in different
+// timezones see the same calendar day. Pre-fix, Gillian (viewer in
+// a UTC-negative zone) would see "Jul 10" for a row Ruel (Manila)
+// had inputted as "Jul 11", because format() from date-fns applies
+// the viewer's local TZ shift.
 function formatDate(date: Date | null | undefined) {
   return fmtCalendarDate(date)
-}
-
-function isoDateString(date: Date | null): string {
-  return toCalendarDateInput(date)
 }
 
 export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
@@ -131,46 +128,7 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
     format(new Date(), 'yyyy-MM-dd'),
   )
   const [offboardNotes, setOffboardNotes] = useState('')
-  // Editable snapshot of the employee's basics. Reset from props on
-  // each edit-open so the dialog always mirrors the current row.
-  const [editName, setEditName] = useState(employee.name)
-  const [editRoleTitle, setEditRoleTitle] = useState(employee.roleTitle)
-  const [editOnboardingDate, setEditOnboardingDate] = useState(
-    isoDateString(employee.onboardingDate),
-  )
-  const [editDateStarted, setEditDateStarted] = useState(
-    isoDateString(employee.dateStarted),
-  )
-  const [editNotes, setEditNotes] = useState(employee.notes ?? '')
   const [pending, startTransition] = useTransition()
-
-  function openEdit() {
-    setEditName(employee.name)
-    setEditRoleTitle(employee.roleTitle)
-    setEditOnboardingDate(isoDateString(employee.onboardingDate))
-    setEditDateStarted(isoDateString(employee.dateStarted))
-    setEditNotes(employee.notes ?? '')
-    setEditOpen(true)
-  }
-
-  function handleEditSubmit() {
-    startTransition(async () => {
-      try {
-        await updateEmployeeAction(employee.id, {
-          name: editName.trim(),
-          roleTitle: editRoleTitle.trim(),
-          onboardingDate: editOnboardingDate || null,
-          dateStarted: editDateStarted || null,
-          notes: editNotes.trim() ? editNotes.trim() : null,
-        })
-        toast.success('Employee updated')
-        setEditOpen(false)
-        router.refresh()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to update')
-      }
-    })
-  }
 
   const { items, checklist } = employee
   const isOffboarded = employee.status === 'OFFBOARDED'
@@ -325,7 +283,7 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
                 <MoreHorizontal className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-auto min-w-0">
-                <DropdownMenuItem onClick={openEdit}>
+                <DropdownMenuItem onClick={() => setEditOpen(true)}>
                   <Pencil className="mr-1.5 size-4" />
                   Edit employee
                 </DropdownMenuItem>
@@ -472,95 +430,18 @@ export function EmployeeDetailShell({ employee }: EmployeeDetailShellProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <EditEmployeeDialog
         open={editOpen}
-        onOpenChange={(v) => !pending && setEditOpen(v)}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit {employee.name}</DialogTitle>
-            <DialogDescription>
-              Update the employee&apos;s basics. Checklist status +
-              offboarding are managed separately.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-name">Name</Label>
-              <Input
-                id="edit-name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-role">Role title</Label>
-              <Input
-                id="edit-role"
-                value={editRoleTitle}
-                onChange={(e) => setEditRoleTitle(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-onboarding">Onboarding date</Label>
-                <Input
-                  id="edit-onboarding"
-                  type="date"
-                  value={editOnboardingDate}
-                  onChange={(e) => setEditOnboardingDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-started">Date started</Label>
-                <Input
-                  id="edit-started"
-                  type="date"
-                  value={editDateStarted}
-                  onChange={(e) => setEditDateStarted(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-notes">Notes</Label>
-              <Textarea
-                id="edit-notes"
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="Anything relevant — reporting line, tenure, comments…"
-                rows={4}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setEditOpen(false)}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleEditSubmit}
-              disabled={
-                pending ||
-                editName.trim().length === 0 ||
-                editRoleTitle.trim().length === 0
-              }
-            >
-              {pending ? (
-                <>
-                  <Loader2 className="mr-1.5 size-4 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                'Save changes'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setEditOpen}
+        employee={{
+          id: employee.id,
+          name: employee.name,
+          roleTitle: employee.roleTitle,
+          onboardingDate: employee.onboardingDate,
+          dateStarted: employee.dateStarted,
+          notes: employee.notes,
+        }}
+      />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>

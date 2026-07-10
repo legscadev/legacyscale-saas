@@ -37,6 +37,7 @@ import {
 } from '@/lib/validations/employee'
 
 import { updateChecklistItemStatusAction } from '@/app/(admin)/admin/onboarding/actions'
+import { EditEmployeeDialog } from './edit-employee-dialog'
 import { NewEmployeeDialog } from './new-employee-dialog'
 
 interface OnboardingShellProps {
@@ -98,11 +99,21 @@ export function OnboardingShell({
   const [tab, setTab] = useState<TabKey>('active')
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(
+    null,
+  )
   const [isPending, startTransition] = useTransition()
 
   // We hold local employee state so cell edits reflect instantly
   // without waiting for a router.refresh() round-trip.
   const [employees, setEmployees] = useState(initialEmployees)
+
+  // Resolved editable snapshot for the currently open edit dialog.
+  // Reads from local `employees` so the dialog seeds off any optimistic
+  // updates that have already landed in state.
+  const editingEmployee = editingEmployeeId
+    ? (employees.find((e) => e.id === editingEmployeeId) ?? null)
+    : null
 
   const activeCount = useMemo(
     () => employees.filter((e) => e.status === 'ACTIVE').length,
@@ -291,6 +302,7 @@ export function OnboardingShell({
             isPending={isPending}
             onCellChange={handleCellStatusChange}
             onNameClick={(id) => router.push(`/admin/onboarding/${id}`)}
+            onEditClick={(id) => setEditingEmployeeId(id)}
           />
         </>
       )}
@@ -306,6 +318,33 @@ export function OnboardingShell({
       ) : null}
 
       <NewEmployeeDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+
+      <EditEmployeeDialog
+        open={editingEmployee !== null}
+        onOpenChange={(v) => {
+          if (!v) setEditingEmployeeId(null)
+        }}
+        employee={editingEmployee}
+        onSaved={(patch) => {
+          // Reflect the save in local state so the row updates
+          // without a full refetch — matches how the cell-status
+          // handler treats optimistic writes.
+          setEmployees((prev) =>
+            prev.map((e) =>
+              e.id === patch.id
+                ? {
+                    ...e,
+                    name: patch.name,
+                    roleTitle: patch.roleTitle,
+                    onboardingDate: patch.onboardingDate,
+                    dateStarted: patch.dateStarted,
+                    notes: patch.notes,
+                  }
+                : e,
+            ),
+          )
+        }}
+      />
     </div>
   )
 }
@@ -406,6 +445,7 @@ function OnboardingMatrix({
   isPending,
   onCellChange,
   onNameClick,
+  onEditClick,
 }: {
   rows: EmployeeListItem[]
   items: ChecklistItem[]
@@ -418,6 +458,7 @@ function OnboardingMatrix({
     current: ChecklistItemStatusValue,
   ) => void
   onNameClick: (employeeId: string) => void
+  onEditClick: (employeeId: string) => void
 }) {
   // Single sticky column keeps the layering simple and avoids the
   // pixel-offset overlap that two sticky columns produce when the
@@ -502,7 +543,7 @@ function OnboardingMatrix({
                         size="icon-sm"
                         aria-label={`Edit ${row.name}`}
                         title="Edit employee"
-                        onClick={() => onNameClick(row.id)}
+                        onClick={() => onEditClick(row.id)}
                         className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                       >
                         <Pencil className="size-3.5" />

@@ -20,6 +20,10 @@ export interface EmployeeListItem {
   onboardingDate: Date | null
   dateStarted: Date | null
   offboardingDate: Date | null
+  /** Same field the detail page renders. Included in the list so
+   *  the inline edit dialog on /admin/onboarding can round-trip
+   *  notes without an extra fetch. */
+  notes: string | null
   createdAt: Date
   checklist: {
     totalItems: number
@@ -208,6 +212,7 @@ class EmployeeService {
         onboardingDate: e.onboardingDate,
         dateStarted: e.dateStarted,
         offboardingDate: e.offboardingDate,
+        notes: e.notes,
         createdAt: e.createdAt,
         checklist: summarize(totalItems, e.checklistStatuses),
         statusByItemId,
