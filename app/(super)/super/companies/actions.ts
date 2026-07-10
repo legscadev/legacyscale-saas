@@ -5,9 +5,14 @@ import type { Prisma } from '@prisma/client'
 
 import { requireActiveUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import {
+  CompanySlugConflictError,
+  createCompany,
+} from '@/lib/services/company-provisioning'
 import { setActiveCompanyCookie } from '@/lib/tenancy/active-company'
 import { isTenancyEnabled } from '@/lib/tenancy/feature-flag'
 import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
+import { createCompanySchema } from '@/lib/validations/company'
 
 import {
   COMPANY_DIRECTORY_PAGE_SIZE,
@@ -106,6 +111,64 @@ export async function fetchCompanies(
       totalPages: Math.max(1, Math.ceil(total / limit)),
     }
   })
+}
+
+export interface CreateCompanyResult {
+  ok: boolean
+  companyId?: string
+  companySlug?: string
+  ownerWasNewlyCreated?: boolean
+  error?: string
+  fieldErrors?: Record<string, string[]>
+}
+
+/**
+ * Super-admin creates a new tenant. Returns the created company's
+ * id + slug on success. On validation failure, returns fieldErrors
+ * so the client form can render inline messages.
+ */
+export async function createCompanyAction(
+  input: unknown,
+): Promise<CreateCompanyResult> {
+  await assertSuperAdmin()
+
+  const parsed = createCompanySchema.safeParse(input)
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {}
+    for (const issue of parsed.error.issues) {
+      const key = issue.path[0]
+      if (typeof key !== 'string') continue
+      fieldErrors[key] = [...(fieldErrors[key] ?? []), issue.message]
+    }
+    return { ok: false, fieldErrors }
+  }
+
+  try {
+    const result = await createCompany({
+      name: parsed.data.name,
+      slug: parsed.data.slug,
+      isAgency: parsed.data.isAgency,
+      owner: {
+        email: parsed.data.ownerEmail,
+        name: parsed.data.ownerName || undefined,
+      },
+    })
+    return {
+      ok: true,
+      companyId: result.company.id,
+      companySlug: result.company.slug,
+      ownerWasNewlyCreated: result.ownerWasNewlyCreated,
+    }
+  } catch (err) {
+    if (err instanceof CompanySlugConflictError) {
+      return {
+        ok: false,
+        fieldErrors: { slug: ['This slug is already in use'] },
+      }
+    }
+    console.error('createCompanyAction failed:', err)
+    return { ok: false, error: 'Could not create company' }
+  }
 }
 
 /**
