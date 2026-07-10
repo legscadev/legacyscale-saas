@@ -3,7 +3,6 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { format } from 'date-fns'
 import {
   AlertTriangle,
   Check,
@@ -19,6 +18,7 @@ import {
 import { toast } from 'sonner'
 
 import { PageHeader, EmptyState } from '@/components/shared'
+import { fmtCalendarDate } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -53,11 +53,13 @@ const STATUS_OPTIONS: ChecklistItemStatusValue[] = [
   'NA',
 ]
 
+// Delegates to fmtCalendarDate so the label sticks to the calendar
+// day the admin originally picked, regardless of viewer timezone.
+// Gillian saw "Jul 10" and Ruel saw "Jul 11" for the same row before
+// this was fixed — every prior `format(d, 'MMM d, yyyy')` here ran
+// through the viewer's local TZ.
 function formatDate(date: Date | null | undefined) {
-  if (!date) return '—'
-  const d = date instanceof Date ? date : new Date(date)
-  if (Number.isNaN(d.getTime())) return '—'
-  return format(d, 'MMM d, yyyy')
+  return fmtCalendarDate(date)
 }
 
 // Colour + icon lookup for cell rendering. Kept out of the component

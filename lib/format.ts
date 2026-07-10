@@ -38,6 +38,54 @@ export function fmtDate(date: Date | null): string {
   })
 }
 
+// Calendar-date fields (onboarding date, hire date, offboarding
+// date, …) are stored as timestamptz at UTC midnight because that's
+// what `new Date("2026-07-11")` produces on the input side. Rendering
+// them with any TZ-sensitive formatter shifts the label by a day on
+// viewers who aren't at UTC — Gillian sees "Jul 10" while Ruel sees
+// "Jul 11" for the same row. These two helpers pin the render to
+// UTC so every viewer sees whichever calendar day was originally
+// picked.
+
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
+
+/** "Jul 11, 2026" — TZ-independent. Use for any date field that
+ *  represents a calendar day rather than an instant in time. */
+export function fmtCalendarDate(date: Date | string | null | undefined): string {
+  if (!date) return '—'
+  const d = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(d.getTime())) return '—'
+  return `${SHORT_MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`
+}
+
+/** "2026-07-11" — TZ-independent. Use when pre-filling an
+ *  <input type=date>, where a local-TZ format shifts the picker to
+ *  the previous day for negative-offset viewers. */
+export function toCalendarDateInput(
+  date: Date | string | null | undefined,
+): string {
+  if (!date) return ''
+  const d = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 /** Returns a Tailwind text-color class based on a 0-100 progress value.
  *  Used for visual grading on cohort/member tables so admins can scan
  *  who's on track at a glance. */
