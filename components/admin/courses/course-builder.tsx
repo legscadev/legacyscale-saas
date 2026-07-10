@@ -597,10 +597,59 @@ export function CourseBuilder({
     [patchChapter],
   )
 
+  // Cross-chapter move: lesson leaves its current chapter and lands in
+  // another. When `overLessonId` is given, the moved lesson slots just
+  // above that one; otherwise it appends to the end of the destination.
+  // No-op when the lesson is already in the target chapter (that path
+  // uses moveLesson for same-chapter reorder).
+  const moveLessonAcross = useCallback(
+    (
+      activeLessonId: string,
+      fromChapterId: string,
+      toChapterId: string,
+      overLessonId?: string,
+    ) => {
+      if (fromChapterId === toChapterId) return
+      setChapters((prev) => {
+        const from = prev.find((c) => c.id === fromChapterId)
+        const to = prev.find((c) => c.id === toChapterId)
+        if (!from || !to) return prev
+        const lesson = from.lessons.find((l) => l.id === activeLessonId)
+        if (!lesson) return prev
+
+        const moved = { ...lesson, chapterId: toChapterId }
+        return prev.map((c) => {
+          if (c.id === fromChapterId) {
+            return {
+              ...c,
+              lessons: c.lessons.filter((l) => l.id !== activeLessonId),
+            }
+          }
+          if (c.id === toChapterId) {
+            const anchorIdx = overLessonId
+              ? c.lessons.findIndex((l) => l.id === overLessonId)
+              : -1
+            const nextLessons =
+              anchorIdx >= 0
+                ? [
+                    ...c.lessons.slice(0, anchorIdx),
+                    moved,
+                    ...c.lessons.slice(anchorIdx),
+                  ]
+                : [...c.lessons, moved]
+            return { ...c, lessons: nextLessons }
+          }
+          return c
+        })
+      })
+    },
+    [],
+  )
+
   // Pre-drag snapshot for Escape-cancel. onDragOver mutates chapters
-  // live (cross-scope preview), so if the user cancels we need to put
-  // the chapter back where it started instead of leaving it where it
-  // last hovered.
+  // live (cross-scope preview for both chapter AND lesson drags), so
+  // if the user cancels we need to put things back where they started
+  // instead of leaving them where they last hovered.
   const dragSnapshotRef = useRef<LocalChapter[] | null>(null)
 
   const onDragStart = useCallback(() => {
@@ -645,6 +694,57 @@ export function CourseBuilder({
       moveChapterAcross(String(active.id), targetScope, anchorId)
     },
     [chapters, moveChapterAcross],
+  )
+
+  // Live cross-chapter preview for lesson drags. Mirror of onDragOver
+  // above but for lessons — as the user hovers into another chapter's
+  // list (or its empty-state drop zone), pull the lesson into that
+  // destination so the drop lands exactly where they see it.
+  const onLessonDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const activeType = active.data.current?.type
+      if (activeType !== 'lesson') return
+
+      const fromChapterId = active.data.current?.chapterId as string | undefined
+      if (!fromChapterId) return
+
+      const overType = over.data.current?.type
+      let toChapterId: string | undefined
+      let overLessonId: string | undefined
+
+      if (overType === 'lesson') {
+        toChapterId = over.data.current?.chapterId as string | undefined
+        overLessonId = String(over.id)
+      } else if (overType === 'lesson-container') {
+        toChapterId = over.data.current?.chapterId as string | undefined
+      } else {
+        return
+      }
+
+      if (!toChapterId || toChapterId === fromChapterId) return
+      moveLessonAcross(
+        String(active.id),
+        fromChapterId,
+        toChapterId,
+        overLessonId,
+      )
+    },
+    [moveLessonAcross],
+  )
+
+  // Merged over-handler — routes to the right cross-scope preview
+  // depending on what's being dragged. Chapter drags run the existing
+  // module-scope logic; lesson drags run the cross-chapter logic above.
+  const onCombinedDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const activeType = event.active.data.current?.type
+      if (activeType === 'chapter') onDragOver(event)
+      else if (activeType === 'lesson') onLessonDragOver(event)
+    },
+    [onDragOver, onLessonDragOver],
   )
 
   const onDragCancel = useCallback(() => {
@@ -701,21 +801,56 @@ export function CourseBuilder({
         return
       }
 
-      if (activeType === 'lesson' && overType === 'lesson') {
-        const fromChapter = active.data.current?.chapterId as
-          | string
-          | undefined
-        const toChapter = over.data.current?.chapterId as string | undefined
-        if (!fromChapter || fromChapter !== toChapter) return
-        const chapter = chapters.find((c) => c.id === fromChapter)
-        if (!chapter) return
-        const from = chapter.lessons.findIndex((l) => l.id === active.id)
-        const to = chapter.lessons.findIndex((l) => l.id === over.id)
-        if (from === -1 || to === -1) return
-        moveLesson(fromChapter, from, to)
+      if (activeType === 'lesson') {
+        // onLessonDragOver already pulled the lesson into its
+        // destination chapter (if it ever crossed one). By the time
+        // we get here the lesson lives in the target chapter, so
+        // resolve fromChapterId out of the current chapters state
+        // rather than the pre-drag data-attribute.
+        const currentChapter = chapters.find((c) =>
+          c.lessons.some((l) => l.id === active.id),
+        )
+        if (!currentChapter) return
+        const fromChapterId = currentChapter.id
+
+        let toChapterId: string | undefined
+        let overLessonId: string | undefined
+        if (overType === 'lesson') {
+          toChapterId = over.data.current?.chapterId as string | undefined
+          overLessonId = String(over.id)
+        } else if (overType === 'lesson-container') {
+          toChapterId = over.data.current?.chapterId as string | undefined
+        } else {
+          return
+        }
+        if (!toChapterId) return
+
+        if (fromChapterId === toChapterId) {
+          // Same-chapter reorder — anchor on the hovered lesson.
+          if (!overLessonId) return
+          const from = currentChapter.lessons.findIndex(
+            (l) => l.id === active.id,
+          )
+          const to = currentChapter.lessons.findIndex(
+            (l) => l.id === overLessonId,
+          )
+          if (from === -1 || to === -1 || from === to) return
+          moveLesson(fromChapterId, from, to)
+          return
+        }
+
+        // Fallback — onLessonDragOver may have been skipped (e.g. a
+        // very fast drag with no intermediate over event). Apply the
+        // cross-chapter move now.
+        moveLessonAcross(
+          String(active.id),
+          fromChapterId,
+          toChapterId,
+          overLessonId,
+        )
       }
     },
-    [chapters, moveChapterTo, moveChapterAcross, moveLesson],
+    [chapters, moveChapterTo, moveChapterAcross, moveLesson, moveLessonAcross],
   )
 
   // ===========================================================
@@ -913,7 +1048,7 @@ export function CourseBuilder({
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragStart={onDragStart}
-              onDragOver={onDragOver}
+              onDragOver={onCombinedDragOver}
               onDragCancel={onDragCancel}
               onDragEnd={onDragEnd}
             >

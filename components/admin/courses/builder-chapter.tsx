@@ -15,6 +15,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useDroppable } from '@dnd-kit/core'
 import {
   SortableContext,
   useSortable,
@@ -219,43 +220,91 @@ export function BuilderChapter({
         </Button>
       </div>
 
-      {collapsed ? null : lessons.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-          No lessons yet — use “Add lesson”.
-        </p>
-      ) : (
-        <SortableContext
-          items={lessons.map((l) => l.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          <ul className="divide-y">
-            {lessons.map((lesson, i) => (
-              <SortableLessonRow
-                key={lesson.id}
-                lesson={lesson}
-                chapterId={chapter.id}
-                index={i}
-                total={lessons.length}
-                onRename={
-                  onRenameLesson
-                    ? (title) => onRenameLesson(lesson.id, title)
-                    : undefined
-                }
-                onMove={
-                  onMoveLesson
-                    ? (dir) => onMoveLesson(i, i + dir)
-                    : undefined
-                }
-                onEdit={onEditLesson ? () => onEditLesson(lesson) : undefined}
-                onRemove={
-                  onRemoveLesson ? () => onRemoveLesson(lesson.id) : undefined
-                }
-              />
-            ))}
-          </ul>
-        </SortableContext>
+      {collapsed ? null : (
+        <LessonDropZone chapterId={chapter.id} empty={lessons.length === 0}>
+          <SortableContext
+            items={lessons.map((l) => l.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="divide-y">
+              {lessons.map((lesson, i) => (
+                <SortableLessonRow
+                  key={lesson.id}
+                  lesson={lesson}
+                  chapterId={chapter.id}
+                  index={i}
+                  total={lessons.length}
+                  onRename={
+                    onRenameLesson
+                      ? (title) => onRenameLesson(lesson.id, title)
+                      : undefined
+                  }
+                  onMove={
+                    onMoveLesson
+                      ? (dir) => onMoveLesson(i, i + dir)
+                      : undefined
+                  }
+                  onEdit={
+                    onEditLesson ? () => onEditLesson(lesson) : undefined
+                  }
+                  onRemove={
+                    onRemoveLesson ? () => onRemoveLesson(lesson.id) : undefined
+                  }
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </LessonDropZone>
       )}
     </Card>
+  )
+}
+
+// Droppable wrapper around each chapter's lesson list. When lessons.length
+// is zero, the empty state itself is the drop target so a user can drop
+// a lesson into a fresh chapter. When populated, the whole area is still
+// a drop target for the "drop past the last lesson" case that
+// SortableContext can't cover on its own.
+function LessonDropZone({
+  chapterId,
+  empty,
+  children,
+}: {
+  chapterId: string
+  empty: boolean
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `chapter-body-${chapterId}`,
+    data: { type: 'lesson-container' as const, chapterId },
+  })
+
+  if (empty) {
+    return (
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex items-center justify-center px-4 py-6 text-center text-sm text-muted-foreground transition-colors',
+          isOver && 'bg-primary/5 text-foreground',
+        )}
+      >
+        {isOver
+          ? 'Drop lesson here'
+          : 'No lessons yet — use “Add lesson” or drag one in.'}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'transition-colors',
+        isOver && 'bg-primary/[0.03]',
+      )}
+    >
+      {children}
+    </div>
   )
 }
 
