@@ -68,6 +68,7 @@ async function syncCourseStructure(
         where: { deletedAt: null },
         select: {
           id: true,
+          chapterId: true,
           type: true,
           title: true,
           description: true,
@@ -197,17 +198,32 @@ async function syncCourseStructure(
       for (const lesson of chapter.lessons) {
         if (lesson.id) {
           const existing = existingLessonById.get(lesson.id)
+          // Guard: only touch lessons we loaded from THIS course. The
+          // original where clause included chapterId which acted as a
+          // course-scope check; now that we relaxed the where to
+          // support cross-chapter moves, this explicit lookup keeps
+          // a rogue payload from redirecting another course's lesson.
+          if (!existing) continue
           const incomingDescription = lesson.description ?? null
           const titleChanged = existing?.title !== lesson.title
           const descChanged = existing?.description !== incomingDescription
           const orderChanged = existing?.orderIndex !== lesson.orderIndex
-          if (titleChanged || descChanged || orderChanged) {
+          // Chapter move — the lesson's DB row still points at the
+          // origin chapter until this update runs. The where clause
+          // uses only the primary key so the row is findable even
+          // though its chapterId is out of date; the reconnect lives
+          // in `data`.
+          const chapterChanged = existing?.chapterId !== realChapterId
+          if (titleChanged || descChanged || orderChanged || chapterChanged) {
             await tx.lesson.update({
-              where: { id: lesson.id, chapterId: realChapterId },
+              where: { id: lesson.id },
               data: {
                 title: lesson.title,
                 description: incomingDescription,
                 orderIndex: lesson.orderIndex,
+                ...(chapterChanged
+                  ? { chapter: { connect: { id: realChapterId } } }
+                  : {}),
               },
             })
           }
