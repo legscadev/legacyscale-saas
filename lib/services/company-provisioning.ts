@@ -6,6 +6,8 @@ import type { Company, User } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { syncUserToDatabase } from '@/lib/auth/sync-user'
+import { issueInvite } from '@/lib/invites'
+import { sendWelcomeEmail } from '@/lib/resend'
 import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -117,6 +119,28 @@ export async function createCompany(
         role: 'OWNER',
       },
     })
+
+    // Fresh accounts get an onboarding invite so the OWNER can
+    // actually sign in — mirrors provisionMemberWithInvite. Without
+    // this the account exists in Supabase auth with a password
+    // nobody knows, and the recipient has no way in. Email failure
+    // is logged but non-fatal: the company + membership are the
+    // load-bearing parts, and the operator can re-fire the invite
+    // manually if needed.
+    if (ownerWasNewlyCreated) {
+      const token = await issueInvite(owner.id)
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      const onboardingUrl = `${appUrl}/onboarding?token=${token}`
+      const displayName = input.owner.name?.trim() || normalizedEmail
+      try {
+        await sendWelcomeEmail(normalizedEmail, displayName, {
+          ctaUrl: onboardingUrl,
+          variant: 'invite',
+        })
+      } catch (err) {
+        console.error('Company-owner invite email failed:', err)
+      }
+    }
 
     return { company, owner, ownerWasNewlyCreated }
   })
