@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Route the `dark:` variant off Tailwind's default media query onto
+ * the `.dark` class that our theme toggle flips on <html>. Without
+ * this override, `dark:` utilities silently no-op under the manual
+ * theme system. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;

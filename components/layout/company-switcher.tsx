@@ -84,7 +84,7 @@ export function CompanySwitcher({
           <button
             type="button"
             className={cn(
-              'group/company flex w-full items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.03] text-left transition-colors hover:bg-white/[0.06]',
+              'group/company flex w-full items-center gap-2 rounded-md bg-white/[0.03] text-left transition-colors hover:bg-white/[0.06] dark:border dark:border-[#ffffff0f]',
               collapsed ? 'size-9 justify-center' : 'px-2 py-1.5',
             )}
           />

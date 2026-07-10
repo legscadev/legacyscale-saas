@@ -118,7 +118,7 @@ function AppShellInner({
         {tenancy ? (
           <div
             className={cn(
-              'border-t border-white/[0.06]',
+              'dark:border-t dark:border-[#ffffff0f]',
               collapsed ? 'flex justify-center p-2' : 'px-3 py-2',
             )}
           >
@@ -176,7 +176,7 @@ function AppShellInner({
               </Button>
             </div>
             {tenancy ? (
-              <div className="border-t border-white/[0.06] px-3 py-2">
+              <div className="px-3 py-2 dark:border-t dark:border-[#ffffff0f]">
                 <CompanySwitcher
                   activeCompanyId={tenancy.activeCompanyId}
                   companies={tenancy.companies}
