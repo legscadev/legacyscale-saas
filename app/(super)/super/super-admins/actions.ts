@@ -6,6 +6,7 @@ import { requireActiveUser } from '@/lib/auth'
 import {
   LastSuperAdminError,
   SelfRevokeError,
+  UnknownEmailError,
   UserNotFoundError,
   grantSuperAdmin,
   listSuperAdmins,
@@ -32,13 +33,15 @@ export async function fetchSuperAdmins(): Promise<SuperAdminRow[]> {
 
 export interface GrantSuperAdminResult {
   ok: boolean
-  wasNewlyCreated?: boolean
+  /** Set when the failure was specifically "we don't know this
+   *  email" — the client uses this to render a friendlier hint
+   *  with a link to /admin/members. */
+  unknownEmail?: boolean
   error?: string
 }
 
 export async function grantSuperAdminAction(input: {
   email: string
-  name?: string
   role?: SuperAdminRole
   expiresAt?: string | null
   notes?: string | null
@@ -56,9 +59,8 @@ export async function grantSuperAdminAction(input: {
       expiresAt = parsed
     }
 
-    const { wasNewlyCreated } = await grantSuperAdmin({
+    await grantSuperAdmin({
       email: input.email,
-      name: input.name,
       role: input.role,
       expiresAt,
       notes: input.notes,
@@ -66,8 +68,11 @@ export async function grantSuperAdminAction(input: {
       // column on /super/super-admins and the future audit view.
       grantedById: caller.id,
     })
-    return { ok: true, wasNewlyCreated }
+    return { ok: true }
   } catch (err) {
+    if (err instanceof UnknownEmailError) {
+      return { ok: false, unknownEmail: true, error: err.message }
+    }
     console.error('grantSuperAdminAction failed:', err)
     return {
       ok: false,

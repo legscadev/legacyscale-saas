@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -74,24 +75,24 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
 
   const [grantOpen, setGrantOpen] = useState(false)
   const [grantEmail, setGrantEmail] = useState('')
-  const [grantName, setGrantName] = useState('')
   const [grantRole, setGrantRole] =
     useState<SuperAdminRow['grant']['role']>('MASTER')
   const [grantExpires, setGrantExpires] = useState('')
   const [grantNotes, setGrantNotes] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [granting, setGranting] = useState(false)
+  const [unknownEmailHint, setUnknownEmailHint] = useState(false)
 
   const [revokeTarget, setRevokeTarget] = useState<SuperAdminRow | null>(null)
   const [revoking, setRevoking] = useState(false)
 
   function resetGrantForm() {
     setGrantEmail('')
-    setGrantName('')
     setGrantRole('MASTER')
     setGrantExpires('')
     setGrantNotes('')
     setAdvancedOpen(false)
+    setUnknownEmailHint(false)
   }
 
   async function refresh() {
@@ -107,23 +108,26 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
     const email = grantEmail.trim()
     if (!email) return
     setGranting(true)
+    setUnknownEmailHint(false)
     try {
       const result = await grantSuperAdminAction({
         email,
-        name: grantName.trim() || undefined,
         role: grantRole,
         expiresAt: grantExpires ? grantExpires : null,
         notes: grantNotes.trim() ? grantNotes.trim() : null,
       })
       if (!result.ok) {
+        if (result.unknownEmail) {
+          // Render an inline hint with a shortcut instead of a
+          // fire-and-forget toast — the recovery step (invite as
+          // member first) is non-obvious.
+          setUnknownEmailHint(true)
+          return
+        }
         toast.error(result.error ?? 'Failed to grant super-admin')
         return
       }
-      toast.success(
-        result.wasNewlyCreated
-          ? `Created ${email} and granted super-admin`
-          : `Granted super-admin to ${email}`,
-      )
+      toast.success(`Granted super-admin to ${email}`)
       setGrantOpen(false)
       resetGrantForm()
       await refresh()
@@ -294,9 +298,10 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
           <DialogHeader>
             <DialogTitle>Grant super-admin</DialogTitle>
             <DialogDescription>
-              Type an email. If the user already exists on the platform,
-              we flip the flag. Otherwise we create a fresh account and
-              hand them the master key.
+              Elevate an existing user to super-admin. If the email
+              isn&apos;t registered yet, invite them as a member first —
+              super-admin is too destructive to hand out based on a
+              typo&apos;d email.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -306,21 +311,26 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
                 id="grant-email"
                 type="email"
                 value={grantEmail}
-                onChange={(e) => setGrantEmail(e.target.value)}
+                onChange={(e) => {
+                  setGrantEmail(e.target.value)
+                  if (unknownEmailHint) setUnknownEmailHint(false)
+                }}
                 placeholder="ruby@kondense.ai"
                 autoFocus
                 disabled={granting}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="grant-name">Name (optional)</Label>
-              <Input
-                id="grant-name"
-                value={grantName}
-                onChange={(e) => setGrantName(e.target.value)}
-                placeholder="Used only when creating a fresh account"
-                disabled={granting}
-              />
+              {unknownEmailHint ? (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                  This email isn&apos;t registered yet.{' '}
+                  <Link
+                    href="/admin/members"
+                    className="underline underline-offset-2"
+                  >
+                    Invite them as a member first
+                  </Link>
+                  , then come back here to promote them.
+                </p>
+              ) : null}
             </div>
 
             <button

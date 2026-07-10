@@ -13,8 +13,6 @@
 import type { SuperAdminRole, User } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { syncUserToDatabase } from '@/lib/auth/sync-user'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 export interface SuperAdminRow {
   id: string
@@ -58,6 +56,22 @@ export class UserNotFoundError extends Error {
   constructor(message = 'User not found') {
     super(message)
     this.name = 'UserNotFoundError'
+  }
+}
+
+/** Thrown when the operator tries to grant super-admin to an
+ *  email that isn't registered on the platform. We deliberately
+ *  refuse to mint fresh accounts from this surface — the master
+ *  key is too destructive to hand out based on a possibly-typo'd
+ *  email. Operators must invite the person as a regular member
+ *  first (which goes through the full welcome + password-reset
+ *  flow) and then promote them here. */
+export class UnknownEmailError extends Error {
+  constructor(
+    message = 'No user with this email. Invite them as a member first, then grant super-admin.',
+  ) {
+    super(message)
+    this.name = 'UnknownEmailError'
   }
 }
 
@@ -122,7 +136,6 @@ export async function listSuperAdmins(
 
 export interface GrantInput {
   email: string
-  name?: string
   role?: SuperAdminRole
   expiresAt?: Date | null
   notes?: string | null
@@ -130,47 +143,27 @@ export interface GrantInput {
 }
 
 /**
- * Grant super-admin to a user by email. If the user is already
- * registered we insert a new grant row + flip the cached boolean.
- * Otherwise we mint a Supabase auth user + local users row first,
- * then grant. Idempotent on re-grant (already active → returns
- * the existing grant).
+ * Grant super-admin to an EXISTING user by email. Refuses unknown
+ * emails on purpose — the master key is too destructive to hand
+ * out based on a typo. Operators must invite the person as a
+ * regular member first (which sends a welcome + password-reset
+ * link) and then promote them here.
+ *
+ * Idempotent on re-grant (user already has an active grant →
+ * returns the existing state without inserting a duplicate row).
  *
  * Callers upstream must verify the requester is themselves a
  * super-admin before invoking this — the service does not gate.
  */
 export async function grantSuperAdmin(
   input: GrantInput,
-): Promise<{ user: User; wasNewlyCreated: boolean }> {
+): Promise<{ user: User }> {
   const email = input.email.trim().toLowerCase()
   if (!email) throw new Error('Email is required')
   const role: SuperAdminRole = input.role ?? 'MASTER'
 
-  // Ensure the user exists BEFORE opening the transaction so we
-  // never leave a Supabase auth account without a matching grant.
-  let user = await prisma.user.findUnique({ where: { email } })
-  let wasNewlyCreated = false
-
-  if (!user) {
-    const admin = createAdminClient()
-    const displayName = input.name?.trim() || email
-    const { data: created, error: createErr } =
-      await admin.auth.admin.createUser({
-        email,
-        password: randomPassword(),
-        email_confirm: true,
-        user_metadata: { name: displayName },
-      })
-    if (createErr || !created.user) {
-      throw new Error(
-        `Failed to create Supabase auth user: ${createErr?.message ?? 'unknown'}`,
-      )
-    }
-    user = await syncUserToDatabase(created.user, {
-      suppressWelcomeEmail: true,
-    })
-    wasNewlyCreated = true
-  }
+  const user = await prisma.user.findUnique({ where: { email } })
+  if (!user) throw new UnknownEmailError()
 
   const targetUserId = user.id
 
@@ -206,7 +199,7 @@ export async function grantSuperAdmin(
   const refreshed = await prisma.user.findUniqueOrThrow({
     where: { id: targetUserId },
   })
-  return { user: refreshed, wasNewlyCreated }
+  return { user: refreshed }
 }
 
 /**
@@ -280,10 +273,4 @@ export async function revokeSuperAdmin(input: {
   return prisma.user.findUniqueOrThrow({
     where: { id: input.userId },
   })
-}
-
-function randomPassword(): string {
-  const buf = new Uint8Array(24)
-  crypto.getRandomValues(buf)
-  return Buffer.from(buf).toString('base64')
 }
