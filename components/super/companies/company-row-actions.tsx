@@ -178,7 +178,7 @@ export function CompanyRowActions({
       </DropdownMenu>
 
       <Dialog open={snapshotOpen} onOpenChange={setSnapshotOpen}>
-        <DialogContent className="w-auto max-w-[min(90vw,42rem)] sm:max-w-fit">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Clone content into {companyName}</DialogTitle>
             <DialogDescription>
@@ -206,7 +206,7 @@ export function CompanyRowActions({
               >
                 <SelectTrigger
                   id="snapshot-source-row"
-                  className="w-auto min-w-56"
+                  className="w-full"
                 >
                   <SelectValue placeholder="Pick a tenant">
                     {(() => {
