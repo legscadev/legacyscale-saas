@@ -17,6 +17,18 @@ export const createCompanySchema = z.object({
   isAgency: z.boolean().optional().default(false),
   ownerEmail: z.string().trim().toLowerCase().email('Enter a valid email'),
   ownerName: z.string().trim().max(120).optional().or(z.literal('')),
+  /**
+   * Optional source-tenant to snapshot content from at creation
+   * time. Undefined / null / empty string means "start blank".
+   */
+  snapshotFromCompanyId: z.string().uuid().optional().or(z.literal('')),
 })
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>
+
+export const snapshotCompanySchema = z.object({
+  sourceCompanyId: z.string().uuid(),
+  targetCompanyId: z.string().uuid(),
+})
+
+export type SnapshotCompanyInput = z.infer<typeof snapshotCompanySchema>

@@ -3,19 +3,30 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Copy, FileText, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
+import type { SnapshotSourceOption } from '@/app/(super)/super/companies/actions'
 import { createCompanyAction } from '@/app/(super)/super/companies/actions'
 
 type FieldErrors = Partial<
-  Record<'name' | 'slug' | 'isAgency' | 'ownerEmail' | 'ownerName', string[]>
+  Record<
+    'name' | 'slug' | 'isAgency' | 'ownerEmail' | 'ownerName' | 'snapshotFromCompanyId',
+    string[]
+  >
 >
 
 // Live slug suggestion — same normalisation the server does on submit.
@@ -28,7 +39,15 @@ function slugify(name: string): string {
     .replace(/^-|-$/g, '')
 }
 
-export function CreateCompanyForm() {
+interface CreateCompanyFormProps {
+  snapshotSources: SnapshotSourceOption[]
+}
+
+const NONE_SOURCE = '__blank__'
+
+export function CreateCompanyForm({
+  snapshotSources,
+}: CreateCompanyFormProps) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
@@ -36,6 +55,7 @@ export function CreateCompanyForm() {
   const [isAgency, setIsAgency] = useState(false)
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerName, setOwnerName] = useState('')
+  const [snapshotSource, setSnapshotSource] = useState<string>(NONE_SOURCE)
   const [pending, setPending] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
@@ -52,17 +72,34 @@ export function CreateCompanyForm() {
         isAgency,
         ownerEmail,
         ownerName,
+        snapshotFromCompanyId:
+          snapshotSource === NONE_SOURCE ? undefined : snapshotSource,
       })
       if (!result.ok) {
         if (result.fieldErrors) setFieldErrors(result.fieldErrors)
         if (result.error) toast.error(result.error)
         return
       }
-      toast.success(
-        result.ownerWasNewlyCreated
-          ? 'Company created and owner invited'
-          : 'Company created',
-      )
+      // Success — narrate the outcome so the toast reflects what
+      // actually happened. Snapshot failure after a successful
+      // create is common enough (transient DB timeouts on huge
+      // catalogs) that it needs its own callout instead of being
+      // swallowed by the generic success path.
+      if (result.snapshotError) {
+        toast.warning(
+          `Company created but snapshot failed: ${result.snapshotError}. You can re-run it from the company row.`,
+        )
+      } else if (result.snapshot) {
+        toast.success(
+          `Company created — cloned ${result.snapshot.coursesCopied} courses, ${result.snapshot.lessonsCopied} lessons, and ${result.snapshot.categoriesCopied} categories`,
+        )
+      } else {
+        toast.success(
+          result.ownerWasNewlyCreated
+            ? 'Company created and owner invited'
+            : 'Company created',
+        )
+      }
       router.push('/super/companies')
       router.refresh()
     } catch (err) {
@@ -187,12 +224,75 @@ export function CreateCompanyForm() {
         </FormRow>
       </div>
 
+      <div className="space-y-3 rounded-lg border p-4">
+        <div>
+          <p className="text-sm font-semibold">Starting content</p>
+          <p className="text-xs text-muted-foreground">
+            Start blank, or clone the courses + categories from another
+            tenant. Cloned content lands as DRAFT so the new owner can
+            review before publishing. Videos + files aren't carried
+            over — those need to be re-uploaded.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <SourceOption
+            checked={snapshotSource === NONE_SOURCE}
+            onClick={() => setSnapshotSource(NONE_SOURCE)}
+            icon={<FileText className="size-4" />}
+            title="Start blank"
+            description="A fresh tenant with no courses, categories, or modules."
+            disabled={pending}
+          />
+          <SourceOption
+            checked={snapshotSource !== NONE_SOURCE}
+            onClick={() => {
+              if (snapshotSources[0]) setSnapshotSource(snapshotSources[0].id)
+            }}
+            icon={<Copy className="size-4" />}
+            title="Clone from another tenant"
+            description={
+              snapshotSources.length === 0
+                ? 'No other tenants exist yet — nothing to clone from.'
+                : `Copy the catalog from one of ${snapshotSources.length} eligible tenants.`
+            }
+            disabled={pending || snapshotSources.length === 0}
+          />
+        </div>
+        {snapshotSource !== NONE_SOURCE && snapshotSources.length > 0 ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="snapshot-source">Source tenant</Label>
+            <Select
+              value={snapshotSource}
+              onValueChange={(v) => setSnapshotSource(v ?? NONE_SOURCE)}
+              disabled={pending}
+            >
+              <SelectTrigger id="snapshot-source">
+                <SelectValue placeholder="Pick a tenant to clone from" />
+              </SelectTrigger>
+              <SelectContent>
+                {snapshotSources.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                    {s.isAgency ? ' · Agency' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {fieldErrors.snapshotFromCompanyId ? (
+              <p className="text-xs text-destructive">
+                {fieldErrors.snapshotFromCompanyId[0]}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? (
             <>
               <Loader2 className="animate-spin" />
-              Creating…
+              {snapshotSource !== NONE_SOURCE ? 'Creating + cloning…' : 'Creating…'}
             </>
           ) : (
             'Create company'
@@ -208,6 +308,54 @@ export function CreateCompanyForm() {
         </Button>
       </div>
     </form>
+  )
+}
+
+interface SourceOptionProps {
+  checked: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  title: string
+  description: string
+  disabled?: boolean
+}
+
+function SourceOption({
+  checked,
+  onClick,
+  icon,
+  title,
+  description,
+  disabled,
+}: SourceOptionProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'flex items-start gap-3 rounded-md border p-3 text-left transition-colors',
+        checked
+          ? 'border-primary/50 bg-primary/[0.04]'
+          : 'hover:border-input hover:bg-muted/40',
+        disabled && 'cursor-not-allowed opacity-60',
+      )}
+    >
+      <span
+        className={cn(
+          'grid size-8 shrink-0 place-items-center rounded-md',
+          checked
+            ? 'bg-primary/15 text-primary'
+            : 'bg-muted text-muted-foreground',
+        )}
+      >
+        {icon}
+      </span>
+      <div className="space-y-0.5">
+        <p className="text-sm font-medium leading-none">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+    </button>
   )
 }
 

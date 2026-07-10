@@ -3,7 +3,6 @@
 import type { Column, ColumnDef } from '@tanstack/react-table'
 import { formatDistanceToNow } from 'date-fns'
 import {
-  ArrowRight,
   ArrowUpDown,
   Building2,
   ChevronDown,
@@ -11,11 +10,11 @@ import {
   Globe2,
 } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-import { enterCompanyAction } from '@/app/(super)/super/companies/actions'
 import type { CompanyDirectoryRow } from '@/app/(super)/super/companies/types'
+
+import { CompanyRowActions } from './company-row-actions'
 
 function SortHeader({
   column,
@@ -128,20 +127,14 @@ export const companyColumns: ColumnDef<CompanyDirectoryRow, unknown>[] = [
   },
   {
     id: 'action',
-    header: () => <span className="sr-only">Enter</span>,
+    header: () => <span className="sr-only">Actions</span>,
     cell: ({ row }) => (
-      <form action={enterCompanyAction} className="text-right">
-        <input type="hidden" name="companyId" value={row.original.id} />
-        <Button
-          type="submit"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-        >
-          Enter
-          <ArrowRight className="size-3.5" />
-        </Button>
-      </form>
+      <div className="text-right">
+        <CompanyRowActions
+          companyId={row.original.id}
+          companyName={row.original.name}
+        />
+      </div>
     ),
     meta: { className: 'text-right', stopRowClick: true },
     enableSorting: false,
