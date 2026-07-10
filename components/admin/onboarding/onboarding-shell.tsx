@@ -11,6 +11,7 @@ import {
   ListChecks,
   Loader2,
   MinusCircle,
+  Pencil,
   Plus,
   Search,
   UserPlus,
@@ -475,23 +476,36 @@ function OnboardingMatrix({
                       'group-hover:bg-accent',
                     )}
                   >
-                    <button
-                      type="button"
-                      onClick={() => onNameClick(row.id)}
-                      className="flex w-full min-w-0 flex-col text-left"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <span className="truncate font-medium hover:text-primary">
-                          {row.name}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onNameClick(row.id)}
+                        className="flex min-w-0 flex-1 flex-col text-left"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate font-medium hover:text-primary">
+                            {row.name}
+                          </span>
+                          {row.checklist.attentionCount > 0 ? (
+                            <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                          ) : null}
                         </span>
-                        {row.checklist.attentionCount > 0 ? (
-                          <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
-                        ) : null}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {row.roleTitle}
-                      </span>
-                    </button>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {row.roleTitle}
+                        </span>
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Edit ${row.name}`}
+                        title="Edit employee"
+                        onClick={() => onNameClick(row.id)}
+                        className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    </div>
                   </td>
                   <td
                     className={cn(
