@@ -1,5 +1,7 @@
 'use server'
 
+import type { SuperAdminRole } from '@prisma/client'
+
 import { requireActiveUser } from '@/lib/auth'
 import {
   LastSuperAdminError,
@@ -37,12 +39,29 @@ export interface GrantSuperAdminResult {
 export async function grantSuperAdminAction(input: {
   email: string
   name?: string
+  role?: SuperAdminRole
+  expiresAt?: string | null
+  notes?: string | null
 }): Promise<GrantSuperAdminResult> {
   const caller = await assertSuperAdmin()
   try {
+    // Parse the date input on the server so a malformed value from
+    // the client fails loudly rather than silently landing null.
+    let expiresAt: Date | null = null
+    if (input.expiresAt) {
+      const parsed = new Date(input.expiresAt)
+      if (Number.isNaN(parsed.getTime())) {
+        return { ok: false, error: 'Invalid expiry date' }
+      }
+      expiresAt = parsed
+    }
+
     const { wasNewlyCreated } = await grantSuperAdmin({
       email: input.email,
       name: input.name,
+      role: input.role,
+      expiresAt,
+      notes: input.notes,
       // Attribute the grant to the caller — powers the "Granted by"
       // column on /super/super-admins and the future audit view.
       grantedById: caller.id,
