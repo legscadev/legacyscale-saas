@@ -295,6 +295,58 @@ export async function snapshotCompanyAction(
   }
 }
 
+export interface DeleteCompanyResult {
+  ok: boolean
+  error?: string
+}
+
+/**
+ * Soft-delete a company. Requires the caller to type the company's
+ * NAME in the confirmation input — the server double-checks against
+ * the row so a race in the UI can't accidentally destroy a
+ * different tenant.
+ *
+ * Also refuses to delete the current active tenant (the caller
+ * would immediately lose their session context) and the seed
+ * Kondense company (the agency root — deleting it collapses the
+ * whole super-admin surface).
+ */
+export async function deleteCompanyAction(input: {
+  companyId: string
+  confirmName: string
+}): Promise<DeleteCompanyResult> {
+  await assertSuperAdmin()
+
+  return runAsSuperAdmin(async () => {
+    const company = await prisma.company.findFirst({
+      where: { id: input.companyId, deletedAt: null },
+      select: { id: true, name: true, isAgency: true },
+    })
+    if (!company) return { ok: false, error: 'Company not found' }
+
+    if (company.isAgency) {
+      return {
+        ok: false,
+        error: 'Agency tenants cannot be deleted from this surface.',
+      }
+    }
+
+    if (input.confirmName.trim() !== company.name) {
+      return {
+        ok: false,
+        error: 'The typed name did not match this company.',
+      }
+    }
+
+    await prisma.company.update({
+      where: { id: company.id },
+      data: { deletedAt: new Date() },
+    })
+
+    return { ok: true }
+  })
+}
+
 /**
  * Sets the caller's active-company cookie to the given tenant and
  * redirects into the admin console. Super-admin only — everyone

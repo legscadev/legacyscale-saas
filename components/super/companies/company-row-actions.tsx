@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Copy, Loader2, MoreHorizontal } from 'lucide-react'
+import { ArrowRight, Copy, Loader2, MoreHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -18,8 +18,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -30,6 +32,7 @@ import {
 } from '@/components/ui/select'
 
 import {
+  deleteCompanyAction,
   enterCompanyAction,
   listSnapshotSources,
   snapshotCompanyAction,
@@ -39,11 +42,13 @@ import {
 interface CompanyRowActionsProps {
   companyId: string
   companyName: string
+  isAgency: boolean
 }
 
 export function CompanyRowActions({
   companyId,
   companyName,
+  isAgency,
 }: CompanyRowActionsProps) {
   const router = useRouter()
   const [snapshotOpen, setSnapshotOpen] = useState(false)
@@ -51,6 +56,9 @@ export function CompanyRowActions({
   const [sourceLoading, setSourceLoading] = useState(false)
   const [selectedSource, setSelectedSource] = useState<string>('')
   const [running, setRunning] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmName, setDeleteConfirmName] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const [, startTransition] = useTransition()
 
   async function openSnapshot() {
@@ -65,6 +73,29 @@ export function CompanyRowActions({
       toast.error('Could not load source tenants')
     } finally {
       setSourceLoading(false)
+    }
+  }
+
+  async function runDelete() {
+    setDeleting(true)
+    try {
+      const result = await deleteCompanyAction({
+        companyId,
+        confirmName: deleteConfirmName,
+      })
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not delete company')
+        return
+      }
+      toast.success(`Deleted ${companyName}`)
+      setDeleteOpen(false)
+      setDeleteConfirmName('')
+      startTransition(() => router.refresh())
+    } catch (err) {
+      console.error(err)
+      toast.error('Could not delete company')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -122,7 +153,7 @@ export function CompanyRowActions({
         >
           <MoreHorizontal />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="w-auto min-w-0">
           <DropdownMenuItem
             onClick={() => {
               void openSnapshot()
@@ -131,11 +162,23 @@ export function CompanyRowActions({
             <Copy className="size-4" />
             Clone content into…
           </DropdownMenuItem>
+          {isAgency ? null : (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setDeleteOpen(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="size-4" />
+                Delete company…
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
       <Dialog open={snapshotOpen} onOpenChange={setSnapshotOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-auto max-w-[min(90vw,42rem)] sm:max-w-fit">
           <DialogHeader>
             <DialogTitle>Clone content into {companyName}</DialogTitle>
             <DialogDescription>
@@ -161,7 +204,10 @@ export function CompanyRowActions({
                 onValueChange={(v) => setSelectedSource(v ?? '')}
                 disabled={running}
               >
-                <SelectTrigger id="snapshot-source-row">
+                <SelectTrigger
+                  id="snapshot-source-row"
+                  className="w-auto min-w-56"
+                >
                   <SelectValue placeholder="Pick a tenant">
                     {(() => {
                       const s = sources.find((x) => x.id === selectedSource)
@@ -204,6 +250,72 @@ export function CompanyRowActions({
                 </>
               ) : (
                 'Run snapshot'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(v) => {
+          if (deleting) return
+          setDeleteOpen(v)
+          if (!v) setDeleteConfirmName('')
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">
+              Delete {companyName}?
+            </DialogTitle>
+            <DialogDescription>
+              This soft-deletes the tenant. Its content, memberships,
+              and per-tenant records stop surfacing on the platform
+              immediately. To confirm, type the company name below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor={`delete-confirm-${companyId}`}>
+              Type <span className="font-medium">{companyName}</span> to
+              confirm
+            </Label>
+            <Input
+              id={`delete-confirm-${companyId}`}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              placeholder={companyName}
+              autoComplete="off"
+              disabled={deleting}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setDeleteOpen(false)
+                setDeleteConfirmName('')
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={runDelete}
+              disabled={
+                deleting || deleteConfirmName.trim() !== companyName
+              }
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                'Delete company'
               )}
             </Button>
           </DialogFooter>

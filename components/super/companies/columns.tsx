@@ -133,6 +133,7 @@ export const companyColumns: ColumnDef<CompanyDirectoryRow, unknown>[] = [
         <CompanyRowActions
           companyId={row.original.id}
           companyName={row.original.name}
+          isAgency={row.original.isAgency}
         />
       </div>
     ),

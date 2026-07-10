@@ -111,7 +111,7 @@ export function CreateCompanyForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
+    <form onSubmit={handleSubmit} className="w-full space-y-6">
       <div>
         <Link
           href="/super/companies"
