@@ -13,6 +13,7 @@ const PUBLIC_PREFIXES = [
   '/unauthorized',
   '/maintenance',
   '/prototype', // static UI mockups (no auth)
+  '/manifest.webmanifest', // per-tenant PWA manifest — no secrets
 ]
 
 // ────────────────────────────────────────────

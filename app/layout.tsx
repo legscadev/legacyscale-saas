@@ -11,17 +11,31 @@ const inter = Inter({
   variable: "--font-sans",
 })
 
-// Dynamic metadata so the browser tab title + favicon reflect the
-// caller's active tenant. Falls back to the Kondense platform
-// defaults when tenancy is off, when there's no signed-in caller, or
-// when a tenant hasn't set its own brand. Cached per request through
-// `getBranding()`.
+// Dynamic metadata so the browser tab title + favicon + Open Graph
+// image + web-app manifest reflect the caller's active tenant. Falls
+// back to the Kondense platform defaults when tenancy is off, when
+// there's no signed-in caller, or when a tenant hasn't set its own
+// brand. Cached per request through `getBranding()`.
 export async function generateMetadata(): Promise<Metadata> {
   const b = await getBranding()
+  const description = b.tagline ?? b.productName
   return {
     title: b.productName,
-    description: b.tagline ?? b.productName,
+    description,
     icons: { icon: b.faviconUrl },
+    manifest: '/manifest.webmanifest',
+    openGraph: {
+      siteName: b.productName,
+      title: b.productName,
+      description,
+      images: b.ogImageUrl ? [{ url: b.ogImageUrl }] : undefined,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: b.productName,
+      description,
+      images: b.ogImageUrl ? [b.ogImageUrl] : undefined,
+    },
   }
 }
 
