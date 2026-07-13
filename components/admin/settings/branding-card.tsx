@@ -41,6 +41,9 @@ import {
 interface BrandingCardProps {
   initial: BrandingInput | null
   action: (fd: FormData) => Promise<BrandingSaveResult>
+  /** Explicit clear — sets Company.brand to NULL so the theme lock
+   *  releases and the visitor light/dark toggle works again. */
+  clearAction: () => Promise<BrandingSaveResult>
 }
 
 // ────────────────────────────────────────────
@@ -111,9 +114,14 @@ function buildFormData(state: FormState): FormData {
   return fd
 }
 
-export function BrandingCard({ initial, action }: BrandingCardProps) {
+export function BrandingCard({
+  initial,
+  action,
+  clearAction,
+}: BrandingCardProps) {
   const [state, setState] = useState<FormState>(initialState(initial))
   const [isSaving, startSaving] = useTransition()
+  const [isResetting, startReset] = useTransition()
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setState((prev) => ({ ...prev, [key]: value }))
@@ -177,9 +185,25 @@ export function BrandingCard({ initial, action }: BrandingCardProps) {
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => applyTheme(defaultPreset().theme)}
+              disabled={isResetting}
+              onClick={() => {
+                startReset(async () => {
+                  const result = await clearAction()
+                  if (!result.ok) {
+                    toast.error(result.error ?? 'Could not reset')
+                    return
+                  }
+                  // Clear the form back to empty so the placeholder
+                  // "Kondense" values show through — matches the
+                  // just-cleared DB state.
+                  setState(initialState(null))
+                  toast.success(
+                    'Reverted to platform defaults — light/dark toggle is live again',
+                  )
+                })
+              }}
             >
-              Reset
+              {isResetting ? 'Resetting…' : 'Reset to platform defaults'}
             </Button>
           </div>
         </div>

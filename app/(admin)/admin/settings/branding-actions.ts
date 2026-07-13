@@ -48,6 +48,31 @@ const ENUM_KEYS = [
 const BOOLEAN_KEYS = ['darkModeDefault'] as const
 
 /**
+ * Explicitly clear the active company's brand JSON. The row-level
+ * NULL is what the theme-lock check in the shell keys off — writing
+ * "Kondense values" through the update path would still count as a
+ * custom palette and keep the light/dark toggle disabled. This
+ * action gives the "Reset to platform defaults" button in the
+ * BrandingCard a way out.
+ */
+export async function clearBrandingAction(): Promise<BrandingSaveResult> {
+  await requireAdmin()
+  const company = await getActiveCompany()
+  if (!company) return { ok: false, error: 'No active company.' }
+  try {
+    await prisma.company.update({
+      where: { id: company.id },
+      data: { brand: Prisma.DbNull as unknown as Prisma.InputJsonValue },
+    })
+    revalidatePath('/', 'layout')
+    return { ok: true }
+  } catch (err) {
+    console.error('clearBrandingAction failed:', err)
+    return { ok: false, error: 'Could not reset branding' }
+  }
+}
+
+/**
  * Read the current tenant's brand JSON for the form defaults. Returns
  * `null` when tenancy is off (no active company) or the stored blob
  * is malformed — the form then falls back to placeholders.
@@ -92,9 +117,16 @@ export async function updateBrandingAction(
       raw[key] = value.trim()
     }
   }
-  for (const key of BOOLEAN_KEYS) {
-    // Checkboxes send "1" when checked, absent when unchecked.
-    raw[key] = formData.get(key) === '1'
+  // Booleans have no "empty" state — the checkbox is always either
+  // checked or unchecked. Only persist them when some other field is
+  // set; otherwise the brand column can never fall back to NULL and
+  // the theme toggle stays locked forever after a single accidental
+  // save. See docs discussion re: adaptive foreground rewrite.
+  const hasOtherData = Object.keys(raw).length > 0
+  if (hasOtherData) {
+    for (const key of BOOLEAN_KEYS) {
+      raw[key] = formData.get(key) === '1'
+    }
   }
 
   const parsed = brandingInputSchema.safeParse(raw)
@@ -110,7 +142,7 @@ export async function updateBrandingAction(
       where: { id: company.id },
       data: hasAny
         ? { brand: parsed.data as unknown as Prisma.InputJsonValue }
-        : { brand: Prisma.JsonNull as unknown as Prisma.InputJsonValue },
+        : { brand: Prisma.DbNull as unknown as Prisma.InputJsonValue },
     })
     // Layouts + root metadata both call getBranding(); revalidate the
     // whole layout tree so the sidebar / <title> / favicon pick up

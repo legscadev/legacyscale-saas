@@ -19,6 +19,7 @@ import {
   updateDiscordWebhookAction,
 } from './actions'
 import {
+  clearBrandingAction,
   getCurrentBrandingAction,
   updateBrandingAction,
 } from './branding-actions'
@@ -61,6 +62,7 @@ export default async function AdminSettingsPage() {
           <BrandingCard
             initial={currentBranding}
             action={updateBrandingAction}
+            clearAction={clearBrandingAction}
           />
         </TabsContent>
 
