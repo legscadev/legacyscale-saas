@@ -27,3 +27,39 @@ export function hexToHslTriple(hex: string): string {
   }
   return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`
 }
+
+/** Read the lightness (%) out of a "H S% L%" triple. */
+function lightnessOf(triple: string): number {
+  const parts = triple.split(' ')
+  const raw = parts[2]?.replace('%', '') ?? '50'
+  return parseInt(raw, 10)
+}
+
+/** True when the given hex is closer to white than to black. Uses
+ *  lightness > 55% as the pivot — reads well in practice for both
+ *  saturated primaries and neutral greys. */
+export function isLight(hex: string): boolean {
+  return lightnessOf(hexToHslTriple(hex)) > 55
+}
+
+/**
+ * Return the HSL triple for a foreground colour that contrasts
+ * cleanly against `hex`. Near-black for light backgrounds; near-
+ * white for dark backgrounds. Matches the values ShadCN uses in
+ * :root and .dark so components already tuned for those tones
+ * (borders, muted text, focus rings) still look right.
+ */
+export function contrastForegroundHslTriple(hex: string): string {
+  return isLight(hex) ? '222 47% 11%' : '0 0% 98%'
+}
+
+/**
+ * Shift the lightness of an HSL triple by `deltaPercent`, clamped
+ * to [0, 100]. Positive nudges it lighter; negative, darker.
+ */
+export function nudgeLightness(triple: string, deltaPercent: number): string {
+  const parts = triple.split(' ')
+  const l = lightnessOf(triple)
+  const newL = Math.max(0, Math.min(100, l + deltaPercent))
+  return `${parts[0]} ${parts[1]} ${newL}%`
+}

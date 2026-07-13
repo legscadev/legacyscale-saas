@@ -5,7 +5,12 @@ import { cn } from "@/lib/utils"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getBranding } from "@/lib/branding/get-branding"
-import { hexToHslTriple } from "@/lib/branding/hex-to-hsl"
+import {
+  contrastForegroundHslTriple,
+  hexToHslTriple,
+  isLight,
+  nudgeLightness,
+} from "@/lib/branding/hex-to-hsl"
 import type { Branding } from "@/lib/branding/schema"
 
 const inter = Inter({
@@ -62,8 +67,16 @@ function themeInitScript(darkModeDefault: boolean): string {
 /** Build the inline CSS-variable overrides that make the tenant's
  *  brand actually drive ShadCN. All shipped as `H S% L%` triples so
  *  the `hsl(var(--…))` wrappers in globals.css resolve correctly.
- *  Font family is spread inline (not via [data-font] CSS) so it
- *  beats next/font's per-body class override on --font-sans. */
+ *
+ *  Every ShadCN token that carries a background or a foreground is
+ *  overridden here — the alternative is a Frankenstein palette where
+ *  --background switches to white but --card stays dark and cards
+ *  look black against a white shell.
+ *
+ *  Foregrounds and cards/popovers/borders are derived from the
+ *  tenant's own colours so a "light" preset actually looks light and
+ *  a light primary automatically gets dark button text (and vice
+ *  versa). */
 function themeStyle(b: Branding): React.CSSProperties {
   const radius =
     b.borderRadius === 'sharp'
@@ -71,18 +84,59 @@ function themeStyle(b: Branding): React.CSSProperties {
       : b.borderRadius === 'rounded'
         ? '1rem'
         : '0.5rem'
+
+  const bgHsl = hexToHslTriple(b.backgroundColor)
+  const bgIsLight = isLight(b.backgroundColor)
+  // Sign of the nudge: on a dark shell, borders / cards should be
+  // slightly LIGHTER than the background; on a light shell, DARKER.
+  const nudge = bgIsLight ? -1 : 1
+  const cardHsl = nudgeLightness(bgHsl, nudge * 2)
+  const popoverHsl = nudgeLightness(bgHsl, nudge * 4)
+  const mutedHsl = nudgeLightness(bgHsl, nudge * 6)
+  const borderHsl = nudgeLightness(bgHsl, nudge * 12)
+  const foregroundHsl = contrastForegroundHslTriple(b.backgroundColor)
+  const mutedForegroundHsl = bgIsLight
+    ? '215 16% 47%'
+    : '0 0% 63%'
+
   const fontOverride =
     b.fontFamily === 'system'
       ? 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
       : b.fontFamily === 'serif'
         ? 'Georgia, ui-serif, "Times New Roman", serif'
         : undefined // leave --font-sans alone for "inter" — Next's class wins
+
   return {
-    // ShadCN core tokens (HSL)
+    // Shell background + primary/destructive
+    ['--background' as string]: bgHsl,
+    ['--foreground' as string]: foregroundHsl,
     ['--primary' as string]: hexToHslTriple(b.primaryColor),
-    ['--ring' as string]: hexToHslTriple(b.primaryColor),
-    ['--background' as string]: hexToHslTriple(b.backgroundColor),
+    ['--primary-foreground' as string]: contrastForegroundHslTriple(
+      b.primaryColor,
+    ),
     ['--destructive' as string]: hexToHslTriple(b.destructiveColor),
+    ['--destructive-foreground' as string]: contrastForegroundHslTriple(
+      b.destructiveColor,
+    ),
+    ['--ring' as string]: hexToHslTriple(b.primaryColor),
+    // Cards / popovers / muted / borders — all derived from background
+    // so a light preset actually renders light everywhere, not just
+    // on the outermost shell.
+    ['--card' as string]: cardHsl,
+    ['--card-foreground' as string]: foregroundHsl,
+    ['--popover' as string]: popoverHsl,
+    ['--popover-foreground' as string]: foregroundHsl,
+    ['--muted' as string]: mutedHsl,
+    ['--muted-foreground' as string]: mutedForegroundHsl,
+    ['--secondary' as string]: mutedHsl,
+    ['--secondary-foreground' as string]: foregroundHsl,
+    ['--accent' as string]: hexToHslTriple(b.accentColor),
+    ['--accent-foreground' as string]: contrastForegroundHslTriple(
+      b.accentColor,
+    ),
+    ['--border' as string]: borderHsl,
+    ['--input' as string]: borderHsl,
+    // Radius scale
     ['--radius' as string]: radius,
     // Raw-hex brand tokens for components that read them directly
     ['--brand-primary' as string]: b.primaryColor,
