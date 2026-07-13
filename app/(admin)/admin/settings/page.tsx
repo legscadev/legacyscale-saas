@@ -22,6 +22,7 @@ import {
   clearBrandingAction,
   getCurrentBrandingAction,
   updateBrandingAction,
+  uploadBrandingAssetAction,
 } from './branding-actions'
 import {
   claimManagedSubdomainAction,
@@ -63,6 +64,7 @@ export default async function AdminSettingsPage() {
             initial={currentBranding}
             action={updateBrandingAction}
             clearAction={clearBrandingAction}
+            uploadAction={uploadBrandingAssetAction}
           />
         </TabsContent>
 

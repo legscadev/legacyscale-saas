@@ -1,13 +1,36 @@
 'use server'
 
+import { randomUUID } from 'node:crypto'
+
 import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { brandingInputSchema, type BrandingInput } from '@/lib/branding/schema'
 import { prisma } from '@/lib/prisma'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getActiveCompany } from '@/lib/tenancy/active-company'
 
 import { Prisma } from '@prisma/client'
+
+const BRAND_ASSET_BUCKET = 'course-thumbnails'
+const MAX_ASSET_BYTES = 5 * 1024 * 1024 // 5 MB — logos are small
+const ALLOWED_MIME = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/svg+xml',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+])
+
+const ASSET_KINDS = ['logo', 'logoDark', 'favicon', 'og'] as const
+export type BrandingAssetKind = (typeof ASSET_KINDS)[number]
+
+export interface BrandingUploadResult {
+  ok: boolean
+  url?: string
+  error?: string
+}
 
 export interface BrandingSaveResult {
   ok: boolean
@@ -46,6 +69,73 @@ const ENUM_KEYS = [
 ] as const
 
 const BOOLEAN_KEYS = ['darkModeDefault'] as const
+
+/**
+ * Upload a brand asset (logo / favicon / OG image) to the shared
+ * course-thumbnails bucket under `<companyId>/brand/…` so RLS +
+ * tenant-prefix conventions match the rest of the file storage. The
+ * returned URL is what the caller stores on `Company.brand`.
+ *
+ * We route through a server action (rather than a signed browser
+ * upload) because branding assets are small (a favicon is ~15 KB, a
+ * logo maybe a few hundred KB) and Vercel Server Actions accept up
+ * to 12 MB (`next.config.ts` `serverActions.bodySizeLimit`).
+ */
+export async function uploadBrandingAssetAction(
+  formData: FormData,
+): Promise<BrandingUploadResult> {
+  await requireAdmin()
+  const company = await getActiveCompany()
+  if (!company) return { ok: false, error: 'No active company.' }
+
+  const kindRaw = String(formData.get('kind') ?? '')
+  if (!ASSET_KINDS.includes(kindRaw as BrandingAssetKind)) {
+    return { ok: false, error: `Unknown asset kind: ${kindRaw}` }
+  }
+  const kind = kindRaw as BrandingAssetKind
+
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: 'No file provided.' }
+  }
+  if (file.size > MAX_ASSET_BYTES) {
+    return {
+      ok: false,
+      error: `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — max 5 MB.`,
+    }
+  }
+  const mime = file.type || 'application/octet-stream'
+  if (!ALLOWED_MIME.has(mime)) {
+    return {
+      ok: false,
+      error: `Unsupported file type (${mime}). PNG, JPEG, WebP, SVG, or ICO only.`,
+    }
+  }
+
+  const ext =
+    mime === 'image/x-icon' || mime === 'image/vnd.microsoft.icon'
+      ? 'ico'
+      : mime === 'image/svg+xml'
+        ? 'svg'
+        : (mime.split('/')[1]?.split('+')[0] ?? 'png')
+  const path = `${company.id}/brand/${kind}-${randomUUID()}.${ext}`
+
+  const supabase = createAdminClient()
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const { error: uploadErr } = await supabase.storage
+    .from(BRAND_ASSET_BUCKET)
+    .upload(path, buffer, {
+      contentType: mime,
+      cacheControl: '3600',
+      upsert: false,
+    })
+  if (uploadErr) {
+    console.error('brand asset upload failed:', uploadErr)
+    return { ok: false, error: 'Upload failed — try again.' }
+  }
+  const { data } = supabase.storage.from(BRAND_ASSET_BUCKET).getPublicUrl(path)
+  return { ok: true, url: data.publicUrl }
+}
 
 /**
  * Explicitly clear the active company's brand JSON. The row-level

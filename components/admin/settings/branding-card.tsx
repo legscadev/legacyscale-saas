@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useRef, useState, useTransition } from 'react'
+import { ImageIcon, Loader2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,12 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
-import type { BrandingSaveResult } from '@/app/(admin)/admin/settings/branding-actions'
+import { cn } from '@/lib/utils'
+import type {
+  BrandingAssetKind,
+  BrandingSaveResult,
+  BrandingUploadResult,
+} from '@/app/(admin)/admin/settings/branding-actions'
 import {
   defaultPreset,
   findPreset,
@@ -44,6 +49,9 @@ interface BrandingCardProps {
   /** Explicit clear — sets Company.brand to NULL so the theme lock
    *  releases and the visitor light/dark toggle works again. */
   clearAction: () => Promise<BrandingSaveResult>
+  /** Upload one image and return a public URL. Client-side wire is
+   *  handled by ImageUploadField below. */
+  uploadAction: (fd: FormData) => Promise<BrandingUploadResult>
 }
 
 // ────────────────────────────────────────────
@@ -118,6 +126,7 @@ export function BrandingCard({
   initial,
   action,
   clearAction,
+  uploadAction,
 }: BrandingCardProps) {
   const [state, setState] = useState<FormState>(initialState(initial))
   const [isSaving, startSaving] = useTransition()
@@ -283,38 +292,40 @@ export function BrandingCard({
               </TabsContent>
 
               <TabsContent value="logos" className="space-y-4">
-                <TextField
+                <ImageUploadField
                   id="logoUrl"
-                  label="Logo URL"
-                  type="url"
+                  label="Logo"
+                  kind="logo"
                   value={state.logoUrl}
                   onChange={(v) => update('logoUrl', v)}
-                  placeholder="https://cdn.example.com/logo.png"
+                  uploadAction={uploadAction}
+                  hint="Square or wide, up to 5 MB. PNG or SVG recommended."
                 />
-                <TextField
+                <ImageUploadField
                   id="logoDarkUrl"
-                  label="Logo URL (dark mode)"
-                  type="url"
+                  label="Logo (dark mode)"
+                  kind="logoDark"
                   value={state.logoDarkUrl}
                   onChange={(v) => update('logoDarkUrl', v)}
-                  placeholder="https://cdn.example.com/logo-dark.png"
+                  uploadAction={uploadAction}
                   hint="Leave blank to reuse the light-mode logo."
                 />
-                <TextField
+                <ImageUploadField
                   id="faviconUrl"
-                  label="Favicon URL"
-                  type="url"
+                  label="Favicon"
+                  kind="favicon"
                   value={state.faviconUrl}
                   onChange={(v) => update('faviconUrl', v)}
-                  placeholder="https://cdn.example.com/favicon.ico"
+                  uploadAction={uploadAction}
+                  hint="ICO, PNG or SVG. 32×32 or 64×64 recommended."
                 />
-                <TextField
+                <ImageUploadField
                   id="ogImageUrl"
-                  label="Open Graph image URL"
-                  type="url"
+                  label="Open Graph image"
+                  kind="og"
                   value={state.ogImageUrl}
                   onChange={(v) => update('ogImageUrl', v)}
-                  placeholder="https://cdn.example.com/og.png"
+                  uploadAction={uploadAction}
                   hint="1200×630 recommended. Used in social share previews."
                 />
               </TabsContent>
@@ -566,6 +577,140 @@ function SelectField({
         ))}
       </select>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  )
+}
+
+function ImageUploadField({
+  id,
+  label,
+  kind,
+  value,
+  onChange,
+  uploadAction,
+  hint,
+}: {
+  id: string
+  label: string
+  kind: BrandingAssetKind
+  value: string
+  onChange: (url: string) => void
+  uploadAction: (fd: FormData) => Promise<BrandingUploadResult>
+  hint?: string
+}) {
+  const [isUploading, startUpload] = useTransition()
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const upload = (file: File) => {
+    startUpload(async () => {
+      const fd = new FormData()
+      fd.set('file', file)
+      fd.set('kind', kind)
+      const result = await uploadAction(fd)
+      if (result.ok && result.url) {
+        onChange(result.url)
+        toast.success(`${label} uploaded`)
+      } else {
+        toast.error(result.error ?? 'Upload failed')
+      }
+    })
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => fileRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            fileRef.current?.click()
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setIsDragOver(true)
+        }}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setIsDragOver(false)
+          const file = e.dataTransfer.files?.[0]
+          if (file) upload(file)
+        }}
+        className={cn(
+          'group flex cursor-pointer items-center gap-3 rounded-md border-2 border-dashed p-3 outline-none transition-colors',
+          isDragOver
+            ? 'border-primary bg-primary/5'
+            : 'border-input hover:border-primary/50',
+          isUploading && 'cursor-wait opacity-70',
+        )}
+      >
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={value}
+            alt=""
+            className="h-12 w-12 shrink-0 rounded-md border object-contain bg-background"
+          />
+        ) : (
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border bg-muted text-muted-foreground">
+            <ImageIcon className="h-5 w-5" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-sm">
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Uploading…</span>
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">
+                  {value ? 'Replace' : 'Upload or drag & drop'}
+                </span>
+                {value && (
+                  <button
+                    type="button"
+                    className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onChange('')
+                    }}
+                  >
+                    <X className="h-3 w-3" /> Remove
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {hint && (
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {hint}
+            </p>
+          )}
+        </div>
+        <input
+          ref={fileRef}
+          id={id}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.ico"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) upload(file)
+            // Reset so choosing the same file twice still fires onChange.
+            e.target.value = ''
+          }}
+        />
+      </div>
     </div>
   )
 }
