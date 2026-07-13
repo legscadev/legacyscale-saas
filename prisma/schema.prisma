@@ -255,6 +255,10 @@ model User {
   superAdminGrantsIssued  SuperAdminGrant[] @relation("SuperAdminGrantGrantedBy")
   superAdminGrantsRevoked SuperAdminGrant[] @relation("SuperAdminGrantRevokedBy")
 
+  // Hierarchical settings (Phase 1 white-label task 4). Distinct from
+  // AppSetting (which is the legacy flat key/value store).
+  settingsUpdated Setting[] @relation("SettingUpdater")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -368,13 +372,60 @@ model CompanyMembership {
 }
 
 // ============================================
-// APP SETTINGS
+// SETTINGS HIERARCHY (Phase 1 white-label task 4)
+// ============================================
+
+/// Scope for a hierarchical Setting row. Resolution order is
+/// USER > COMPANY > PLATFORM — narrower scope wins. Every scope has
+/// exactly one row per key.
+enum SettingScope {
+  PLATFORM
+  COMPANY
+  USER
+}
+
+/// Hierarchical key/value store. Replaces the flat `AppSetting`
+/// table for anything that will eventually want per-tenant
+/// overrides (email `from`, Discord webhooks, feature flags, etc.).
+///
+/// `scopeId` is non-nullable so the (scope, scope_id, key) unique
+/// constraint behaves consistently across Postgres versions:
+///   * PLATFORM rows: `scope_id = '00000000-0000-0000-0000-000000000000'`
+///     (see lib/settings/scope.ts:PLATFORM_SCOPE_ID)
+///   * COMPANY rows: the company id
+///   * USER rows: the user id
+///
+/// `value` is JSON so the same table can hold strings, numbers,
+/// booleans, arrays, or objects without schema churn. Callers
+/// typecast at the read site (see lib/settings/get-setting.ts).
+model Setting {
+  id          String       @id @default(uuid())
+  scope       SettingScope
+  scopeId     String       @map("scope_id")
+  key         String
+  value       Json
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  updatedById String?      @map("updated_by_id")
+  updatedBy   User?        @relation("SettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([scope, scopeId, key])
+  @@index([scope, scopeId])
+  @@map("settings")
+}
+
+// ============================================
+// APP SETTINGS (legacy — being migrated to Setting above)
 // ============================================
 
 /// Generic key-value store for admin-configurable platform settings
 /// (e.g. Discord webhook URL, future integration tokens, branding).
 /// One row per key. Reads are server-only — secret values must never
 /// be returned to the client unmasked.
+///
+/// Kept in the schema during the Phase 1 → 2 transition. New reads +
+/// writes go through `Setting` (with backward-compat proxies in
+/// lib/services/app-setting-service.ts). This table can be dropped
+/// once every caller is verified migrated.
 model AppSetting {
   key         String   @id
   value       String
