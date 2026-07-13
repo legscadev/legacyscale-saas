@@ -22,6 +22,13 @@ import {
 } from '@/components/ui/tabs'
 import type { BrandingSaveResult } from '@/app/(admin)/admin/settings/branding-actions'
 import {
+  defaultPreset,
+  findPreset,
+  matchingPresetId,
+  THEME_PRESETS,
+  type ThemeShape,
+} from '@/lib/branding/presets'
+import {
   BORDER_RADIUS_VALUES,
   BUTTON_STYLE_VALUES,
   FONT_FAMILY_VALUES,
@@ -112,15 +119,70 @@ export function BrandingCard({ initial, action }: BrandingCardProps) {
     setState((prev) => ({ ...prev, [key]: value }))
   }
 
+  /** Overwrite the theme slice of state with the values from a preset.
+   *  Identity + logo + legal fields are left untouched — presets are
+   *  visual-only. */
+  function applyTheme(theme: ThemeShape) {
+    setState((prev) => ({
+      ...prev,
+      primaryColor: theme.primaryColor ?? prev.primaryColor,
+      accentColor: theme.accentColor ?? prev.accentColor,
+      backgroundColor: theme.backgroundColor ?? prev.backgroundColor,
+      sidebarBgColor: theme.sidebarBgColor ?? prev.sidebarBgColor,
+      destructiveColor: theme.destructiveColor ?? prev.destructiveColor,
+      fontFamily: theme.fontFamily ?? prev.fontFamily,
+      borderRadius: theme.borderRadius ?? prev.borderRadius,
+      buttonStyle: theme.buttonStyle ?? prev.buttonStyle,
+      darkModeDefault: theme.darkModeDefault ?? prev.darkModeDefault,
+    }))
+  }
+
+  const activePresetId = matchingPresetId(state) ?? 'custom'
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Branding &amp; theme</CardTitle>
-        <CardDescription>
-          Values here render across the app — sidebar, browser title,
-          emails, PDFs. Colors + radius drive the theme when the tenant
-          UI reads `--brand-*` variables.
-        </CardDescription>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <CardTitle>Branding &amp; theme</CardTitle>
+            <CardDescription>
+              Values here render across the app — sidebar, browser title,
+              emails, PDFs. Colors + radius drive the theme when the tenant
+              UI reads `--brand-*` variables.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="themePreset" className="text-xs">
+              Preset
+            </Label>
+            <select
+              id="themePreset"
+              value={activePresetId}
+              onChange={(e) => {
+                const preset = findPreset(e.target.value)
+                if (preset) applyTheme(preset.theme)
+              }}
+              className="h-9 w-[190px] rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-primary/60 focus-visible:ring-4 focus-visible:ring-primary/15"
+            >
+              {activePresetId === 'custom' && (
+                <option value="custom">Custom</option>
+              )}
+              {THEME_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => applyTheme(defaultPreset().theme)}
+            >
+              Reset
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
