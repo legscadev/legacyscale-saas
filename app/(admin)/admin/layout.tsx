@@ -59,6 +59,11 @@ export default async function AdminLayout({
   // company override) this returns the Kondense platform defaults,
   // so the sidebar looks identical to pre-refactor.
   const branding = toClientBranding(await getBranding())
+  // Signal to the shell whether the active tenant has a saved brand
+  // — used to disable the light/dark toggle (see ThemeToggle) when
+  // inline theme vars in the root layout would make it a no-op.
+  const activeForTheme = await getActiveCompany()
+  const themeLocked = Boolean(activeForTheme?.brand)
 
   return (
     <AppShell
@@ -74,6 +79,7 @@ export default async function AdminLayout({
       tenancy={tenancy}
       isSuperAdmin={user.isSuperAdmin}
       branding={branding}
+      themeLocked={themeLocked}
     >
       {children}
     </AppShell>

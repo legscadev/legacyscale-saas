@@ -67,6 +67,10 @@ export default async function UserLayout({
   // Kondense defaults when tenancy is off; per-tenant overrides
   // when it's on. See lib/branding/get-branding.ts.
   const branding = toClientBranding(await getBranding())
+  // Same story as the admin layout — lock the theme toggle when
+  // the tenant has a saved brand.
+  const activeForTheme = await getActiveCompany()
+  const themeLocked = Boolean(activeForTheme?.brand)
 
   return (
     <AppShell
@@ -81,6 +85,7 @@ export default async function UserLayout({
       }}
       tenancy={tenancy}
       branding={branding}
+      themeLocked={themeLocked}
     >
       <div className="mx-auto w-full max-w-7xl space-y-4">
         {nudges.length > 0 ? <NudgeBanner nudges={nudges} /> : null}

@@ -12,6 +12,7 @@ import {
   nudgeLightness,
 } from "@/lib/branding/hex-to-hsl"
 import type { Branding } from "@/lib/branding/schema"
+import { getActiveCompany } from "@/lib/tenancy/active-company"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -158,6 +159,13 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
   const b = await getBranding()
+  // Only inject the theme CSS-variable overrides when the tenant has
+  // actually saved a brand. When Company.brand is null we let the
+  // `:root` + `.dark` rules in globals.css win — that's the classic
+  // Kondense palette AND keeps the light/dark toggle functional
+  // (inline vars would otherwise beat the .dark class every time).
+  const active = await getActiveCompany()
+  const hasCustomTheme = Boolean(active?.brand)
   return (
     <html
       lang="en"
@@ -165,12 +173,13 @@ export default async function RootLayout({
       data-font={b.fontFamily}
       data-button-style={b.buttonStyle}
       data-radius={b.borderRadius}
+      data-tenant-theme={hasCustomTheme ? 'on' : 'off'}
       // Inter's next/font class lives on <html> (not <body>) so my
       // inline style on <html> can override --font-sans when the
       // tenant picks system / serif. Otherwise next/font's per-body
       // class would win by proximity.
       className={inter.variable}
-      style={themeStyle(b)}
+      style={hasCustomTheme ? themeStyle(b) : undefined}
     >
       <head>
         <script

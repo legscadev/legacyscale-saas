@@ -38,6 +38,9 @@ interface TopBarProps {
    *  shortcut that jumps to /super. Members never see it, and it's
    *  redundant when the caller is already inside /super. */
   isSuperAdmin?: boolean
+  /** Disable the light/dark toggle because a tenant palette owns
+   *  the theme. */
+  themeLocked?: boolean
 }
 
 export function TopBar({
@@ -47,6 +50,7 @@ export function TopBar({
   role,
   isSuperAdmin = false,
   unreadAnnouncements = 0,
+  themeLocked = false,
 }: TopBarProps) {
   const { collapsed, toggle } = useSidebar()
   const Icon = collapsed ? PanelLeftOpen : PanelLeftClose
@@ -273,7 +277,7 @@ export function TopBar({
             </TooltipContent>
           </Tooltip>
 
-          <ThemeToggle />
+          <ThemeToggle locked={themeLocked} />
           <div className="ml-1 lg:hidden">
             <UserMenu user={user} profileHref={profileHref} variant="topbar" />
           </div>

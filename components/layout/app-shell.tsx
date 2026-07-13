@@ -53,6 +53,12 @@ interface AppShellProps {
    *  Undefined means "use platform defaults" (Kondense). Server
    *  layouts pass this via `getBranding()` when tenancy is on. */
   branding?: AppShellBranding
+  /** True when the active tenant has a custom `Company.brand` and
+   *  the root layout is therefore injecting theme CSS variables
+   *  inline on <html>. In that case the built-in light/dark toggle
+   *  is a no-op (inline styles beat the `.dark` class) so we render
+   *  it disabled with a tooltip explaining why. */
+  themeLocked?: boolean
   children: React.ReactNode
 }
 
@@ -64,6 +70,7 @@ export function AppShell({
   tenancy,
   isSuperAdmin = false,
   branding,
+  themeLocked = false,
   children,
 }: AppShellProps) {
   return (
@@ -75,6 +82,7 @@ export function AppShell({
         tenancy={tenancy}
         isSuperAdmin={isSuperAdmin}
         branding={branding}
+        themeLocked={themeLocked}
       >
         {children}
       </AppShellInner>
@@ -89,6 +97,7 @@ function AppShellInner({
   tenancy,
   isSuperAdmin = false,
   branding,
+  themeLocked = false,
   children,
 }: Omit<AppShellProps, 'defaultCollapsed'>) {
   const { collapsed } = useSidebar()
@@ -250,6 +259,7 @@ function AppShellInner({
           role={role}
           unreadAnnouncements={unreadAnnouncements}
           isSuperAdmin={isSuperAdmin}
+          themeLocked={themeLocked}
         />
         <main className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">
