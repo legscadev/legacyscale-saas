@@ -20,6 +20,14 @@ interface AppShellCompanyOption {
   isAgency: boolean
 }
 
+/** The subset of resolved branding the shell needs on the client.
+ *  Matches `ClientBranding` from `lib/branding/get-branding.ts`; kept
+ *  as an inline shape so the shell file has no server-only imports. */
+interface AppShellBranding {
+  productName: string
+  logoUrl: string
+}
+
 interface AppShellProps {
   role: 'admin' | 'member' | 'super'
   user: ShellUser
@@ -41,6 +49,10 @@ interface AppShellProps {
     companies: AppShellCompanyOption[]
     currentUserIsSuperAdmin: boolean
   }
+  /** Optional resolved branding for the sidebar wordmark + logo.
+   *  Undefined means "use platform defaults" (Kondense). Server
+   *  layouts pass this via `getBranding()` when tenancy is on. */
+  branding?: AppShellBranding
   children: React.ReactNode
 }
 
@@ -51,6 +63,7 @@ export function AppShell({
   unreadAnnouncements = 0,
   tenancy,
   isSuperAdmin = false,
+  branding,
   children,
 }: AppShellProps) {
   return (
@@ -61,6 +74,7 @@ export function AppShell({
         unreadAnnouncements={unreadAnnouncements}
         tenancy={tenancy}
         isSuperAdmin={isSuperAdmin}
+        branding={branding}
       >
         {children}
       </AppShellInner>
@@ -74,6 +88,7 @@ function AppShellInner({
   unreadAnnouncements = 0,
   tenancy,
   isSuperAdmin = false,
+  branding,
   children,
 }: Omit<AppShellProps, 'defaultCollapsed'>) {
   const { collapsed } = useSidebar()
@@ -119,7 +134,12 @@ function AppShellInner({
             className="flex items-center text-white"
             aria-label={context}
           >
-            <BrandMark context={context} compact={collapsed} />
+            <BrandMark
+              context={context}
+              compact={collapsed}
+              productName={branding?.productName}
+              logoUrl={branding?.logoUrl}
+            />
           </Link>
         </div>
         {tenancy ? (
@@ -170,7 +190,11 @@ function AppShellInner({
           >
             <div className="flex h-14 items-center justify-between px-4">
               <span className="text-white">
-                <BrandMark context={context} />
+                <BrandMark
+                  context={context}
+                  productName={branding?.productName}
+                  logoUrl={branding?.logoUrl}
+                />
               </span>
               <Button
                 variant="ghost"

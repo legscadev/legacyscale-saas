@@ -4,6 +4,7 @@ import { AppShell } from '@/components/layout'
 import { SIDEBAR_COOKIE } from '@/components/layout/sidebar-cookie'
 import { NudgeBanner } from '@/components/member/nudge-banner'
 import { requireActiveUser } from '@/lib/auth'
+import { getBranding, toClientBranding } from '@/lib/branding/get-branding'
 import { announcementService } from '@/lib/services/announcement-service'
 import { listActiveNudgesForUser } from '@/lib/services/nudge-service'
 import {
@@ -63,6 +64,10 @@ export default async function UserLayout({
     }
   }
 
+  // Kondense defaults when tenancy is off; per-tenant overrides
+  // when it's on. See lib/branding/get-branding.ts.
+  const branding = toClientBranding(await getBranding())
+
   return (
     <AppShell
       role="member"
@@ -75,6 +80,7 @@ export default async function UserLayout({
         role: user.role,
       }}
       tenancy={tenancy}
+      branding={branding}
     >
       <div className="mx-auto w-full max-w-7xl space-y-4">
         {nudges.length > 0 ? <NudgeBanner nudges={nudges} /> : null}

@@ -4,15 +4,25 @@ import "./globals.css"
 import { cn } from "@/lib/utils"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { getBranding } from "@/lib/branding/get-branding"
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
 })
 
-export const metadata: Metadata = {
-  title: "Kondense",
-  description: "Agency Education Platform",
+// Dynamic metadata so the browser tab title + favicon reflect the
+// caller's active tenant. Falls back to the Kondense platform
+// defaults when tenancy is off, when there's no signed-in caller, or
+// when a tenant hasn't set its own brand. Cached per request through
+// `getBranding()`.
+export async function generateMetadata(): Promise<Metadata> {
+  const b = await getBranding()
+  return {
+    title: b.productName,
+    description: b.tagline ?? b.productName,
+    icons: { icon: b.faviconUrl },
+  }
 }
 
 // Runs before React hydration. Reads the persisted theme and applies

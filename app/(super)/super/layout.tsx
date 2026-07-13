@@ -4,6 +4,8 @@ import { notFound, redirect } from 'next/navigation'
 import { AppShell } from '@/components/layout'
 import { SIDEBAR_COOKIE } from '@/components/layout/sidebar-cookie'
 import { requireActiveUser } from '@/lib/auth'
+import { DEFAULT_BRANDING } from '@/lib/branding/defaults'
+import { toClientBranding } from '@/lib/branding/get-branding'
 import { isTenancyEnabled } from '@/lib/tenancy/feature-flag'
 
 /**
@@ -45,6 +47,10 @@ export default async function SuperLayout({
         avatarUrl: user.avatarUrl,
         role: user.role,
       }}
+      // Super console is the platform surface — always show platform
+      // (Kondense) branding, even when the caller has an active
+      // per-tenant cookie set. Skips a DB lookup.
+      branding={toClientBranding(DEFAULT_BRANDING)}
     >
       {children}
     </AppShell>

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { AppShell } from '@/components/layout'
 import { SIDEBAR_COOKIE } from '@/components/layout/sidebar-cookie'
 import { requireAdmin } from '@/lib/auth'
+import { getBranding, toClientBranding } from '@/lib/branding/get-branding'
 import { announcementService } from '@/lib/services/announcement-service'
 import {
   getActiveCompany,
@@ -54,6 +55,11 @@ export default async function AdminLayout({
     }
   }
 
+  // Branding — always resolvable. When tenancy is off (or no
+  // company override) this returns the Kondense platform defaults,
+  // so the sidebar looks identical to pre-refactor.
+  const branding = toClientBranding(await getBranding())
+
   return (
     <AppShell
       role="admin"
@@ -67,6 +73,7 @@ export default async function AdminLayout({
       }}
       tenancy={tenancy}
       isSuperAdmin={user.isSuperAdmin}
+      branding={branding}
     >
       {children}
     </AppShell>
