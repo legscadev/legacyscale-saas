@@ -14,24 +14,38 @@ export interface BrandingSaveResult {
   error?: string
 }
 
-/** Every branding key the form can submit. Kept in one place so
- *  reads + writes stay in sync when we add new fields later. */
-const BRANDING_KEYS = [
+/** String-valued keys the form can submit. Booleans + enums have
+ *  their own handling below. */
+const STRING_KEYS = [
+  // Identity
   'productName',
   'tagline',
   'supportEmail',
+  'supportUrl',
   'fromName',
   'legalCompany',
-  'primaryColor',
-  'accentColor',
+  'privacyUrl',
+  'termsUrl',
+  // Logos & icons
   'logoUrl',
   'logoDarkUrl',
   'faviconUrl',
   'ogImageUrl',
-  'supportUrl',
-  'privacyUrl',
-  'termsUrl',
+  // Colors
+  'primaryColor',
+  'accentColor',
+  'backgroundColor',
+  'sidebarBgColor',
+  'destructiveColor',
 ] as const
+
+const ENUM_KEYS = [
+  'fontFamily',
+  'borderRadius',
+  'buttonStyle',
+] as const
+
+const BOOLEAN_KEYS = ['darkModeDefault'] as const
 
 /**
  * Read the current tenant's brand JSON for the form defaults. Returns
@@ -66,11 +80,21 @@ export async function updateBrandingAction(
   }
 
   const raw: Record<string, unknown> = {}
-  for (const key of BRANDING_KEYS) {
+  for (const key of STRING_KEYS) {
     const value = formData.get(key)
     if (typeof value === 'string' && value.trim() !== '') {
       raw[key] = value.trim()
     }
+  }
+  for (const key of ENUM_KEYS) {
+    const value = formData.get(key)
+    if (typeof value === 'string' && value.trim() !== '') {
+      raw[key] = value.trim()
+    }
+  }
+  for (const key of BOOLEAN_KEYS) {
+    // Checkboxes send "1" when checked, absent when unchecked.
+    raw[key] = formData.get(key) === '1'
   }
 
   const parsed = brandingInputSchema.safeParse(raw)

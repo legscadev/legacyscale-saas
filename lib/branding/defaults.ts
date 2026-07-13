@@ -13,18 +13,30 @@
 import type { Branding } from './schema'
 
 export const DEFAULT_BRANDING: Branding = {
+  // Identity
   productName: 'Kondense',
-  logoUrl: '/kondense-logo.png',
-  logoDarkUrl: '/kondense-logo.png',
-  faviconUrl: '/favicon.ico',
-  ogImageUrl: undefined,
-  primaryColor: '#d11a1a',
-  accentColor: undefined,
+  tagline: 'Agency Education Platform',
   supportEmail: 'support@kondense.ai',
   supportUrl: undefined,
   fromName: 'Kondense',
   legalCompany: 'Kondense',
-  tagline: 'Agency Education Platform',
   privacyUrl: undefined,
   termsUrl: undefined,
+  // Logos & icons
+  logoUrl: '/kondense-logo.png',
+  logoDarkUrl: '/kondense-logo.png',
+  faviconUrl: '/favicon.ico',
+  ogImageUrl: undefined,
+  // Colors
+  primaryColor: '#d11a1a',
+  accentColor: '#f97316',
+  backgroundColor: '#0a0a0b',
+  sidebarBgColor: '#0a0a0a',
+  destructiveColor: '#ef4444',
+  // Typography
+  fontFamily: 'inter',
+  // Interface
+  borderRadius: 'default',
+  buttonStyle: 'default',
+  darkModeDefault: true,
 }
