@@ -133,7 +133,7 @@ export const companyColumns: ColumnDef<CompanyDirectoryRow, unknown>[] = [
         <CompanyRowActions
           companyId={row.original.id}
           companyName={row.original.name}
-          isAgency={row.original.isAgency}
+          isProtected={row.original.slug === 'kondense'}
         />
       </div>
     ),

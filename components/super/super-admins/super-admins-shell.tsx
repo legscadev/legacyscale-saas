@@ -28,7 +28,6 @@ import { EmptyState } from '@/components/shared'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
 
 import type { SuperAdminRow } from '@/lib/services/super-admin-service'
 import { fmtCalendarDate, getInitials } from '@/lib/format'
@@ -42,32 +41,6 @@ interface SuperAdminsShellProps {
   initialRows: SuperAdminRow[]
 }
 
-const ROLE_STYLE: Record<
-  SuperAdminRow['grant']['role'],
-  { label: string; className: string; description: string }
-> = {
-  MASTER: {
-    label: 'Master',
-    className:
-      'bg-brand-500/10 text-brand-600 ring-brand-500/30 dark:bg-brand-500/15 dark:text-brand-300 dark:ring-brand-500/40',
-    description:
-      'Full platform power — create/delete companies, grant + revoke other super-admins, enter any tenant.',
-  },
-  SUPPORT: {
-    label: 'Support',
-    className:
-      'bg-sky-100 text-sky-700 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:ring-sky-900/50',
-    description:
-      'Read-write inside any tenant. Cannot delete companies or hand out super-admin.',
-  },
-  AUDITOR: {
-    label: 'Auditor',
-    className:
-      'bg-neutral-100 text-neutral-700 ring-neutral-200 dark:bg-neutral-900 dark:text-neutral-200 dark:ring-neutral-800',
-    description: 'Read-only across every tenant.',
-  },
-}
-
 export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
   const router = useRouter()
   const [rows, setRows] = useState(initialRows)
@@ -75,8 +48,6 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
 
   const [grantOpen, setGrantOpen] = useState(false)
   const [grantEmail, setGrantEmail] = useState('')
-  const [grantRole, setGrantRole] =
-    useState<SuperAdminRow['grant']['role']>('MASTER')
   const [grantExpires, setGrantExpires] = useState('')
   const [grantNotes, setGrantNotes] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -88,7 +59,6 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
 
   function resetGrantForm() {
     setGrantEmail('')
-    setGrantRole('MASTER')
     setGrantExpires('')
     setGrantNotes('')
     setAdvancedOpen(false)
@@ -112,7 +82,6 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
     try {
       const result = await grantSuperAdminAction({
         email,
-        role: grantRole,
         expiresAt: grantExpires ? grantExpires : null,
         notes: grantNotes.trim() ? grantNotes.trim() : null,
       })
@@ -186,7 +155,6 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
             <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-4 py-2.5">Name</th>
-                <th className="px-4 py-2.5">Role</th>
                 <th className="px-4 py-2.5">Granted by</th>
                 <th className="px-4 py-2.5">Granted</th>
                 <th className="px-4 py-2.5">Expires</th>
@@ -197,7 +165,6 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
             <tbody className="divide-y">
               {rows.map((row) => {
                 const initials = getInitials(row.name, row.email)
-                const roleMeta = ROLE_STYLE[row.grant.role]
                 const grantedBy = row.grant.grantedBy
                 return (
                   <tr key={row.id} className="hover:bg-muted/30">
@@ -225,18 +192,6 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
                           </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        title={roleMeta.description}
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
-                          roleMeta.className,
-                        )}
-                      >
-                        <ShieldCheck className="size-3" />
-                        {roleMeta.label}
-                      </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {grantedBy
@@ -348,42 +303,6 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
 
             {advancedOpen ? (
               <div className="space-y-4 rounded-md border border-dashed p-3">
-                <div className="space-y-1.5">
-                  <Label>Role</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['MASTER', 'SUPPORT', 'AUDITOR'] as const).map((r) => {
-                      const style = ROLE_STYLE[r]
-                      const selected = grantRole === r
-                      return (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setGrantRole(r)}
-                          disabled={granting}
-                          className={cn(
-                            'flex flex-col items-start gap-1 rounded-md border p-2 text-left transition-colors',
-                            selected
-                              ? 'border-primary/50 bg-primary/[0.04]'
-                              : 'hover:border-input hover:bg-muted/40',
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset',
-                              style.className,
-                            )}
-                          >
-                            <ShieldCheck className="size-2.5" />
-                            {style.label}
-                          </span>
-                          <span className="text-[10px] leading-tight text-muted-foreground">
-                            {style.description.split('.')[0]}.
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="grant-expires">Expires (optional)</Label>
                   <Input

@@ -320,14 +320,17 @@ export async function deleteCompanyAction(input: {
   return runAsSuperAdmin(async () => {
     const company = await prisma.company.findFirst({
       where: { id: input.companyId, deletedAt: null },
-      select: { id: true, name: true, isAgency: true },
+      select: { id: true, name: true, slug: true },
     })
     if (!company) return { ok: false, error: 'Company not found' }
 
-    if (company.isAgency) {
+    // Protect only the Kondense platform seed row — soft-deleting it
+    // would collapse the entire /super surface. Every other tenant
+    // (including legacy `isAgency` rows) is deletable.
+    if (company.slug === 'kondense') {
       return {
         ok: false,
-        error: 'Agency tenants cannot be deleted from this surface.',
+        error: 'The platform seed tenant cannot be deleted.',
       }
     }
 

@@ -10,7 +10,7 @@
 // Every grant + revoke runs inside a Prisma transaction so the
 // table and the cached boolean never drift.
 
-import type { SuperAdminRole, User } from '@prisma/client'
+import type { User } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
@@ -25,7 +25,6 @@ export interface SuperAdminRow {
    *  revoked_at IS NULL. */
   grant: {
     id: string
-    role: SuperAdminRole
     grantedAt: Date
     expiresAt: Date | null
     notes: string | null
@@ -118,7 +117,6 @@ export async function listSuperAdmins(
     lastActiveAt: g.user.lastActiveAt,
     grant: {
       id: g.id,
-      role: g.role,
       grantedAt: g.grantedAt,
       expiresAt: g.expiresAt,
       notes: g.notes,
@@ -136,7 +134,6 @@ export async function listSuperAdmins(
 
 export interface GrantInput {
   email: string
-  role?: SuperAdminRole
   expiresAt?: Date | null
   notes?: string | null
   grantedById?: string | null
@@ -160,7 +157,6 @@ export async function grantSuperAdmin(
 ): Promise<{ user: User }> {
   const email = input.email.trim().toLowerCase()
   if (!email) throw new Error('Email is required')
-  const role: SuperAdminRole = input.role ?? 'MASTER'
 
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user) throw new UnknownEmailError()
@@ -181,7 +177,6 @@ export async function grantSuperAdmin(
       await tx.superAdminGrant.create({
         data: {
           userId: targetUserId,
-          role,
           grantedById: input.grantedById ?? null,
           expiresAt: input.expiresAt ?? null,
           notes: input.notes ?? null,
@@ -229,7 +224,7 @@ export async function revokeSuperAdmin(input: {
   await prisma.$transaction(async (tx) => {
     const activeGrant = await tx.superAdminGrant.findFirst({
       where: { userId: input.userId, revokedAt: null },
-      select: { id: true, role: true },
+      select: { id: true },
     })
     // Idempotent — no active grant means already revoked; keep
     // the cached boolean in sync just in case it drifted and
@@ -242,18 +237,16 @@ export async function revokeSuperAdmin(input: {
       return
     }
 
-    // Guard: refuse to drop below one active MASTER platform-wide.
-    // MASTER is the only role that opens /super today; the SUPPORT
-    // + AUDITOR seats can't grant new super-admins, so leaving the
-    // platform with only those roles would be a lockout.
-    const activeMasterCount = await tx.superAdminGrant.count({
+    // Guard: refuse to drop below one active super-admin
+    // platform-wide. Losing the last one locks everyone out of
+    // /super with no in-app recovery path (only SQL).
+    const activeCount = await tx.superAdminGrant.count({
       where: {
         revokedAt: null,
-        role: 'MASTER',
         user: { deletedAt: null },
       },
     })
-    if (activeGrant.role === 'MASTER' && activeMasterCount <= 1) {
+    if (activeCount <= 1) {
       throw new LastSuperAdminError()
     }
 

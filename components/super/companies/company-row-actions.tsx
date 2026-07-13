@@ -42,13 +42,17 @@ import {
 interface CompanyRowActionsProps {
   companyId: string
   companyName: string
-  isAgency: boolean
+  /** True when this tenant is the platform seed row (Kondense) and
+   *  should not be deletable from the super console — soft-deleting
+   *  it would collapse the whole /super surface. Non-seed rows are
+   *  freely deletable, including any legacy `isAgency` tenants. */
+  isProtected: boolean
 }
 
 export function CompanyRowActions({
   companyId,
   companyName,
-  isAgency,
+  isProtected,
 }: CompanyRowActionsProps) {
   const router = useRouter()
   const [snapshotOpen, setSnapshotOpen] = useState(false)
@@ -162,7 +166,7 @@ export function CompanyRowActions({
             <Copy className="size-4" />
             Clone content into…
           </DropdownMenuItem>
-          {isAgency ? null : (
+          {isProtected ? null : (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem

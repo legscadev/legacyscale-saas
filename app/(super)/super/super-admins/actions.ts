@@ -1,7 +1,5 @@
 'use server'
 
-import type { SuperAdminRole } from '@prisma/client'
-
 import { requireActiveUser } from '@/lib/auth'
 import {
   LastSuperAdminError,
@@ -42,7 +40,6 @@ export interface GrantSuperAdminResult {
 
 export async function grantSuperAdminAction(input: {
   email: string
-  role?: SuperAdminRole
   expiresAt?: string | null
   notes?: string | null
 }): Promise<GrantSuperAdminResult> {
@@ -61,7 +58,6 @@ export async function grantSuperAdminAction(input: {
 
     await grantSuperAdmin({
       email: input.email,
-      role: input.role,
       expiresAt,
       notes: input.notes,
       // Attribute the grant to the caller — powers the "Granted by"
