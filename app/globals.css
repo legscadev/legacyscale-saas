@@ -127,6 +127,34 @@ h1, h2, h3 {
   letter-spacing: -0.015em;
 }
 
+/* ─── Per-tenant theme overrides ────────────────────────────────
+ *
+ * The root layout sets `data-font`, `data-button-style`, and
+ * `data-radius` on <html> based on the resolved Branding. These
+ * rules translate those attributes into concrete CSS var values.
+ * Colors and --radius are injected inline on <html> in layout.tsx.
+ */
+
+/* Font family. Inter (default) is loaded via next/font and already
+ * lives in --font-sans; the other choices override without needing
+ * any webfont bundle. */
+:root[data-font="system"] {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+:root[data-font="serif"] {
+  --font-sans: Georgia, ui-serif, "Times New Roman", serif;
+}
+
+/* Button shape. "sharp" and "pill" override every ShadCN button —
+ * the base component reads --radius, so this raises specificity by
+ * targeting the data-slot ShadCN emits. */
+:root[data-button-style="sharp"] button[data-slot="button"] {
+  border-radius: 2px !important;
+}
+:root[data-button-style="pill"] button[data-slot="button"] {
+  border-radius: 999px !important;
+}
+
 /* Skeleton shimmer keyframes (used by components/ui/skeleton.tsx). */
 @keyframes shimmer {
   0% {

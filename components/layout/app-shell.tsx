@@ -115,11 +115,14 @@ function AppShellInner({
       className="min-h-screen bg-background"
       data-state={collapsed ? 'collapsed' : 'expanded'}
     >
-      {/* Desktop sidebar — always dark (Vercel pattern). */}
+      {/* Desktop sidebar — colour comes from the tenant's brand
+       *   (--brand-sidebar), with the Kondense-default black as
+       *   a fallback so the shell never renders unpainted. */}
       <aside
         data-sidebar="dark"
+        style={{ background: 'var(--brand-sidebar, #0a0a0a)' }}
         className={cn(
-          'fixed inset-y-0 left-0 z-40 hidden flex-col bg-neutral-950 text-neutral-300 transition-[width] duration-200 ease-in-out lg:flex',
+          'fixed inset-y-0 left-0 z-40 hidden flex-col text-neutral-300 transition-[width] duration-200 ease-in-out lg:flex',
           collapsed ? 'w-14' : 'w-64',
         )}
       >
@@ -186,7 +189,8 @@ function AppShellInner({
           />
           <div
             data-sidebar="dark"
-            className="absolute inset-y-0 left-0 flex w-72 flex-col bg-neutral-950 text-neutral-300 animate-in slide-in-from-left"
+            style={{ background: 'var(--brand-sidebar, #0a0a0a)' }}
+            className="absolute inset-y-0 left-0 flex w-72 flex-col text-neutral-300 animate-in slide-in-from-left"
           >
             <div className="flex h-14 items-center justify-between px-4">
               <span className="text-white">
