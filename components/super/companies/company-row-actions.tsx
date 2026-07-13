@@ -277,7 +277,10 @@ export function CompanyRowActions({
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor={`delete-confirm-${companyId}`}>
-              Type <span className="font-bold">{companyName}</span> to confirm
+              <span>
+                Type <span className="font-bold">{companyName}</span> to
+                confirm
+              </span>
             </Label>
             <Input
               id={`delete-confirm-${companyId}`}
