@@ -65,6 +65,55 @@ function slugFromHost(host: string): string | null {
   return SLUG_PATTERN.test(slug) ? slug : null
 }
 
+/** True when host matches PLATFORM_HOST (case- and port-insensitive). */
+function isPlatformHost(host: string): boolean {
+  const bare = host.split(':')[0]?.toLowerCase() ?? ''
+  const platformBare = getPlatformHost().split(':')[0]?.toLowerCase() ?? ''
+  return bare === platformBare
+}
+
+// In-memory cache for custom-domain lookups. Vercel Edge keeps
+// module state alive between invocations within a single instance,
+// so this survives across many requests. Cold instances re-fetch on
+// first hit — worst case 1 subrequest per unique host per instance
+// per TTL window. Cache is keyed on the exact Host header (lowercased).
+type CustomCacheEntry = { slug: string | null; expiresAt: number }
+const customDomainCache = new Map<string, CustomCacheEntry>()
+const CUSTOM_CACHE_TTL_MS = 5 * 60 * 1000
+
+async function slugFromCustomDomain(
+  request: NextRequest,
+  host: string,
+): Promise<string | null> {
+  const key = host.toLowerCase()
+  const hit = customDomainCache.get(key)
+  const now = Date.now()
+  if (hit && hit.expiresAt > now) return hit.slug
+
+  try {
+    const url = new URL('/api/tenancy/resolve-host', request.nextUrl)
+    url.searchParams.set('host', key)
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) {
+      customDomainCache.set(key, {
+        slug: null,
+        expiresAt: now + CUSTOM_CACHE_TTL_MS,
+      })
+      return null
+    }
+    const body = (await res.json()) as { slug?: string | null }
+    const slug = body.slug ?? null
+    customDomainCache.set(key, {
+      slug,
+      expiresAt: now + CUSTOM_CACHE_TTL_MS,
+    })
+    return slug
+  } catch (err) {
+    console.warn('[proxy] resolve-host lookup failed:', err)
+    return null
+  }
+}
+
 function isPublicPath(pathname: string): boolean {
   if (pathname === '/') return true // landing page
   return PUBLIC_PREFIXES.some(
@@ -80,14 +129,23 @@ export async function proxy(request: NextRequest) {
   // Always refresh the Supabase session cookies.
   const { user, supabaseResponse } = await updateSession(request)
 
-  // Resolve tenant slug (query param OR managed subdomain host) and
-  // forward as `x-tenant-slug`. Downstream Server Components pick it
-  // up via `lib/tenancy/tenant-header.ts:getTenantFromHeaders()`.
-  if (tenancyEnabled()) {
+  // Resolve tenant slug (query param OR host) and forward as
+  // `x-tenant-slug`. Downstream Server Components pick it up via
+  // `lib/tenancy/tenant-header.ts:getTenantFromHeaders()`.
+  //
+  // The internal resolve-host route we call for the custom-domain
+  // branch is under /api, so this section is skipped when the
+  // incoming request is itself heading to that route — avoiding a
+  // recursion loop.
+  if (tenancyEnabled() && !pathname.startsWith('/api/tenancy/resolve-host')) {
     const querySlug = request.nextUrl.searchParams.get(TENANCY_QUERY_PARAM)
-    const hostSlug = slugFromHost(request.headers.get('host') ?? '')
-    const resolved =
+    const host = request.headers.get('host') ?? ''
+    const hostSlug = slugFromHost(host)
+    let resolved =
       querySlug && SLUG_PATTERN.test(querySlug) ? querySlug : hostSlug
+    if (!resolved && host && !isPlatformHost(host)) {
+      resolved = await slugFromCustomDomain(request, host)
+    }
     if (resolved) {
       supabaseResponse.headers.set(TENANT_SLUG_HEADER, resolved)
       request.headers.set(TENANT_SLUG_HEADER, resolved)
