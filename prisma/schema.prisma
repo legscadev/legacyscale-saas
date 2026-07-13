@@ -338,18 +338,72 @@ model Company {
   /// product name shown in the sidebar, email `from` name, etc.
   /// Shape validated at the application layer (Phase 5).
   brand        Json?
-  /// Custom domain e.g. "stephenagency.com". Nullable while a
-  /// tenant is still on a subdomain. Verified + issued via Vercel
-  /// in Phase 6.
+  /// Deprecated single-domain slot from Phase 1. Kept nullable and
+  /// unenforced during the Phase 3 → 4 transition; new writes go to
+  /// the `Domain` table (multiple domains per tenant, verified +
+  /// SSL state per row). Safe to drop in a later migration once all
+  /// callers move to the new table.
   customDomain String?   @unique @map("custom_domain")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
 
   memberships CompanyMembership[]
+  domains     Domain[]
 
   @@index([deletedAt])
   @@map("companies")
+}
+
+// ============================================
+// DOMAINS (Phase 3 white-label — task 10)
+// ============================================
+
+/// A hostname a tenant is reachable at. Two flavours:
+///   * MANAGED_SUBDOMAIN — a slug under the platform apex (e.g.
+///     `acme.kondense.ai`). Auto-verified since the wildcard cert
+///     covers it. No Vercel API call needed.
+///   * CUSTOM — a tenant-owned domain (e.g. `portal.acme.com`).
+///     Requires TXT-record ownership proof, then Vercel adds it +
+///     issues a Let's Encrypt cert.
+///
+/// Multiple rows per Company are allowed; `isPrimary` marks the
+/// preferred one for outbound links. Deleted rows should really be
+/// removed (not soft-deleted) so the unique(hostname) constraint
+/// can be reused.
+enum DomainKind {
+  MANAGED_SUBDOMAIN
+  CUSTOM
+}
+
+model Domain {
+  id                String     @id @default(uuid())
+  companyId         String     @map("company_id")
+  hostname          String     @unique
+  kind              DomainKind
+  isPrimary         Boolean    @default(false) @map("is_primary")
+  /// Set when the TXT-record proof succeeds. Null for un-verified
+  /// custom domains; auto-set to now() for managed subdomains.
+  verifiedAt        DateTime?  @map("verified_at")
+  /// Set when Vercel confirms an SSL cert has been issued (custom
+  /// domains only; managed subdomains inherit the wildcard cert and
+  /// leave this null).
+  sslIssuedAt       DateTime?  @map("ssl_issued_at")
+  /// Vercel's internal id for the domain — needed to remove it from
+  /// the project when the tenant unlinks.
+  vercelDomainId    String?    @map("vercel_domain_id")
+  /// Random token the tenant sets as a TXT record at
+  /// `_kondense-verify.<hostname>` to prove ownership. Rotated on
+  /// every verification retry so an abandoned token can't be reused.
+  verificationToken String?    @map("verification_token")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([verifiedAt])
+  @@map("domains")
 }
 
 /// Join row between User and Company. Carries the user's role
