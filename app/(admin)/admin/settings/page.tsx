@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/tabs'
 import { BrandingCard } from '@/components/admin/settings/branding-card'
 import { DiscordWebhookCard } from '@/components/admin/settings/discord-webhook-card'
+import { DomainCard } from '@/components/admin/settings/domain-card'
 import {
   getAchievementsWebhookSettingAction,
   getDiscordWebhookSettingAction,
@@ -21,14 +22,27 @@ import {
   getCurrentBrandingAction,
   updateBrandingAction,
 } from './branding-actions'
+import {
+  claimManagedSubdomainAction,
+  getPlatformApexAction,
+  listDomainsAction,
+  removeDomainAction,
+} from './domain-actions'
 
 export default async function AdminSettingsPage() {
-  const [discordSetting, achievementsSetting, currentBranding] =
-    await Promise.all([
-      getDiscordWebhookSettingAction(),
-      getAchievementsWebhookSettingAction(),
-      getCurrentBrandingAction(),
-    ])
+  const [
+    discordSetting,
+    achievementsSetting,
+    currentBranding,
+    domains,
+    apexDomain,
+  ] = await Promise.all([
+    getDiscordWebhookSettingAction(),
+    getAchievementsWebhookSettingAction(),
+    getCurrentBrandingAction(),
+    listDomainsAction(),
+    getPlatformApexAction(),
+  ])
 
   return (
     <div className="space-y-6">
@@ -37,6 +51,7 @@ export default async function AdminSettingsPage() {
       <Tabs defaultValue="branding" className="gap-6">
         <TabsList>
           <TabsTrigger value="branding">Branding</TabsTrigger>
+          <TabsTrigger value="domains">Domains</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
@@ -44,6 +59,15 @@ export default async function AdminSettingsPage() {
           <BrandingCard
             initial={currentBranding}
             action={updateBrandingAction}
+          />
+        </TabsContent>
+
+        <TabsContent value="domains" className="space-y-6">
+          <DomainCard
+            initialDomains={domains}
+            apexDomain={apexDomain}
+            claimAction={claimManagedSubdomainAction}
+            removeAction={removeDomainAction}
           />
         </TabsContent>
 
