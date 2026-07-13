@@ -13,6 +13,7 @@
 // service assumes the caller already checked authz.
 
 import { CertificateDeliveryEmail } from '@/emails'
+import { getBranding } from '@/lib/branding/get-branding'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/resend'
 import { getCertificatePdfBytes } from '@/lib/services/certificate-service'
@@ -290,16 +291,19 @@ export async function emailCertificateToMember(
     'there'
   const filename = safeFilename(issuance.module.title)
 
+  const branding = await getBranding()
   try {
     const { id } = await sendEmail({
       to: issuance.user.email,
       subject: `Your certificate: ${issuance.module.title}`,
       purpose: 'notifications',
+      fromName: branding.fromName,
       react: CertificateDeliveryEmail({
         name: memberName,
         moduleTitle: issuance.module.title,
         courseTitle: issuance.course.title,
         shortCode: issuance.shortCode,
+        branding,
       }),
       attachments: [
         {

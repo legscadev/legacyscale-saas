@@ -4,6 +4,7 @@ import { AnnouncementEmail } from '@/emails/announcement'
 import { CourseCompleteEmail } from '@/emails/course-complete'
 import { PasswordResetEmail } from '@/emails/password-reset'
 import { WelcomeEmail } from '@/emails/welcome'
+import { getBranding } from '@/lib/branding/get-branding'
 
 // Lazy singleton — only throws on first use, not at import time, so
 // `next build` and code paths that don't email don't crash when the key
@@ -20,11 +21,9 @@ function getResend(): Resend {
   return _resend
 }
 
-const FROM_NAME = 'Kondense'
-
 type EmailPurpose = 'welcome' | 'security' | 'notifications' | 'billing'
 
-function getFromAddress(purpose: EmailPurpose): string {
+function getFromAddress(purpose: EmailPurpose, fromName: string): string {
   // Per-mailstream from-addresses so reputation issues stay isolated
   // (e.g. a flagged notification doesn't poison the welcome stream).
   // Falls back to RESEND_FROM_EMAIL, then Resend's sandbox sender.
@@ -36,7 +35,7 @@ function getFromAddress(purpose: EmailPurpose): string {
   }[purpose]
   const email =
     purposeEnv ?? process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
-  return `${FROM_NAME} <${email}>`
+  return `${fromName} <${email}>`
 }
 
 interface EmailAttachment {
@@ -66,10 +65,11 @@ export async function sendEmail({
   purpose,
   replyTo,
   attachments,
-}: SendEmailOptions): Promise<{ id: string | undefined }> {
+  fromName,
+}: SendEmailOptions & { fromName: string }): Promise<{ id: string | undefined }> {
   const resend = getResend()
   const { data, error } = await resend.emails.send({
-    from: getFromAddress(purpose),
+    from: getFromAddress(purpose, fromName),
     to: Array.isArray(to) ? to : [to],
     subject,
     react,
@@ -102,17 +102,20 @@ export async function sendWelcomeEmail(
   name: string,
   options: WelcomeEmailOptions
 ) {
+  const branding = await getBranding()
   const isInvite = options.variant === 'invite'
   return sendEmail({
     to,
     purpose: 'welcome',
+    fromName: branding.fromName,
     subject: isInvite
-      ? "Welcome to Kondense — Let's Get Started"
-      : 'Welcome to Kondense!',
+      ? `Welcome to ${branding.productName} — Let's Get Started`
+      : `Welcome to ${branding.productName}!`,
     react: WelcomeEmail({
       name,
       ctaUrl: options.ctaUrl,
       variant: options.variant,
+      branding,
     }),
   })
 }
@@ -122,11 +125,13 @@ export async function sendPasswordResetEmail(
   name: string,
   resetUrl: string
 ) {
+  const branding = await getBranding()
   return sendEmail({
     to,
     purpose: 'security',
-    subject: 'Reset Your Password — Kondense',
-    react: PasswordResetEmail({ name, resetUrl }),
+    fromName: branding.fromName,
+    subject: `Reset Your Password — ${branding.productName}`,
+    react: PasswordResetEmail({ name, resetUrl, branding }),
   })
 }
 
@@ -136,11 +141,13 @@ export async function sendAnnouncementEmail(
   body: string,
   viewUrl: string
 ) {
+  const branding = await getBranding()
   return sendEmail({
     to,
     purpose: 'notifications',
+    fromName: branding.fromName,
     subject: `New Announcement: ${title}`,
-    react: AnnouncementEmail({ title, body, viewUrl }),
+    react: AnnouncementEmail({ title, body, viewUrl, branding }),
   })
 }
 
@@ -150,10 +157,12 @@ export async function sendCourseCompleteEmail(
   courseTitle: string,
   completeUrl: string
 ) {
+  const branding = await getBranding()
   return sendEmail({
     to,
     purpose: 'notifications',
+    fromName: branding.fromName,
     subject: `Congrats — you finished ${courseTitle}`,
-    react: CourseCompleteEmail({ name, courseTitle, completeUrl }),
+    react: CourseCompleteEmail({ name, courseTitle, completeUrl, branding }),
   })
 }
