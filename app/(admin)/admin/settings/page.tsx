@@ -27,6 +27,8 @@ import {
   getPlatformApexAction,
   listDomainsAction,
   removeDomainAction,
+  startCustomDomainAction,
+  verifyCustomDomainAction,
 } from './domain-actions'
 
 export default async function AdminSettingsPage() {
@@ -68,6 +70,8 @@ export default async function AdminSettingsPage() {
             apexDomain={apexDomain}
             claimAction={claimManagedSubdomainAction}
             removeAction={removeDomainAction}
+            startCustomAction={startCustomDomainAction}
+            verifyAction={verifyCustomDomainAction}
           />
         </TabsContent>
 
