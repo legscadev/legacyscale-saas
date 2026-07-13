@@ -7,7 +7,6 @@ import { ArrowLeft, Copy, FileText, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -24,7 +23,7 @@ import { createCompanyAction } from '@/app/(super)/super/companies/actions'
 
 type FieldErrors = Partial<
   Record<
-    'name' | 'slug' | 'isAgency' | 'ownerEmail' | 'ownerName' | 'snapshotFromCompanyId',
+    'name' | 'slug' | 'ownerEmail' | 'ownerName' | 'snapshotFromCompanyId',
     string[]
   >
 >
@@ -52,7 +51,6 @@ export function CreateCompanyForm({
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
-  const [isAgency, setIsAgency] = useState(false)
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerName, setOwnerName] = useState('')
   const [snapshotSource, setSnapshotSource] = useState<string>(NONE_SOURCE)
@@ -69,7 +67,6 @@ export function CreateCompanyForm({
       const result = await createCompanyAction({
         name,
         slug: effectiveSlug,
-        isAgency,
         ownerEmail,
         ownerName,
         snapshotFromCompanyId:
@@ -158,31 +155,6 @@ export function CreateCompanyForm({
           className="font-mono"
         />
       </FormRow>
-
-      <label
-        htmlFor="company-agency"
-        className={cn(
-          'flex cursor-pointer select-none items-start gap-3 rounded-md border p-3 transition-colors',
-          isAgency && 'border-primary/40 bg-primary/[0.04]',
-        )}
-      >
-        <Checkbox
-          id="company-agency"
-          checked={isAgency}
-          onCheckedChange={(v) => setIsAgency(v === true)}
-          disabled={pending}
-        />
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium leading-none">
-            This is an agency
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Agencies run their own sub-accounts. Sub-account creation +
-            snapshot cloning becomes visible from an agency's admin
-            console.
-          </p>
-        </div>
-      </label>
 
       <div className="space-y-4 rounded-lg border p-4">
         <div>
