@@ -59,14 +59,26 @@ export type ClientBranding = ReturnType<typeof toClientBranding>
 // INTERNALS
 // ────────────────────────────────────────────
 
-// Both wrappers swallow their errors: branding is decorative, not
-// load-bearing, and blowing up a page for a resolver failure would
-// be worse than showing the platform default.
+// Both wrappers swallow real resolver errors (branding is decorative
+// — blowing up a page for a bad brand blob is worse than showing the
+// platform default). They deliberately re-throw Next.js's dynamic-
+// server-usage errors, which are a control-flow signal used by the
+// static-generation pass to mark a route dynamic. Catching those
+// causes a hundred harmless-but-alarming stack traces per build.
+
+function isDynamicUsageError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { digest?: string }).digest === 'DYNAMIC_SERVER_USAGE'
+  )
+}
 
 async function safeGetTenantFromHeaders() {
   try {
     return await getTenantFromHeaders()
   } catch (err) {
+    if (isDynamicUsageError(err)) throw err
     console.warn('[branding] getTenantFromHeaders failed:', err)
     return null
   }
@@ -76,6 +88,7 @@ async function safeGetActiveCompany() {
   try {
     return await getActiveCompany()
   } catch (err) {
+    if (isDynamicUsageError(err)) throw err
     console.warn('[branding] getActiveCompany failed:', err)
     return null
   }
