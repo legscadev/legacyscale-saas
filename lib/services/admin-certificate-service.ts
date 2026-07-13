@@ -18,7 +18,7 @@ import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/resend'
 import { getCertificatePdfBytes } from '@/lib/services/certificate-service'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { withTenantPrefix } from '@/lib/tenancy/storage-path'
+import { tenantPrefixCandidates } from '@/lib/tenancy/storage-path'
 
 const CERTIFICATE_BUCKET = 'course-certificates'
 const SIGNED_URL_TTL_SEC = 60 * 10
@@ -342,7 +342,24 @@ export async function getAdminCertificateDownload(
 
   const supabase = createAdminClient()
   const filename = safeFilename(issuance.module.title)
-  const certPath = await withTenantPrefix(`${issuanceId}.pdf`)
+  // getCertificatePdfBytes above ensures the PDF exists at ONE of the
+  // candidate paths (prefixed for new files, bare for pre-tenancy).
+  // Probe both and sign whichever we find.
+  const candidates = await tenantPrefixCandidates(`${issuanceId}.pdf`)
+  let certPath: string | null = null
+  for (const candidate of candidates) {
+    const { data: existing } = await supabase.storage
+      .from(CERTIFICATE_BUCKET)
+      .list('', { search: candidate, limit: 1 })
+    if (existing?.some((f) => f.name === candidate)) {
+      certPath = candidate
+      break
+    }
+  }
+  if (!certPath) {
+    console.error('Admin cert path lookup missed both prefixed and bare')
+    return { ok: false, error: 'Could not locate certificate PDF' }
+  }
   const { data, error } = await supabase.storage
     .from(CERTIFICATE_BUCKET)
     .createSignedUrl(certPath, SIGNED_URL_TTL_SEC, {

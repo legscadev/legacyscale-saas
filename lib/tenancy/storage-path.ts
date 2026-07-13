@@ -38,3 +38,23 @@ export async function stripTenantPrefix(path: string): Promise<string> {
   const prefix = `${companyId}/`
   return path.startsWith(prefix) ? path.slice(prefix.length) : path
 }
+
+/**
+ * Prefer the tenant-prefixed path; fall back to the un-prefixed
+ * original. Both variants are returned so callers can probe storage
+ * in order and use whichever exists.
+ *
+ * Used by anything that reconstructs a storage path on read (e.g. the
+ * certificate service looks up `<issuanceId>.pdf`). Files that were
+ * uploaded pre-tenancy remain at the bare path and stay reachable via
+ * the fallback until they're migrated. Post-tenancy writes always
+ * land at the prefixed path, and any regeneration path (cert re-render)
+ * writes to the prefixed path only.
+ */
+export async function tenantPrefixCandidates(
+  path: string,
+): Promise<string[]> {
+  const prefixed = await withTenantPrefix(path)
+  if (prefixed === path) return [path]
+  return [prefixed, path]
+}

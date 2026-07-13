@@ -29,7 +29,10 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { getBranding } from '@/lib/branding/get-branding'
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { withTenantPrefix } from '@/lib/tenancy/storage-path'
+import {
+  tenantPrefixCandidates,
+  withTenantPrefix,
+} from '@/lib/tenancy/storage-path'
 
 const CERTIFICATE_BUCKET = 'course-certificates'
 const SIGNED_URL_TTL_SEC = 60 * 10 // 10 min — plenty for click-to-download
@@ -207,17 +210,25 @@ export async function getCertificatePdfBytes(
   if (!issuance) return null
 
   const supabase = createAdminClient()
-  const certPath = await withTenantPrefix(`${issuance.id}.pdf`)
+  // Look for an existing PDF at the tenant-prefixed path first, then
+  // at the pre-tenancy bare path. Anything found gets served straight;
+  // a cache miss falls through to a fresh render at the prefixed path.
+  const candidates = await tenantPrefixCandidates(`${issuance.id}.pdf`)
+  let existingPath: string | null = null
+  for (const candidate of candidates) {
+    const { data: existing } = await supabase.storage
+      .from(CERTIFICATE_BUCKET)
+      .list('', { search: candidate, limit: 1 })
+    if (existing?.some((f) => f.name === candidate)) {
+      existingPath = candidate
+      break
+    }
+  }
 
-  const { data: existing } = await supabase.storage
-    .from(CERTIFICATE_BUCKET)
-    .list('', { search: certPath, limit: 1 })
-  const alreadyGenerated = existing?.some((f) => f.name === certPath)
-
-  if (alreadyGenerated) {
+  if (existingPath) {
     const { data, error } = await supabase.storage
       .from(CERTIFICATE_BUCKET)
-      .download(certPath)
+      .download(existingPath)
     if (error || !data) {
       console.error('Certificate download from storage failed:', error)
       return null
@@ -225,6 +236,7 @@ export async function getCertificatePdfBytes(
     return new Uint8Array(await data.arrayBuffer())
   }
 
+  const certPath = candidates[0]
   const memberName =
     issuance.user.name?.trim() ||
     issuance.user.email.split('@')[0] ||
@@ -373,14 +385,23 @@ async function ensureAndSignPdf(
   ctx: RenderContext & { issuanceId: string },
 ): Promise<CertificateDownloadResult | CertificateDownloadError> {
   const supabase = createAdminClient()
-  const certPath = await withTenantPrefix(`${ctx.issuanceId}.pdf`)
+  // Preferred (prefixed) path first; pre-tenancy bare path second.
+  // Whichever exists is used for the signed URL. On cache miss, we
+  // upload to the preferred path.
+  const candidates = await tenantPrefixCandidates(`${ctx.issuanceId}.pdf`)
+  let existingPath: string | null = null
+  for (const candidate of candidates) {
+    const { data: existing } = await supabase.storage
+      .from(CERTIFICATE_BUCKET)
+      .list('', { search: candidate, limit: 1 })
+    if (existing?.some((f) => f.name === candidate)) {
+      existingPath = candidate
+      break
+    }
+  }
 
-  const { data: existing } = await supabase.storage
-    .from(CERTIFICATE_BUCKET)
-    .list('', { search: certPath, limit: 1 })
-  const alreadyGenerated = existing?.some((f) => f.name === certPath)
-
-  if (!alreadyGenerated) {
+  const certPath = existingPath ?? candidates[0]
+  if (!existingPath) {
     const bytes = await renderCertificatePdf(ctx)
     const { error: uploadErr } = await supabase.storage
       .from(CERTIFICATE_BUCKET)
