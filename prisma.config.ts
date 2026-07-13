@@ -28,7 +28,12 @@ export default defineConfig({
     url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? '',
     // Empty scratch DB Prisma drops/recreates to compute schema
     // deltas for `migrate diff/dev`. Local-only; never a runtime
-    // URL. See docs/multi-tenancy.md for the local Postgres setup.
-    shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL ?? '',
+    // URL. Left undefined when the env var isn't set — Prisma 7
+    // rejects an empty string (P1013), which breaks Vercel builds
+    // (SHADOW_DATABASE_URL is never configured in the platform env).
+    // See docs/multi-tenancy.md for the local Postgres setup.
+    ...(process.env.SHADOW_DATABASE_URL
+      ? { shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL }
+      : {}),
   },
 })
