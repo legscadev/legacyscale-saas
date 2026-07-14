@@ -12,44 +12,59 @@
 // `settings`. If a rollback is ever needed, restoring the legacy
 // table's values is straightforward — they were never touched.
 
-import { getSetting } from '@/lib/settings/get-setting'
+import { getSettingAtScope } from '@/lib/settings/get-setting'
 import type { SettingKey } from '@/lib/settings/keys'
-import { setPlatformSetting } from '@/lib/settings/set-setting'
+import { setScopedSetting } from '@/lib/settings/set-setting'
+import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 
 /**
- * Read the raw stored value for a setting. Returns null when the key
- * is absent. SERVER ONLY — callers that surface a value to the client
- * must mask it (see `maskWebhookUrl`). Values stored here are secret-
- * equivalent (webhook URLs, API tokens) so leaking them defeats the
- * whole point of moving them out of `.env`.
+ * Read the raw stored value for a setting, always at the caller's
+ * active-company scope. Returns null when the key is absent OR when
+ * there's no active company (server jobs / seed scripts) — the
+ * latter is intentional so we never leak one tenant's secret to
+ * another by falling back to a platform-wide row.
+ *
+ * Values here are secret-equivalent (webhook URLs, API tokens); the
+ * previous PLATFORM-fallback behavior meant every tenant that hadn't
+ * configured Discord read the platform's URL. That's the tenancy leak
+ * the switch to COMPANY-only scope closes.
  */
 export async function getRawSetting(key: SettingKey): Promise<string | null> {
-  const value = await getSetting<unknown>(key)
+  const companyId = await getRequestCompanyId()
+  if (!companyId) return null
+  const value = await getSettingAtScope<unknown>(key, 'COMPANY', companyId)
   return typeof value === 'string' ? value : null
 }
 
 /**
- * Upsert a setting. Passing `null` (or an empty string) clears the row
- * so the env-var fallback resumes. `updatedById` records who made the
- * change for lightweight audit.
+ * Upsert a setting at the caller's active-company scope. Passing
+ * `null` (or an empty string) deletes the row for that tenant. Throws
+ * when there's no active company — the settings surface should never
+ * try to save outside a tenant context.
  */
 export async function setSetting(
   key: SettingKey,
   value: string | null,
   updatedById: string,
 ): Promise<void> {
-  const normalized = value?.trim() ?? ''
-  if (normalized === '') {
-    await setPlatformSetting(key, null, updatedById)
-    return
+  const companyId = await getRequestCompanyId()
+  if (!companyId) {
+    throw new Error('setSetting: no active company on the request')
   }
-  await setPlatformSetting(key, normalized, updatedById)
+  const normalized = value?.trim() ?? ''
+  await setScopedSetting(
+    'COMPANY',
+    companyId,
+    key,
+    normalized === '' ? null : normalized,
+    updatedById,
+  )
 }
 
 /**
  * Convenience check for "is the Discord webhook configured?" — used
  * by the announcement form to disable the Crosspost checkbox when
- * there's no URL on file.
+ * there's no URL on file for the current tenant.
  */
 export async function isDiscordWebhookConfigured(): Promise<boolean> {
   const value = await getRawSetting('discord.webhook_url')

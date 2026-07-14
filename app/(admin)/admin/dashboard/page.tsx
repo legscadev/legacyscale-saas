@@ -28,6 +28,7 @@ import {
 import { getInitials, relativeTime } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
+import { memberTenantScope } from '@/lib/tenancy/request-company'
 import { CompletionsChart } from '@/components/admin/dashboard/completions-chart'
 import { TopCoursesChart } from '@/components/admin/dashboard/top-courses-chart'
 
@@ -51,6 +52,13 @@ export default async function AdminDashboardPage() {
   const stuckEnrolledCutoff = new Date(now - FOURTEEN_DAYS_MS)
   const stuckInactivityCutoff = new Date(now - SEVEN_DAYS_MS)
 
+  // Users are a global table, so the Prisma tenancy extension does
+  // NOT auto-scope them. Every user.count / user.findMany on this
+  // dashboard has to opt in via memberTenantScope() — otherwise the
+  // "Members" card reads the platform-wide count and "Newest members"
+  // leaks other tenants' users into the sidebar panel.
+  const tenantScope = await memberTenantScope()
+
   const [
     membersTotal,
     membersActive,
@@ -66,9 +74,16 @@ export default async function AdminDashboardPage() {
     completionsByWeek,
     topCourses,
   ] = await Promise.all([
-    prisma.user.count({ where: { role: 'MEMBER', deletedAt: null } }),
     prisma.user.count({
-      where: { role: 'MEMBER', isActive: true, deletedAt: null },
+      where: { role: 'MEMBER', deletedAt: null, ...tenantScope },
+    }),
+    prisma.user.count({
+      where: {
+        role: 'MEMBER',
+        isActive: true,
+        deletedAt: null,
+        ...tenantScope,
+      },
     }),
     prisma.course.count({ where: { deletedAt: null } }),
     prisma.course.count({ where: { status: 'PUBLISHED', deletedAt: null } }),
@@ -95,7 +110,7 @@ export default async function AdminDashboardPage() {
       },
     }),
     prisma.user.findMany({
-      where: { role: 'MEMBER', deletedAt: null },
+      where: { role: 'MEMBER', deletedAt: null, ...tenantScope },
       orderBy: { createdAt: 'desc' },
       take: 5,
       select: {
