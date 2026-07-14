@@ -18,6 +18,7 @@ import {
 } from '@/app/(super)/super/companies/types'
 
 import { companyColumns } from './columns'
+import { CompaniesProvider } from './companies-context'
 import { CompaniesToolbar } from './companies-toolbar'
 
 const DEFAULT_QUERY: CompanyDirectoryQuery = {
@@ -36,6 +37,9 @@ export function CompaniesShell({ initialData }: CompaniesShellProps) {
   const [query, setQuery] = useState<CompanyDirectoryQuery>(DEFAULT_QUERY)
   const [data, setData] = useState<CompanyDirectoryData>(initialData)
   const [isLoading, setIsLoading] = useState(false)
+  // Bumped by refetch() so mutation callers (delete, clone) can force
+  // a re-run of the fetch effect against the same query.
+  const [refreshTick, setRefreshTick] = useState(0)
 
   // Skip the initial effect run since server-rendered initialData
   // already matches DEFAULT_QUERY.
@@ -60,7 +64,11 @@ export function CompaniesShell({ initialData }: CompaniesShellProps) {
       }
     })()
     return () => controller.abort()
-  }, [query])
+  }, [query, refreshTick])
+
+  const refetch = useCallback(() => {
+    setRefreshTick((t) => t + 1)
+  }, [])
 
   const patch = useCallback((updates: Partial<CompanyDirectoryQuery>) => {
     setQuery((prev) => {
@@ -100,6 +108,7 @@ export function CompaniesShell({ initialData }: CompaniesShellProps) {
   const showEmpty = data.items.length === 0
 
   return (
+    <CompaniesProvider value={{ refetch }}>
     <div className="space-y-4" data-pending={isLoading}>
       <CompaniesToolbar
         search={query.search}
@@ -139,5 +148,6 @@ export function CompaniesShell({ initialData }: CompaniesShellProps) {
         />
       )}
     </div>
+    </CompaniesProvider>
   )
 }

@@ -39,6 +39,8 @@ import {
   type SnapshotSourceOption,
 } from '@/app/(super)/super/companies/actions'
 
+import { useCompaniesRefetch } from './companies-context'
+
 interface CompanyRowActionsProps {
   companyId: string
   companyName: string
@@ -55,6 +57,7 @@ export function CompanyRowActions({
   isProtected,
 }: CompanyRowActionsProps) {
   const router = useRouter()
+  const refetchCompanies = useCompaniesRefetch()
   const [snapshotOpen, setSnapshotOpen] = useState(false)
   const [sources, setSources] = useState<SnapshotSourceOption[]>([])
   const [sourceLoading, setSourceLoading] = useState(false)
@@ -94,6 +97,7 @@ export function CompanyRowActions({
       toast.success(`Deleted ${companyName}`)
       setDeleteOpen(false)
       setDeleteConfirmName('')
+      refetchCompanies()
       startTransition(() => router.refresh())
     } catch (err) {
       console.error(err)
@@ -120,6 +124,7 @@ export function CompanyRowActions({
         `Cloned ${s?.coursesCopied ?? 0} courses, ${s?.lessonsCopied ?? 0} lessons, and ${s?.categoriesCopied ?? 0} categories into ${companyName}`,
       )
       setSnapshotOpen(false)
+      refetchCompanies()
       startTransition(() => router.refresh())
     } catch (err) {
       console.error(err)
