@@ -7,6 +7,7 @@ import { requireActiveUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import {
   CompanySlugConflictError,
+  DeletedOwnerError,
   createCompany,
 } from '@/lib/services/company-provisioning'
 import { snapshotCompany } from '@/lib/services/company-snapshot'
@@ -157,15 +158,30 @@ export async function createCompanyAction(
     return { ok: false, fieldErrors }
   }
 
+  // Self-assign: blank ownerEmail means "the creator becomes OWNER".
+  // Only super-admins can reach this action, so the caller is always
+  // a valid candidate — we just skip the "you've been added" notice
+  // since they obviously already know.
+  const submittedEmail = parsed.data.ownerEmail?.trim() ?? ''
+  const ownerName = parsed.data.ownerName?.trim() || undefined
+  let ownerEmail = submittedEmail
+  let notifyExistingOwner = true
+  if (submittedEmail === '') {
+    const caller = await requireActiveUser()
+    ownerEmail = caller.email
+    notifyExistingOwner = false
+  }
+
   try {
     const result = await createCompany({
       name: parsed.data.name,
       slug: parsed.data.slug,
       isAgency: parsed.data.isAgency,
       owner: {
-        email: parsed.data.ownerEmail,
-        name: parsed.data.ownerName || undefined,
+        email: ownerEmail,
+        name: ownerName,
       },
+      notifyExistingOwner,
     })
 
     // Optional snapshot pass. Failure here does NOT roll back the
@@ -209,8 +225,66 @@ export async function createCompanyAction(
         fieldErrors: { slug: ['This slug is already in use'] },
       }
     }
+    if (err instanceof DeletedOwnerError) {
+      return {
+        ok: false,
+        fieldErrors: { ownerEmail: [err.message] },
+      }
+    }
     console.error('createCompanyAction failed:', err)
     return { ok: false, error: 'Could not create company' }
+  }
+}
+
+export type OwnerLookup =
+  | { status: 'invalid' }
+  | { status: 'fresh' }
+  | { status: 'deleted' }
+  | {
+      status: 'existing'
+      name: string | null
+      email: string
+      /** Global User.role — determines whether we'll promote to
+       *  ADMIN when creating the OWNER membership. */
+      globalRole: 'ADMIN' | 'TEAM' | 'MEMBER'
+      isSuperAdmin: boolean
+      willPromote: boolean
+    }
+
+/**
+ * Look up what the create-company form will do with a given owner
+ * email — used by the client to render a live preview so the operator
+ * knows whether they're minting a fresh admin, attaching an existing
+ * super-admin, or (rejected) targeting a deleted account. Super-admin
+ * only, since the create surface is super-admin only anyway.
+ */
+export async function lookupOwnerAction(
+  emailRaw: string,
+): Promise<OwnerLookup> {
+  await assertSuperAdmin()
+  const email = emailRaw.trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { status: 'invalid' }
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      email: true,
+      name: true,
+      role: true,
+      isSuperAdmin: true,
+      deletedAt: true,
+    },
+  })
+  if (!user) return { status: 'fresh' }
+  if (user.deletedAt) return { status: 'deleted' }
+
+  return {
+    status: 'existing',
+    email: user.email,
+    name: user.name,
+    globalRole: user.role,
+    isSuperAdmin: user.isSuperAdmin,
+    willPromote: user.role !== 'ADMIN' && !user.isSuperAdmin,
   }
 }
 

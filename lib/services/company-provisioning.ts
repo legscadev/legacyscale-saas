@@ -7,7 +7,7 @@ import type { Company, User } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { syncRoleToAuthMetadata, syncUserToDatabase } from '@/lib/auth/sync-user'
 import { issueInvite } from '@/lib/invites'
-import { sendCompanyOwnerInvite } from '@/lib/resend'
+import { sendCompanyOwnerInvite, sendOwnerAddedNotice } from '@/lib/resend'
 import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -15,6 +15,15 @@ export class CompanySlugConflictError extends Error {
   constructor(message = 'A company with this slug already exists') {
     super(message)
     this.name = 'CompanySlugConflictError'
+  }
+}
+
+export class DeletedOwnerError extends Error {
+  constructor(
+    message = 'The owner email belongs to a soft-deleted user. Restore the account first, or use a different email.',
+  ) {
+    super(message)
+    this.name = 'DeletedOwnerError'
   }
 }
 
@@ -26,6 +35,14 @@ export interface CreateCompanyInput {
     email: string
     name?: string
   }
+  /**
+   * When true (default), send a "you've been added as owner of X"
+   * heads-up email to EXISTING users who get attached to the new
+   * tenant. Set false for self-assign flows where the caller IS the
+   * new owner and already knows. Never gates the fresh-account
+   * invite — those users need the password-set link no matter what.
+   */
+  notifyExistingOwner?: boolean
 }
 
 export interface CreatedCompany {
@@ -78,6 +95,16 @@ export async function createCompany(
       where: { email: normalizedEmail },
     })
     let ownerWasNewlyCreated = false
+    let existingUserWasPromoted = false
+
+    // Reject soft-deleted matches so we don't attach OWNER to a dead
+    // account (the row would look orphaned — nobody can sign in as
+    // them, but the "Owner" column reads the deleted name). Caller
+    // surfaces the message so the operator can pick a different
+    // email or restore the account.
+    if (owner?.deletedAt) {
+      throw new DeletedOwnerError()
+    }
 
     if (!owner) {
       const admin = createAdminClient()
@@ -100,16 +127,28 @@ export async function createCompany(
       // A fresh tenant OWNER runs their own admin console, so their
       // global User.role must be ADMIN — the CompanyMembership OWNER
       // role alone isn't enough (requireAdmin gates on the global
-      // column). Only touched on brand-new users; if the email was
-      // already in our system we don't demote or promote them.
+      // column).
       owner = await prisma.user.update({
         where: { id: owner.id },
         data: { role: 'ADMIN' },
       })
-      // Mirror to Supabase Auth app_metadata so the proxy's role-aware
-      // redirects match the DB.
       await syncRoleToAuthMetadata(created.user.id, 'ADMIN')
       ownerWasNewlyCreated = true
+    } else if (owner.role !== 'ADMIN' && !owner.isSuperAdmin) {
+      // Existing user made OWNER of a tenant needs ADMIN globally too,
+      // otherwise requireAdmin bounces them from /admin/*. The old
+      // behavior silently attached OWNER while leaving them at
+      // role=MEMBER, which is the "Playwright Test pt548361 owner
+      // can't reach their own admin console" bug. Super-admins are
+      // exempt because their gate bypasses role checks anyway.
+      owner = await prisma.user.update({
+        where: { id: owner.id },
+        data: { role: 'ADMIN' },
+      })
+      if (owner.authId) {
+        await syncRoleToAuthMetadata(owner.authId, 'ADMIN')
+      }
+      existingUserWasPromoted = true
     }
 
     const company = await prisma.company.create({
@@ -153,6 +192,25 @@ export async function createCompany(
         })
       } catch (err) {
         console.error('Company-owner invite email failed:', err)
+      }
+    } else if (input.notifyExistingOwner !== false) {
+      // Heads-up to an existing user who just got OWNER of a new
+      // tenant. Copy adapts to whether they're a super-admin (no
+      // access change) or a regular user (promoted to admin, if that
+      // happened). Self-assign flows skip this by passing
+      // notifyExistingOwner: false — the caller obviously knows.
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+      const dashboardUrl = `${appUrl}/admin/dashboard`
+      const displayName = owner.name ?? normalizedEmail.split('@')[0]
+      try {
+        await sendOwnerAddedNotice(normalizedEmail, displayName, {
+          companyName: company.name,
+          ctaUrl: dashboardUrl,
+          isSuperAdmin: owner.isSuperAdmin,
+          wasPromoted: existingUserWasPromoted,
+        })
+      } catch (err) {
+        console.error('Owner-added notice email failed:', err)
       }
     }
 

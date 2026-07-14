@@ -3,6 +3,7 @@ import { Resend } from 'resend'
 import { AnnouncementEmail } from '@/emails/announcement'
 import { CompanyOwnerInviteEmail } from '@/emails/company-owner-invite'
 import { CourseCompleteEmail } from '@/emails/course-complete'
+import { OwnerAddedEmail } from '@/emails/owner-added'
 import { PasswordResetEmail } from '@/emails/password-reset'
 import { WelcomeEmail } from '@/emails/welcome'
 import { getBranding } from '@/lib/branding/get-branding'
@@ -150,6 +151,41 @@ export async function sendCompanyOwnerInvite(
       name,
       companyName: options.companyName,
       ctaUrl: options.ctaUrl,
+      branding,
+    }),
+  })
+}
+
+interface OwnerAddedNoticeOptions {
+  companyName: string
+  ctaUrl: string
+  isSuperAdmin?: boolean
+  wasPromoted?: boolean
+}
+
+/**
+ * Heads-up email for EXISTING users who got attached as OWNER of a
+ * new tenant via /super/create-company. Uses the platform brand,
+ * because the point is to tell them Kondense assigned them the
+ * tenant — they may not have seen the new tenant's brand yet.
+ */
+export async function sendOwnerAddedNotice(
+  to: string,
+  name: string,
+  options: OwnerAddedNoticeOptions,
+) {
+  const branding = await getBranding()
+  return sendEmail({
+    to,
+    purpose: 'welcome',
+    fromName: branding.fromName,
+    subject: `You're now the owner of ${options.companyName}`,
+    react: OwnerAddedEmail({
+      name,
+      companyName: options.companyName,
+      ctaUrl: options.ctaUrl,
+      isSuperAdmin: options.isSuperAdmin,
+      wasPromoted: options.wasPromoted,
       branding,
     }),
   })

@@ -15,7 +15,19 @@ export const createCompanySchema = z.object({
     .max(60)
     .regex(slugRegex, 'Slug can only contain lowercase letters, numbers, and hyphens'),
   isAgency: z.boolean().optional().default(false),
-  ownerEmail: z.string().trim().toLowerCase().email('Enter a valid email'),
+  /**
+   * Blank ownerEmail means "the creator (a super-admin) becomes the
+   * OWNER". The action fills in the caller's email server-side in
+   * that case, so this stays optional on the wire. See
+   * createCompanyAction in app/(super)/super/companies/actions.ts.
+   */
+  ownerEmail: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email('Enter a valid email')
+    .optional()
+    .or(z.literal('')),
   ownerName: z.string().trim().max(120).optional().or(z.literal('')),
   /**
    * Optional source-tenant to snapshot content from at creation
