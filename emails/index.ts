@@ -1,4 +1,5 @@
 export { WelcomeEmail } from './welcome'
+export { CompanyOwnerInviteEmail } from './company-owner-invite'
 export { PasswordResetEmail } from './password-reset'
 export { AnnouncementEmail } from './announcement'
 export { CourseCompleteEmail } from './course-complete'

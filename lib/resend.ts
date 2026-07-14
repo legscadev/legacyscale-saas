@@ -1,6 +1,7 @@
 import { type ReactElement } from 'react'
 import { Resend } from 'resend'
 import { AnnouncementEmail } from '@/emails/announcement'
+import { CompanyOwnerInviteEmail } from '@/emails/company-owner-invite'
 import { CourseCompleteEmail } from '@/emails/course-complete'
 import { PasswordResetEmail } from '@/emails/password-reset'
 import { WelcomeEmail } from '@/emails/welcome'
@@ -115,6 +116,40 @@ export async function sendWelcomeEmail(
       name,
       ctaUrl: options.ctaUrl,
       variant: options.variant,
+      branding,
+    }),
+  })
+}
+
+interface CompanyOwnerInviteOptions {
+  /** Name of the tenant the recipient has been granted OWNER on. */
+  companyName: string
+  /** Password-set + landing link — /onboarding?token=… */
+  ctaUrl: string
+}
+
+/**
+ * Dedicated invite for the initial OWNER of a freshly-provisioned
+ * tenant. Uses the platform (Kondense) brand at send time because the
+ * new tenant has no brand set yet — the recipient is being told
+ * "you're being handed this tenant on our platform," so the platform
+ * identity is the right sender.
+ */
+export async function sendCompanyOwnerInvite(
+  to: string,
+  name: string,
+  options: CompanyOwnerInviteOptions,
+) {
+  const branding = await getBranding()
+  return sendEmail({
+    to,
+    purpose: 'welcome',
+    fromName: branding.fromName,
+    subject: `You're the owner of ${options.companyName} on ${branding.productName}`,
+    react: CompanyOwnerInviteEmail({
+      name,
+      companyName: options.companyName,
+      ctaUrl: options.ctaUrl,
       branding,
     }),
   })

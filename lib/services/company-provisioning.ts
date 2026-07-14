@@ -5,9 +5,9 @@
 import type { Company, User } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { syncUserToDatabase } from '@/lib/auth/sync-user'
+import { syncRoleToAuthMetadata, syncUserToDatabase } from '@/lib/auth/sync-user'
 import { issueInvite } from '@/lib/invites'
-import { sendWelcomeEmail } from '@/lib/resend'
+import { sendCompanyOwnerInvite } from '@/lib/resend'
 import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -97,6 +97,18 @@ export async function createCompany(
       owner = await syncUserToDatabase(created.user, {
         suppressWelcomeEmail: true,
       })
+      // A fresh tenant OWNER runs their own admin console, so their
+      // global User.role must be ADMIN — the CompanyMembership OWNER
+      // role alone isn't enough (requireAdmin gates on the global
+      // column). Only touched on brand-new users; if the email was
+      // already in our system we don't demote or promote them.
+      owner = await prisma.user.update({
+        where: { id: owner.id },
+        data: { role: 'ADMIN' },
+      })
+      // Mirror to Supabase Auth app_metadata so the proxy's role-aware
+      // redirects match the DB.
+      await syncRoleToAuthMetadata(created.user.id, 'ADMIN')
       ownerWasNewlyCreated = true
     }
 
@@ -128,14 +140,16 @@ export async function createCompany(
     // load-bearing parts, and the operator can re-fire the invite
     // manually if needed.
     if (ownerWasNewlyCreated) {
-      const token = await issueInvite(owner.id)
+      // Scope the invite to the new tenant so the onboarding surface
+      // can name the company the owner is being handed.
+      const token = await issueInvite(owner.id, { companyId: company.id })
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
       const onboardingUrl = `${appUrl}/onboarding?token=${token}`
       const displayName = input.owner.name?.trim() || normalizedEmail
       try {
-        await sendWelcomeEmail(normalizedEmail, displayName, {
+        await sendCompanyOwnerInvite(normalizedEmail, displayName, {
+          companyName: company.name,
           ctaUrl: onboardingUrl,
-          variant: 'invite',
         })
       } catch (err) {
         console.error('Company-owner invite email failed:', err)
