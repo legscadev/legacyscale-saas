@@ -12,7 +12,6 @@
 // worker.
 
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { cache } from 'react'
 
 import { getActiveCompany } from './active-company'
 import { isTenancyEnabled } from './feature-flag'
@@ -21,14 +20,20 @@ import { isTenancyEnabled } from './feature-flag'
 const bypassStore = new AsyncLocalStorage<{ superAdmin: true }>()
 
 /**
- * Read the active company for the current request. Cached per
- * request via React's cache() so all Prisma queries in one request
- * share a single lookup. Returns null on:
+ * Read the active company for the current request. Returns null on:
  *   - tenancy flag off
  *   - no request context (seed scripts, background jobs)
  *   - inside a runAsSuperAdmin() callback
+ *
+ * Deliberately NOT wrapped in React's cache() — the AsyncLocalStorage
+ * bypass check needs to run on every call, or a super-admin flow that
+ * opens after the layout has already resolved the active company will
+ * still see the cached tenant id (extension keeps scoping queries
+ * that were supposed to run cross-tenant). The underlying
+ * getActiveCompany() is itself cache()-wrapped, so we still avoid
+ * duplicate DB lookups per request.
  */
-export const getRequestCompanyId = cache(async (): Promise<string | null> => {
+export async function getRequestCompanyId(): Promise<string | null> {
   if (!isTenancyEnabled()) return null
   if (bypassStore.getStore()) return null
 
@@ -41,7 +46,7 @@ export const getRequestCompanyId = cache(async (): Promise<string | null> => {
     // pre-refactor behavior for CLI + job callers.
     return null
   }
-})
+}
 
 /**
  * Run a callback with the tenant filter disabled — every scoped
