@@ -81,3 +81,4 @@ ehthumbs.db
 test-results/
 playwright-report/
 .env.preview
+.env.production
