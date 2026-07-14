@@ -5,22 +5,60 @@ import Link from 'next/link'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { adminNav, memberNav } from '@/lib/config/navigation'
+import { adminNav, memberNav, superNav } from '@/lib/config/navigation'
 import { BrandMark } from './brand-mark'
+import { CompanySwitcher } from './company-switcher'
 import { PageTransition } from './page-transition'
 import { SidebarNav } from './sidebar-nav'
 import { SidebarProvider, useSidebar } from './sidebar-context'
 import { TopBar } from './top-bar'
 import { UserMenu, type ShellUser } from './user-menu'
 
+interface AppShellCompanyOption {
+  id: string
+  name: string
+  isAgency: boolean
+}
+
+/** The subset of resolved branding the shell needs on the client.
+ *  Matches `ClientBranding` from `lib/branding/get-branding.ts`; kept
+ *  as an inline shape so the shell file has no server-only imports. */
+interface AppShellBranding {
+  productName: string
+  logoUrl: string
+}
+
 interface AppShellProps {
-  role: 'admin' | 'member'
+  role: 'admin' | 'member' | 'super'
   user: ShellUser
   /** Server-rendered initial collapsed state from cookie. */
   defaultCollapsed?: boolean
   /** Count of published announcements the current user hasn't
    *  opened — surfaces as a numeric pill on the Bell. */
   unreadAnnouncements?: number
+  /** Server-resolved super-admin flag. Powers the "Super Admin"
+   *  shortcut in the admin top bar so a super-admin never has to
+   *  hunt for the /super entry point. */
+  isSuperAdmin?: boolean
+  /** Optional multi-tenancy context. When present, the sidebar
+   *  renders a company switcher above the nav. Undefined means the
+   *  tenancy feature flag is off — the sidebar looks exactly as it
+   *  did pre-refactor. */
+  tenancy?: {
+    activeCompanyId: string | null
+    companies: AppShellCompanyOption[]
+    currentUserIsSuperAdmin: boolean
+  }
+  /** Optional resolved branding for the sidebar wordmark + logo.
+   *  Undefined means "use platform defaults" (Kondense). Server
+   *  layouts pass this via `getBranding()` when tenancy is on. */
+  branding?: AppShellBranding
+  /** True when the active tenant has a custom `Company.brand` and
+   *  the root layout is therefore injecting theme CSS variables
+   *  inline on <html>. In that case the built-in light/dark toggle
+   *  is a no-op (inline styles beat the `.dark` class) so we render
+   *  it disabled with a tooltip explaining why. */
+  themeLocked?: boolean
   children: React.ReactNode
 }
 
@@ -29,6 +67,10 @@ export function AppShell({
   user,
   defaultCollapsed = false,
   unreadAnnouncements = 0,
+  tenancy,
+  isSuperAdmin = false,
+  branding,
+  themeLocked = false,
   children,
 }: AppShellProps) {
   return (
@@ -37,6 +79,10 @@ export function AppShell({
         role={role}
         user={user}
         unreadAnnouncements={unreadAnnouncements}
+        tenancy={tenancy}
+        isSuperAdmin={isSuperAdmin}
+        branding={branding}
+        themeLocked={themeLocked}
       >
         {children}
       </AppShellInner>
@@ -48,27 +94,44 @@ function AppShellInner({
   role,
   user,
   unreadAnnouncements = 0,
+  tenancy,
+  isSuperAdmin = false,
+  branding,
+  themeLocked = false,
   children,
 }: Omit<AppShellProps, 'defaultCollapsed'>) {
   const { collapsed } = useSidebar()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const isAdmin = role === 'admin'
-  const sections = isAdmin ? adminNav : memberNav
-  const context = isAdmin ? 'Admin Console' : 'Member'
-  const homeHref = isAdmin ? '/admin/dashboard' : '/dashboard'
-  const profileHref = isAdmin ? '/admin/profile' : '/profile'
+  const sections =
+    role === 'super' ? superNav : role === 'admin' ? adminNav : memberNav
+  const context =
+    role === 'super'
+      ? 'Super Admin'
+      : role === 'admin'
+        ? 'Admin Console'
+        : 'Member'
+  const homeHref =
+    role === 'super'
+      ? '/super'
+      : role === 'admin'
+        ? '/admin/dashboard'
+        : '/dashboard'
+  const profileHref = role === 'member' ? '/profile' : '/admin/profile'
 
   return (
     <div
       className="min-h-screen bg-background"
       data-state={collapsed ? 'collapsed' : 'expanded'}
     >
-      {/* Desktop sidebar — always dark (Vercel pattern). */}
+      {/* Desktop sidebar — colour comes from the tenant's brand
+       *   (--brand-sidebar), with the Kondense-default black as
+       *   a fallback so the shell never renders unpainted. */}
       <aside
         data-sidebar="dark"
+        style={{ background: 'var(--brand-sidebar, #0a0a0a)' }}
         className={cn(
-          'fixed inset-y-0 left-0 z-40 hidden flex-col bg-neutral-950 text-neutral-300 transition-[width] duration-200 ease-in-out lg:flex',
+          'fixed inset-y-0 left-0 z-40 hidden flex-col text-neutral-300 transition-[width] duration-200 ease-in-out lg:flex',
           collapsed ? 'w-14' : 'w-64',
         )}
       >
@@ -83,9 +146,29 @@ function AppShellInner({
             className="flex items-center text-white"
             aria-label={context}
           >
-            <BrandMark context={context} compact={collapsed} />
+            <BrandMark
+              context={context}
+              compact={collapsed}
+              productName={branding?.productName}
+              logoUrl={branding?.logoUrl}
+            />
           </Link>
         </div>
+        {tenancy ? (
+          <div
+            className={cn(
+              'dark:border-t dark:border-[#ffffff0f]',
+              collapsed ? 'flex justify-center p-2' : 'px-3 py-2',
+            )}
+          >
+            <CompanySwitcher
+              activeCompanyId={tenancy.activeCompanyId}
+              companies={tenancy.companies}
+              currentUserIsSuperAdmin={tenancy.currentUserIsSuperAdmin}
+              collapsed={collapsed}
+            />
+          </div>
+        ) : null}
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-3">
           <SidebarNav sections={sections} collapsed={collapsed} />
         </div>
@@ -115,11 +198,16 @@ function AppShellInner({
           />
           <div
             data-sidebar="dark"
-            className="absolute inset-y-0 left-0 flex w-72 flex-col bg-neutral-950 text-neutral-300 animate-in slide-in-from-left"
+            style={{ background: 'var(--brand-sidebar, #0a0a0a)' }}
+            className="absolute inset-y-0 left-0 flex w-72 flex-col text-neutral-300 animate-in slide-in-from-left"
           >
             <div className="flex h-14 items-center justify-between px-4">
               <span className="text-white">
-                <BrandMark context={context} />
+                <BrandMark
+                  context={context}
+                  productName={branding?.productName}
+                  logoUrl={branding?.logoUrl}
+                />
               </span>
               <Button
                 variant="ghost"
@@ -131,6 +219,15 @@ function AppShellInner({
                 <X />
               </Button>
             </div>
+            {tenancy ? (
+              <div className="px-3 py-2 dark:border-t dark:border-[#ffffff0f]">
+                <CompanySwitcher
+                  activeCompanyId={tenancy.activeCompanyId}
+                  companies={tenancy.companies}
+                  currentUserIsSuperAdmin={tenancy.currentUserIsSuperAdmin}
+                />
+              </div>
+            ) : null}
             <div className="flex-1 overflow-y-auto py-3">
               <SidebarNav
                 sections={sections}
@@ -161,6 +258,8 @@ function AppShellInner({
           profileHref={profileHref}
           role={role}
           unreadAnnouncements={unreadAnnouncements}
+          isSuperAdmin={isSuperAdmin}
+          themeLocked={themeLocked}
         />
         <main className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">

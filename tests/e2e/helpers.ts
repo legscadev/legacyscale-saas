@@ -21,6 +21,17 @@ export const MEMBER_EMAIL = requireEnv('E2E_MEMBER_EMAIL')
 export const MEMBER_PASSWORD = requireEnv('E2E_MEMBER_PASSWORD')
 
 /**
+ * Tenancy cross-tenant creds. Default to the base admin so a
+ * single-tenant environment (TENANCY_ENABLED=0) can still spin up
+ * the storage state without extra config. When the tenancy flag is
+ * on, set these to the Tenant A admin.
+ */
+export const TENANT_A_ADMIN_EMAIL =
+  process.env.E2E_TENANT_A_ADMIN_EMAIL ?? ADMIN_EMAIL
+export const TENANT_A_ADMIN_PASSWORD =
+  process.env.E2E_TENANT_A_ADMIN_PASSWORD ?? ADMIN_PASSWORD
+
+/**
  * Drive the login form. Submitting auth via UI rather than a session
  * cookie injection so the rate limit + cookie flow is part of every
  * E2E run.

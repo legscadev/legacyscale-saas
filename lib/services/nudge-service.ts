@@ -5,6 +5,7 @@
 // shows (or vice versa) so we don't lose the nudge either way.
 
 import { NudgeEmail } from '@/emails'
+import { getBranding } from '@/lib/branding/get-branding'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/resend'
 
@@ -146,19 +147,22 @@ async function sendNudgeEmail(input: SendNudgeEmailInput): Promise<boolean> {
   const ctaUrl = input.course
     ? `${base}/courses/${input.course.slug}`
     : `${base}/dashboard`
+  const branding = await getBranding()
 
   try {
     await sendEmail({
       to: input.to,
       subject: input.course
-        ? `A nudge from Kondense — ${input.course.title}`
-        : 'A nudge from Kondense',
+        ? `A nudge from ${branding.productName} — ${input.course.title}`
+        : `A nudge from ${branding.productName}`,
       purpose: 'notifications',
+      fromName: branding.fromName,
       react: NudgeEmail({
         name: input.memberName,
         message: input.message,
         courseTitle: input.course?.title ?? null,
         ctaUrl,
+        branding,
       }),
     })
     return true

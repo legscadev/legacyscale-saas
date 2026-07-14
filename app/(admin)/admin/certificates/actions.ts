@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
+import { memberTenantScope } from '@/lib/tenancy/request-company'
 import {
   emailCertificateToMember,
   getAdminCertificateDownload,
@@ -119,7 +120,11 @@ export async function listMembersForCertPicker(): Promise<MemberPickerOption[]> 
   // team members also take courses and sometimes need certificates
   // hand-issued for support reasons.
   return prisma.user.findMany({
-    where: { isActive: true, deletedAt: null },
+    where: {
+      isActive: true,
+      deletedAt: null,
+      ...(await memberTenantScope()),
+    },
     orderBy: [{ name: 'asc' }, { email: 'asc' }],
     select: { id: true, name: true, email: true, role: true },
     take: 500,

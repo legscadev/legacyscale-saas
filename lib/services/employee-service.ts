@@ -5,6 +5,7 @@ import {
   MemberEmailConflictError,
   provisionMemberWithInvite,
 } from '@/lib/services/member-provisioning'
+import { memberTenantScope } from '@/lib/tenancy/request-company'
 
 /**
  * Re-export so route/action handlers that surface friendlier error
@@ -142,6 +143,7 @@ class EmployeeService {
     const users = await prisma.user.findMany({
       where: {
         deletedAt: null,
+        ...(await memberTenantScope()),
         OR: [
           { email: { contains: q, mode: 'insensitive' } },
           { name: { contains: q, mode: 'insensitive' } },

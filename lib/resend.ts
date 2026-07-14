@@ -1,9 +1,12 @@
 import { type ReactElement } from 'react'
 import { Resend } from 'resend'
 import { AnnouncementEmail } from '@/emails/announcement'
+import { CompanyOwnerInviteEmail } from '@/emails/company-owner-invite'
 import { CourseCompleteEmail } from '@/emails/course-complete'
+import { OwnerAddedEmail } from '@/emails/owner-added'
 import { PasswordResetEmail } from '@/emails/password-reset'
 import { WelcomeEmail } from '@/emails/welcome'
+import { getBranding } from '@/lib/branding/get-branding'
 
 // Lazy singleton — only throws on first use, not at import time, so
 // `next build` and code paths that don't email don't crash when the key
@@ -20,11 +23,9 @@ function getResend(): Resend {
   return _resend
 }
 
-const FROM_NAME = 'Kondense'
-
 type EmailPurpose = 'welcome' | 'security' | 'notifications' | 'billing'
 
-function getFromAddress(purpose: EmailPurpose): string {
+function getFromAddress(purpose: EmailPurpose, fromName: string): string {
   // Per-mailstream from-addresses so reputation issues stay isolated
   // (e.g. a flagged notification doesn't poison the welcome stream).
   // Falls back to RESEND_FROM_EMAIL, then Resend's sandbox sender.
@@ -36,7 +37,7 @@ function getFromAddress(purpose: EmailPurpose): string {
   }[purpose]
   const email =
     purposeEnv ?? process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
-  return `${FROM_NAME} <${email}>`
+  return `${fromName} <${email}>`
 }
 
 interface EmailAttachment {
@@ -66,10 +67,11 @@ export async function sendEmail({
   purpose,
   replyTo,
   attachments,
-}: SendEmailOptions): Promise<{ id: string | undefined }> {
+  fromName,
+}: SendEmailOptions & { fromName: string }): Promise<{ id: string | undefined }> {
   const resend = getResend()
   const { data, error } = await resend.emails.send({
-    from: getFromAddress(purpose),
+    from: getFromAddress(purpose, fromName),
     to: Array.isArray(to) ? to : [to],
     subject,
     react,
@@ -102,17 +104,89 @@ export async function sendWelcomeEmail(
   name: string,
   options: WelcomeEmailOptions
 ) {
+  const branding = await getBranding()
   const isInvite = options.variant === 'invite'
   return sendEmail({
     to,
     purpose: 'welcome',
+    fromName: branding.fromName,
     subject: isInvite
-      ? "Welcome to Kondense — Let's Get Started"
-      : 'Welcome to Kondense!',
+      ? `Welcome to ${branding.productName} — Let's Get Started`
+      : `Welcome to ${branding.productName}!`,
     react: WelcomeEmail({
       name,
       ctaUrl: options.ctaUrl,
       variant: options.variant,
+      branding,
+    }),
+  })
+}
+
+interface CompanyOwnerInviteOptions {
+  /** Name of the tenant the recipient has been granted OWNER on. */
+  companyName: string
+  /** Password-set + landing link — /onboarding?token=… */
+  ctaUrl: string
+}
+
+/**
+ * Dedicated invite for the initial OWNER of a freshly-provisioned
+ * tenant. Uses the platform (Kondense) brand at send time because the
+ * new tenant has no brand set yet — the recipient is being told
+ * "you're being handed this tenant on our platform," so the platform
+ * identity is the right sender.
+ */
+export async function sendCompanyOwnerInvite(
+  to: string,
+  name: string,
+  options: CompanyOwnerInviteOptions,
+) {
+  const branding = await getBranding()
+  return sendEmail({
+    to,
+    purpose: 'welcome',
+    fromName: branding.fromName,
+    subject: `Your ${branding.productName} workspace is ready: ${options.companyName}`,
+    react: CompanyOwnerInviteEmail({
+      name,
+      companyName: options.companyName,
+      ctaUrl: options.ctaUrl,
+      branding,
+    }),
+  })
+}
+
+interface OwnerAddedNoticeOptions {
+  companyName: string
+  ctaUrl: string
+  isSuperAdmin?: boolean
+  wasPromoted?: boolean
+}
+
+/**
+ * Heads-up email for EXISTING users who got attached as OWNER of a
+ * new tenant via /super/create-company. Uses the platform brand,
+ * because the point is to tell them Kondense assigned them the
+ * tenant — they may not have seen the new tenant's brand yet.
+ */
+export async function sendOwnerAddedNotice(
+  to: string,
+  name: string,
+  options: OwnerAddedNoticeOptions,
+) {
+  const branding = await getBranding()
+  return sendEmail({
+    to,
+    purpose: 'welcome',
+    fromName: branding.fromName,
+    subject: `Your ${branding.productName} workspace is ready: ${options.companyName}`,
+    react: OwnerAddedEmail({
+      name,
+      companyName: options.companyName,
+      ctaUrl: options.ctaUrl,
+      isSuperAdmin: options.isSuperAdmin,
+      wasPromoted: options.wasPromoted,
+      branding,
     }),
   })
 }
@@ -122,11 +196,13 @@ export async function sendPasswordResetEmail(
   name: string,
   resetUrl: string
 ) {
+  const branding = await getBranding()
   return sendEmail({
     to,
     purpose: 'security',
-    subject: 'Reset Your Password — Kondense',
-    react: PasswordResetEmail({ name, resetUrl }),
+    fromName: branding.fromName,
+    subject: `Reset Your Password — ${branding.productName}`,
+    react: PasswordResetEmail({ name, resetUrl, branding }),
   })
 }
 
@@ -136,11 +212,13 @@ export async function sendAnnouncementEmail(
   body: string,
   viewUrl: string
 ) {
+  const branding = await getBranding()
   return sendEmail({
     to,
     purpose: 'notifications',
+    fromName: branding.fromName,
     subject: `New Announcement: ${title}`,
-    react: AnnouncementEmail({ title, body, viewUrl }),
+    react: AnnouncementEmail({ title, body, viewUrl, branding }),
   })
 }
 
@@ -150,10 +228,12 @@ export async function sendCourseCompleteEmail(
   courseTitle: string,
   completeUrl: string
 ) {
+  const branding = await getBranding()
   return sendEmail({
     to,
     purpose: 'notifications',
+    fromName: branding.fromName,
     subject: `Congrats — you finished ${courseTitle}`,
-    react: CourseCompleteEmail({ name, courseTitle, completeUrl }),
+    react: CourseCompleteEmail({ name, courseTitle, completeUrl, branding }),
   })
 }

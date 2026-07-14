@@ -10,6 +10,7 @@ import type {
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
+import { memberTenantScope } from '@/lib/tenancy/request-company'
 
 // Admin-only progress aggregation. Surfaces under /admin/progress/*
 // read from here, not from member-course-service (which is scoped to
@@ -147,6 +148,7 @@ async function getOverviewKpis(
         role: { in: ['MEMBER', 'TEAM'] },
         isActive: true,
         deletedAt: null,
+        ...(await memberTenantScope()),
       },
     }),
     prisma.enrollment.count({
@@ -641,6 +643,7 @@ async function fetchMembersWithProgress(
       role: { in: roleFilter },
       deletedAt: null,
       enrollments: { some: {} },
+      ...(await memberTenantScope()),
       ...(search
         ? {
             OR: [

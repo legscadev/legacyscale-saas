@@ -38,7 +38,23 @@ export default async function OnboardingPage({
     // goal, done) and go straight to password → dashboard. They're the
     // ones running the platform, not the ones being sold on it.
     if (invite.user.role === 'ADMIN') {
-      return <AdminPasswordOnboarding token={token!} />
+      // Company scope — populated for super/create-company invites so
+      // the admin onboarding screen can name the tenant the recipient
+      // is being handed. Regular admin invites resolve to the Kondense
+      // seed row (or a deleted company), which we suppress since there
+      // is no "You're the owner of Kondense" story to tell an internal
+      // Kondense admin.
+      const company = invite.companyId
+        ? await prisma.company.findFirst({
+            where: { id: invite.companyId, deletedAt: null },
+            select: { name: true, slug: true },
+          })
+        : null
+      const companyName =
+        company && company.slug !== 'kondense' ? company.name : null
+      return (
+        <AdminPasswordOnboarding token={token!} companyName={companyName} />
+      )
     }
     const firstName = invite.user.name?.split(' ')[0] ?? null
     return (

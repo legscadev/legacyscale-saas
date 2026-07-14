@@ -14,6 +14,7 @@ import {
   type SortDirection,
 } from '@/lib/services/course-service'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { withTenantPrefix } from '@/lib/tenancy/storage-path'
 import {
   createCourseSchema,
   updateCourseSchema,
@@ -43,14 +44,17 @@ function imagePathFor(
 // Verifies that a client-supplied path matches a course we minted a
 // signed URL for. Reject anything that doesn't look like one of our
 // own paths so an admin can't set course A's thumbnail to a file
-// living in course B's folder.
+// living in course B's folder. Accepts both bare (`<courseId>/...`)
+// and tenant-prefixed (`<companyId>/<courseId>/...`) forms so
+// legacy uploads keep working post-tenancy flip.
 function parseCourseImagePath(
   path: string,
   courseId: string,
 ): CourseImageKind | null {
-  const prefix = `${courseId}/`
-  if (!path.startsWith(prefix)) return null
-  const leaf = path.slice(prefix.length)
+  const marker = `${courseId}/`
+  const idx = path.indexOf(marker)
+  if (idx < 0) return null
+  const leaf = path.slice(idx + marker.length)
   const m = /^(thumbnail|cover)\.(png|jpg|webp)$/.exec(leaf)
   return m ? (m[1] as CourseImageKind) : null
 }
@@ -164,7 +168,7 @@ export async function prepareCourseImageUploadAction(
   }
 
   const { courseId, kind } = parsed.data
-  const path = imagePathFor(courseId, kind, ext)
+  const path = await withTenantPrefix(imagePathFor(courseId, kind, ext))
 
   const supabase = createAdminClient()
   // upsert: true so an admin replacing the same-extension image

@@ -69,5 +69,16 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'], storageState: '.auth/member.json' },
       dependencies: ['setup'],
     },
+    {
+      // Cross-tenant isolation probes. Auto-skips when
+      // TENANCY_ENABLED != 1 — safe to enable in CI unconditionally.
+      name: 'tenancy-cross-tenant',
+      testMatch: /tenancy-cross-tenant\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: '.auth/tenant-a-admin.json',
+      },
+      dependencies: ['setup'],
+    },
   ],
 })

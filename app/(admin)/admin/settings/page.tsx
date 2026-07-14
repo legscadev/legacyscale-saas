@@ -1,20 +1,11 @@
 import { PageHeader } from '@/components/shared'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
+import { BrandingCard } from '@/components/admin/settings/branding-card'
 import { DiscordWebhookCard } from '@/components/admin/settings/discord-webhook-card'
 import {
   getAchievementsWebhookSettingAction,
@@ -26,45 +17,48 @@ import {
   updateAchievementsWebhookAction,
   updateDiscordWebhookAction,
 } from './actions'
+import {
+  clearBrandingAction,
+  getCurrentBrandingAction,
+  updateBrandingAction,
+  uploadBrandingAssetAction,
+} from './branding-actions'
+// Domain actions + DomainCard are intentionally left imported-but-not-
+// used-here would fail lint, so they're removed until the tab is
+// brought back. The action file itself is untouched so the API stays
+// live for future work.
 
 export default async function AdminSettingsPage() {
-  const [discordSetting, achievementsSetting] = await Promise.all([
-    getDiscordWebhookSettingAction(),
-    getAchievementsWebhookSettingAction(),
-  ])
+  // Domains tab is hidden for now — the surface + Vercel-side plumbing
+  // stays wired up, but the fetch calls (listDomainsAction /
+  // getPlatformApexAction) are skipped so we don't pay for them on
+  // every settings render. Re-enable by restoring both the awaits and
+  // the <TabsTrigger value="domains"/> + <TabsContent value="domains"/>
+  // pair below.
+  const [discordSetting, achievementsSetting, currentBranding] =
+    await Promise.all([
+      getDiscordWebhookSettingAction(),
+      getAchievementsWebhookSettingAction(),
+      getCurrentBrandingAction(),
+    ])
 
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" description="Configure platform settings" />
 
-      <Tabs defaultValue="general" className="gap-6">
+      <Tabs defaultValue="branding" className="gap-6">
         <TabsList>
-          <TabsTrigger value="general">Settings</TabsTrigger>
+          <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>General Settings</CardTitle>
-              <CardDescription>Basic platform configuration</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="platformName">Platform Name</Label>
-                <Input id="platformName" defaultValue="Kondense" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="supportEmail">Support Email</Label>
-                <Input
-                  id="supportEmail"
-                  type="email"
-                  defaultValue="support@kondense.ai"
-                />
-              </div>
-              <Button>Save Changes</Button>
-            </CardContent>
-          </Card>
+        <TabsContent value="branding" className="space-y-6">
+          <BrandingCard
+            initial={currentBranding}
+            action={updateBrandingAction}
+            clearAction={clearBrandingAction}
+            uploadAction={uploadBrandingAssetAction}
+          />
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">

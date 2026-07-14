@@ -26,8 +26,13 @@ import path from 'node:path'
 
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
+import { getBranding } from '@/lib/branding/get-branding'
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  tenantPrefixCandidates,
+  withTenantPrefix,
+} from '@/lib/tenancy/storage-path'
 
 const CERTIFICATE_BUCKET = 'course-certificates'
 const SIGNED_URL_TTL_SEC = 60 * 10 // 10 min — plenty for click-to-download
@@ -57,11 +62,26 @@ const CERT_ID_X = 36
 const CERT_ID_Y = 18
 const CERT_ID_FONT_SIZE = 8
 
-// Recipient name + module title use Kondense red to echo the
-// template's brand accent. Cert ID stays muted white so it doesn't
-// fight with the design.
-const KONDENSE_RED = rgb(0.819, 0.102, 0.102)
+// Recipient name + module title use the tenant's primaryColor (see
+// hexToRgb below). Cert ID stays muted white so it doesn't fight
+// with the design. Underlying template PDF still ships Kondense's
+// artwork — swapping the template art per tenant is a future
+// follow-up (needs a settings UI to upload a custom template).
 const MUTED_WHITE = rgb(0.78, 0.78, 0.82)
+
+/** Six-digit hex to pdf-lib `rgb(0..1, 0..1, 0..1)`. Falls back to
+ *  a mid-grey if the string is malformed rather than throwing —
+ *  branding is decorative and a bad value shouldn't block delivery. */
+function hexToRgb(hex: string): ReturnType<typeof rgb> {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!match) return rgb(0.5, 0.5, 0.5)
+  const n = parseInt(match[1], 16)
+  return rgb(
+    ((n >> 16) & 0xff) / 255,
+    ((n >> 8) & 0xff) / 255,
+    (n & 0xff) / 255,
+  )
+}
 
 // Random base32 — Crockford alphabet, no I/L/O/U so support reads
 // over the phone don't get mistakes. 8 chars gives ~10^12 space,
@@ -190,17 +210,25 @@ export async function getCertificatePdfBytes(
   if (!issuance) return null
 
   const supabase = createAdminClient()
-  const certPath = `${issuance.id}.pdf`
+  // Look for an existing PDF at the tenant-prefixed path first, then
+  // at the pre-tenancy bare path. Anything found gets served straight;
+  // a cache miss falls through to a fresh render at the prefixed path.
+  const candidates = await tenantPrefixCandidates(`${issuance.id}.pdf`)
+  let existingPath: string | null = null
+  for (const candidate of candidates) {
+    const { data: existing } = await supabase.storage
+      .from(CERTIFICATE_BUCKET)
+      .list('', { search: candidate, limit: 1 })
+    if (existing?.some((f) => f.name === candidate)) {
+      existingPath = candidate
+      break
+    }
+  }
 
-  const { data: existing } = await supabase.storage
-    .from(CERTIFICATE_BUCKET)
-    .list('', { search: certPath, limit: 1 })
-  const alreadyGenerated = existing?.some((f) => f.name === certPath)
-
-  if (alreadyGenerated) {
+  if (existingPath) {
     const { data, error } = await supabase.storage
       .from(CERTIFICATE_BUCKET)
-      .download(certPath)
+      .download(existingPath)
     if (error || !data) {
       console.error('Certificate download from storage failed:', error)
       return null
@@ -208,6 +236,7 @@ export async function getCertificatePdfBytes(
     return new Uint8Array(await data.arrayBuffer())
   }
 
+  const certPath = candidates[0]
   const memberName =
     issuance.user.name?.trim() ||
     issuance.user.email.split('@')[0] ||
@@ -356,14 +385,23 @@ async function ensureAndSignPdf(
   ctx: RenderContext & { issuanceId: string },
 ): Promise<CertificateDownloadResult | CertificateDownloadError> {
   const supabase = createAdminClient()
-  const certPath = `${ctx.issuanceId}.pdf`
+  // Preferred (prefixed) path first; pre-tenancy bare path second.
+  // Whichever exists is used for the signed URL. On cache miss, we
+  // upload to the preferred path.
+  const candidates = await tenantPrefixCandidates(`${ctx.issuanceId}.pdf`)
+  let existingPath: string | null = null
+  for (const candidate of candidates) {
+    const { data: existing } = await supabase.storage
+      .from(CERTIFICATE_BUCKET)
+      .list('', { search: candidate, limit: 1 })
+    if (existing?.some((f) => f.name === candidate)) {
+      existingPath = candidate
+      break
+    }
+  }
 
-  const { data: existing } = await supabase.storage
-    .from(CERTIFICATE_BUCKET)
-    .list('', { search: certPath, limit: 1 })
-  const alreadyGenerated = existing?.some((f) => f.name === certPath)
-
-  if (!alreadyGenerated) {
+  const certPath = existingPath ?? candidates[0]
+  if (!existingPath) {
     const bytes = await renderCertificatePdf(ctx)
     const { error: uploadErr } = await supabase.storage
       .from(CERTIFICATE_BUCKET)
@@ -392,11 +430,14 @@ async function ensureAndSignPdf(
 async function renderCertificatePdf(
   ctx: RenderContext,
 ): Promise<Uint8Array> {
+  const branding = await getBranding()
+  const brandColor = hexToRgb(branding.primaryColor)
+
   const templateBytes = await readFile(TEMPLATE_PATH)
   const pdf = await PDFDocument.load(templateBytes)
   pdf.setTitle(`${ctx.moduleTitle} — Certificate`)
-  pdf.setAuthor('Kondense')
-  pdf.setCreator('Kondense')
+  pdf.setAuthor(branding.legalCompany)
+  pdf.setCreator(branding.productName)
 
   const page = pdf.getPage(0)
   const { width: pageWidth } = page.getSize()
@@ -409,7 +450,7 @@ async function renderCertificatePdf(
     y: NAME_CENTER_Y,
     font: helvBold,
     size: NAME_FONT_SIZE,
-    color: KONDENSE_RED,
+    color: brandColor,
   })
 
   const titleLines = wrapText(ctx.moduleTitle, {
@@ -427,7 +468,7 @@ async function renderCertificatePdf(
       y: titleTopY - i * lineGap,
       font: helvBold,
       size: COURSE_FONT_SIZE,
-      color: KONDENSE_RED,
+      color: brandColor,
     })
   })
 

@@ -221,6 +221,10 @@ async function createCourse(
   const slug = await resolveSlug({ desired: input.slug, title: input.title })
   const categoryIds = input.categoryIds ?? []
 
+  // Course + CourseCategory rows are both tenant-scoped, so we
+  // split the nested `categories: { create: [...] }` into two
+  // top-level calls. The tenancy extension only stamps companyId on
+  // top-level ops — a nested create would ship without one.
   const row = await prisma.course.create({
     data: {
       ...(options?.id ? { id: options.id } : {}),
@@ -237,12 +241,18 @@ async function createCourse(
       orderIndex,
       createdBy,
       publishedAt: shouldPublishNow ? new Date() : null,
-      categories: categoryIds.length
-        ? { create: categoryIds.map((categoryId) => ({ categoryId })) }
-        : undefined,
     },
     select: courseListSelect,
   })
+  if (categoryIds.length) {
+    await prisma.courseCategory.createMany({
+      data: categoryIds.map((categoryId) => ({
+        courseId: row.id,
+        categoryId,
+      })),
+      skipDuplicates: true,
+    })
+  }
   return withLessonCount(row)
 }
 

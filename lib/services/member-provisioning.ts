@@ -1,10 +1,11 @@
-import type { Role } from '@prisma/client'
+import type { CompanyRole, Role } from '@prisma/client'
 
 import { syncUserToDatabase } from '@/lib/auth/sync-user'
 import { issueInvite } from '@/lib/invites'
 import { prisma } from '@/lib/prisma'
 import { sendWelcomeEmail } from '@/lib/resend'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 
 export interface ProvisionMemberInput {
   name: string
@@ -45,6 +46,20 @@ function generateInternalPassword(): string {
   const bytes = new Uint8Array(24)
   crypto.getRandomValues(bytes)
   return Buffer.from(bytes).toString('base64')
+}
+
+/** Maps the legacy per-user Role enum onto the new CompanyRole
+ *  enum. ADMIN → OWNER retains the same "runs the tenant"
+ *  semantics; MEMBER + TEAM map straight across. */
+function mapRoleToCompanyRole(role: Role): CompanyRole {
+  switch (role) {
+    case 'ADMIN':
+      return 'OWNER'
+    case 'TEAM':
+      return 'TEAM'
+    default:
+      return 'MEMBER'
+  }
 }
 
 /**
@@ -106,6 +121,26 @@ export async function provisionMemberWithInvite(
         app_metadata: { role: input.role },
       })
     }
+  }
+
+  // When tenancy is enabled, provisioning through a company admin's
+  // request context also creates the company membership so the new
+  // user shows up in that tenant's member list. No-op when the flag
+  // is off — memberships are Phase-2-only.
+  const activeCompanyId = await getRequestCompanyId()
+  if (activeCompanyId) {
+    const companyRole = mapRoleToCompanyRole(input.role)
+    await prisma.companyMembership.upsert({
+      where: {
+        userId_companyId: { userId: user.id, companyId: activeCompanyId },
+      },
+      update: { role: companyRole },
+      create: {
+        userId: user.id,
+        companyId: activeCompanyId,
+        role: companyRole,
+      },
+    })
   }
 
   const token = await issueInvite(user.id)

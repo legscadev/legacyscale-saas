@@ -22,6 +22,21 @@ enum Role {
   MEMBER
 }
 
+// ============================================
+// MULTI-TENANCY (Phase 1 — see docs/multi-tenancy.md)
+// ============================================
+//
+// Role a user carries inside a specific Company. Distinct from
+// User.role (which is being phased out — will be dropped in Phase 7).
+// Per-company scope: one user can be OWNER in Company A and MEMBER
+// in Company B.
+enum CompanyRole {
+  OWNER // Full control of the company; can invite ADMINs, change branding, delete the company
+  ADMIN // Everything except deleting the company + swapping the owner
+  TEAM // Internal team member — same as today's TEAM role
+  MEMBER // Student — same as today's MEMBER role
+}
+
 enum CourseStatus {
   DRAFT
   PUBLISHED
@@ -168,7 +183,14 @@ model User {
   email                   String    @unique
   name                    String?
   avatarUrl               String?   @map("avatar_url")
+  /// Legacy global role. Being phased out in favour of
+  /// CompanyMembership.role once every code path reads the active
+  /// company's membership. Kept for Phase 1 so nothing else breaks.
   role                    Role      @default(MEMBER)
+  /// Global super-admin flag. Grants the ability to enter any
+  /// Company as a super-admin (Keanu at the agency level).
+  /// Independent of memberships — the master key.
+  isSuperAdmin            Boolean   @default(false) @map("is_super_admin")
   isActive                Boolean   @default(true) @map("is_active")
   emailVerified           Boolean   @default(false) @map("email_verified")
   lastLoginAt             DateTime? @map("last_login_at")
@@ -223,27 +245,240 @@ model User {
   employee              Employee?              @relation("EmployeeUser")
   orgBoardRevisions     OrgBoardRevision[]     @relation("OrgBoardRevisionAuthor")
   orgAuditLogs          OrgNodeAuditLog[]      @relation("OrgAuditActor")
+  companyMemberships    CompanyMembership[]
+
+  // Super-admin grants — Phase 4.4 replaced the User.isSuperAdmin
+  // boolean with a proper table so we get an audit trail + tiered
+  // roles + expiration. The boolean column stays for now as a hot-
+  // path cache; every grant/revoke writes to both places.
+  superAdminGrantsHeld    SuperAdminGrant[] @relation("SuperAdminGrantTarget")
+  superAdminGrantsIssued  SuperAdminGrant[] @relation("SuperAdminGrantGrantedBy")
+  superAdminGrantsRevoked SuperAdminGrant[] @relation("SuperAdminGrantRevokedBy")
+
+  // Hierarchical settings (Phase 1 white-label task 4). Distinct from
+  // AppSetting (which is the legacy flat key/value store).
+  settingsUpdated Setting[] @relation("SettingUpdater")
 
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
+  @@index([isSuperAdmin])
   @@map("users")
 }
 
 // ============================================
-// APP SETTINGS
+// SUPER-ADMIN GRANTS
+// ============================================
+
+/// Grants the super-admin master key to a user. One user can have
+/// many rows over time (grant → revoke → re-grant); only one row
+/// with revokedAt IS NULL is legal at any given moment.
+///
+/// The User.isSuperAdmin boolean is kept in sync as a hot-path
+/// cache — gate checks read the boolean, not this table. Phase 7
+/// drops the boolean once every reader has been switched over.
+///
+/// The former `role` column (MASTER/SUPPORT/AUDITOR) was dropped —
+/// no gate ever consulted it, so tiering was cosmetic. In the
+/// single-tier operator model, a grant is a grant.
+model SuperAdminGrant {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  /// Who granted the flag. Null when the row was seeded via SQL
+  /// during a migration (pre-4.4 backfill, break-glass).
+  grantedById String?   @map("granted_by_id")
+  grantedAt   DateTime  @default(now()) @map("granted_at")
+  /// Optional expiry — after this instant the grant is treated as
+  /// revoked by the hot-path check. Null = never expires.
+  expiresAt   DateTime? @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  revokedById String?   @map("revoked_by_id")
+  /// Free-form justification: ticket #, requester name, etc. Kept
+  /// short (255 char cap enforced app-side).
+  notes       String?
+
+  user      User  @relation("SuperAdminGrantTarget", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("SuperAdminGrantGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  revokedBy User? @relation("SuperAdminGrantRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("super_admin_grants")
+}
+
+// ============================================
+// COMPANIES  (multi-tenancy — see docs/multi-tenancy.md)
+// ============================================
+
+/// A tenant. Every company sees only its own courses, members,
+/// stats, certificates, etc. Users can belong to many companies
+/// via CompanyMembership.
+///
+/// The seed row on migration is "Kondense" — all existing data is
+/// backfilled to belong to it, so pre-tenancy accounts land
+/// exactly where they were before.
+model Company {
+  id           String    @id @default(uuid())
+  slug         String    @unique
+  name         String
+  /// True only for the Kondense parent row today. Not load-bearing
+  /// for auth (super-admin is a global flag on User); reserved for
+  /// future cross-tenant analytics anchoring.
+  isAgency     Boolean   @default(false) @map("is_agency")
+  /// White-label config: logo, favicon, primary + accent colors,
+  /// product name shown in the sidebar, email `from` name, etc.
+  /// Shape validated at the application layer (Phase 5).
+  brand        Json?
+  /// Deprecated single-domain slot from Phase 1. Kept nullable and
+  /// unenforced during the Phase 3 → 4 transition; new writes go to
+  /// the `Domain` table (multiple domains per tenant, verified +
+  /// SSL state per row). Safe to drop in a later migration once all
+  /// callers move to the new table.
+  customDomain String?   @unique @map("custom_domain")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  memberships CompanyMembership[]
+  domains     Domain[]
+
+  @@index([deletedAt])
+  @@map("companies")
+}
+
+// ============================================
+// DOMAINS (Phase 3 white-label — task 10)
+// ============================================
+
+/// A hostname a tenant is reachable at. Two flavours:
+///   * MANAGED_SUBDOMAIN — a slug under the platform apex (e.g.
+///     `acme.kondense.ai`). Auto-verified since the wildcard cert
+///     covers it. No Vercel API call needed.
+///   * CUSTOM — a tenant-owned domain (e.g. `portal.acme.com`).
+///     Requires TXT-record ownership proof, then Vercel adds it +
+///     issues a Let's Encrypt cert.
+///
+/// Multiple rows per Company are allowed; `isPrimary` marks the
+/// preferred one for outbound links. Deleted rows should really be
+/// removed (not soft-deleted) so the unique(hostname) constraint
+/// can be reused.
+enum DomainKind {
+  MANAGED_SUBDOMAIN
+  CUSTOM
+}
+
+model Domain {
+  id                String     @id @default(uuid())
+  companyId         String     @map("company_id")
+  hostname          String     @unique
+  kind              DomainKind
+  isPrimary         Boolean    @default(false) @map("is_primary")
+  /// Set when the TXT-record proof succeeds. Null for un-verified
+  /// custom domains; auto-set to now() for managed subdomains.
+  verifiedAt        DateTime?  @map("verified_at")
+  /// Set when Vercel confirms an SSL cert has been issued (custom
+  /// domains only; managed subdomains inherit the wildcard cert and
+  /// leave this null).
+  sslIssuedAt       DateTime?  @map("ssl_issued_at")
+  /// Vercel's internal id for the domain — needed to remove it from
+  /// the project when the tenant unlinks.
+  vercelDomainId    String?    @map("vercel_domain_id")
+  /// Random token the tenant sets as a TXT record at
+  /// `_kondense-verify.<hostname>` to prove ownership. Rotated on
+  /// every verification retry so an abandoned token can't be reused.
+  verificationToken String?    @map("verification_token")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([verifiedAt])
+  @@map("domains")
+}
+
+/// Join row between User and Company. Carries the user's role
+/// inside that specific company. One user can be OWNER in A,
+/// MEMBER in B, ADMIN in C.
+model CompanyMembership {
+  id        String      @id @default(uuid())
+  userId    String      @map("user_id")
+  companyId String      @map("company_id")
+  role      CompanyRole @default(MEMBER)
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId, role])
+  @@map("company_memberships")
+}
+
+// ============================================
+// SETTINGS HIERARCHY (Phase 1 white-label task 4)
+// ============================================
+
+/// Scope for a hierarchical Setting row. Resolution order is
+/// USER > COMPANY > PLATFORM — narrower scope wins. Every scope has
+/// exactly one row per key.
+enum SettingScope {
+  PLATFORM
+  COMPANY
+  USER
+}
+
+/// Hierarchical key/value store. Replaces the flat `AppSetting`
+/// table for anything that will eventually want per-tenant
+/// overrides (email `from`, Discord webhooks, feature flags, etc.).
+///
+/// `scopeId` is non-nullable so the (scope, scope_id, key) unique
+/// constraint behaves consistently across Postgres versions:
+///   * PLATFORM rows: `scope_id = '00000000-0000-0000-0000-000000000000'`
+///     (see lib/settings/scope.ts:PLATFORM_SCOPE_ID)
+///   * COMPANY rows: the company id
+///   * USER rows: the user id
+///
+/// `value` is JSON so the same table can hold strings, numbers,
+/// booleans, arrays, or objects without schema churn. Callers
+/// typecast at the read site (see lib/settings/get-setting.ts).
+model Setting {
+  id          String       @id @default(uuid())
+  scope       SettingScope
+  scopeId     String       @map("scope_id")
+  key         String
+  value       Json
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  updatedById String?      @map("updated_by_id")
+  updatedBy   User?        @relation("SettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([scope, scopeId, key])
+  @@index([scope, scopeId])
+  @@map("settings")
+}
+
+// ============================================
+// APP SETTINGS (legacy — being migrated to Setting above)
 // ============================================
 
 /// Generic key-value store for admin-configurable platform settings
 /// (e.g. Discord webhook URL, future integration tokens, branding).
 /// One row per key. Reads are server-only — secret values must never
 /// be returned to the client unmasked.
+///
+/// Kept in the schema during the Phase 1 → 2 transition. New reads +
+/// writes go through `Setting` (with backward-compat proxies in
+/// lib/services/app-setting-service.ts). This table can be dropped
+/// once every caller is verified migrated.
 model AppSetting {
   key         String   @id
   value       String
   updatedAt   DateTime @updatedAt @map("updated_at")
   updatedById String?  @map("updated_by_id")
   updatedBy   User?    @relation("AppSettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@map("app_settings")
 }
@@ -269,6 +504,7 @@ model Invite {
   // dead and the "Invite invalid" screen takes over.
   usedAt        DateTime? @map("used_at")
   createdAt     DateTime  @default(now()) @map("created_at")
+  companyId     String    @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([userId])
   @@index([token])
@@ -344,6 +580,7 @@ model Course {
   categories           CourseCategory[]
   certificateIssuances CertificateIssuance[]
   nudges               Nudge[]
+  companyId            String                @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([status])
   @@index([deletedAt])
@@ -366,6 +603,8 @@ model Category {
   courses CourseCategory[]
   members User[]
 
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
   @@map("categories")
 }
 
@@ -377,8 +616,9 @@ model CourseCategory {
   categoryId String   @map("category_id")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  category  Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@id([courseId, categoryId])
   @@index([categoryId])
@@ -403,6 +643,7 @@ model Module {
   course               Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
   chapters             Chapter[]
   certificateIssuances CertificateIssuance[]
+  companyId            String                @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([courseId, orderIndex])
   @@index([deletedAt])
@@ -425,9 +666,10 @@ model Chapter {
   // Relations. Module delete uses SetNull so removing a module turns
   // its chapters into loose chapters on the same course rather than
   // cascading the delete down.
-  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  module  Module?  @relation(fields: [moduleId], references: [id], onDelete: SetNull)
-  lessons Lesson[]
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module    Module?  @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  lessons   Lesson[]
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([courseId, orderIndex])
   @@index([moduleId, orderIndex])
@@ -464,6 +706,7 @@ model Lesson {
   quizAttempts   QuizAttempt[]
   notes          Note[]
   resources      LessonResource[]
+  companyId      String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([chapterId, orderIndex])
   @@index([type])
@@ -485,7 +728,8 @@ model LessonResource {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([lessonId, createdAt])
   @@map("lesson_resources")
@@ -508,7 +752,8 @@ model QuizQuestion {
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
   // Relations
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([lessonId, orderIndex])
   @@map("quiz_questions")
@@ -525,8 +770,9 @@ model QuizAttempt {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([userId, lessonId, createdAt])
   @@map("quiz_attempts")
@@ -551,8 +797,9 @@ model Enrollment {
   revokedReason   String?          @map("revoked_reason")
 
   // Relations
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, courseId])
   @@index([userId, status])
@@ -574,8 +821,9 @@ model LessonProgress {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, lessonId])
   @@index([userId, completed])
@@ -620,6 +868,7 @@ model CertificateIssuance {
   course           Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   manuallyIssuedBy User?  @relation("CertsManuallyIssued", fields: [manuallyIssuedById], references: [id], onDelete: SetNull)
   revokedBy        User?  @relation("CertsRevoked", fields: [revokedById], references: [id], onDelete: SetNull)
+  companyId        String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, moduleId])
   @@index([userId, issuedAt])
@@ -657,6 +906,7 @@ model Nudge {
   user      User    @relation("NudgeRecipient", fields: [userId], references: [id], onDelete: Cascade)
   course    Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
   createdBy User    @relation("NudgeAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  companyId String  @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([userId, dismissedAt])
   @@index([createdAt])
@@ -676,8 +926,9 @@ model Note {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, lessonId])
   @@map("notes")
@@ -722,6 +973,7 @@ model Announcement {
   reactions     AnnouncementReaction[]
   auditLogs     AnnouncementAuditLog[]
   createdByUser User?                  @relation("AnnouncementAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  companyId     String                 @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([status])
   @@index([deletedAt])
@@ -741,6 +993,7 @@ model AnnouncementRead {
   // Relations
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  companyId    String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([userId, announcementId])
   @@index([userId])
@@ -762,6 +1015,7 @@ model AnnouncementComment {
   // Relations
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId    String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([announcementId, createdAt])
   @@index([userId])
@@ -785,6 +1039,7 @@ model AnnouncementReaction {
   // Relations
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId    String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([announcementId, userId, emoji])
   @@index([announcementId])
@@ -812,6 +1067,7 @@ model AnnouncementAuditLog {
   // Relations
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId    String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([announcementId, createdAt])
   @@index([userId])
@@ -886,6 +1142,7 @@ model Employee {
   checklistStatuses   EmployeeChecklistItemStatus[]
   orgAssignments      OrgNode[]                     @relation("OrgNodeEmployee")
   positionAssignments PositionAssignment[]          @relation("EmployeePositionAssignments")
+  companyId           String                        @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([status])
   @@index([roleTitle])
@@ -910,6 +1167,8 @@ model OnboardingChecklistItem {
 
   statuses EmployeeChecklistItemStatus[]
 
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
   @@map("onboarding_checklist_items")
 }
 
@@ -926,8 +1185,9 @@ model EmployeeChecklistItemStatus {
   completedAt DateTime?           @map("completed_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
-  employee Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  item     OnboardingChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  employee  Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  item      OnboardingChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  companyId String                  @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([employeeId, itemId])
   @@index([employeeId])
@@ -959,6 +1219,7 @@ model OrgBoardRevision {
 
   nodes     OrgNode[]
   auditLogs OrgNodeAuditLog[]
+  companyId String            @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([isCurrent])
   @@map("org_board_revisions")
@@ -1018,6 +1279,7 @@ model OrgNode {
   positionDetail PositionDetail?
   assignments    PositionAssignment[]
   auditLogs      OrgNodeAuditLog[]
+  companyId      String               @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([revisionId])
   @@index([parentId])
@@ -1055,7 +1317,8 @@ model PositionDetail {
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
-  node OrgNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  node      OrgNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  companyId String  @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([code])
   @@map("position_details")
@@ -1076,8 +1339,9 @@ model PositionAssignment {
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
-  node     OrgNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  employee Employee @relation("EmployeePositionAssignments", fields: [employeeId], references: [id], onDelete: Cascade)
+  node      OrgNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  employee  Employee @relation("EmployeePositionAssignments", fields: [employeeId], references: [id], onDelete: Cascade)
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([nodeId, endedAt])
   @@index([employeeId, endedAt])
@@ -1107,9 +1371,10 @@ model OrgNodeAuditLog {
   newValue    Json?
   createdAt   DateTime       @default(now()) @map("created_at")
 
-  revision OrgBoardRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
-  node     OrgNode?         @relation(fields: [nodeId], references: [id], onDelete: SetNull)
-  actor    User?            @relation("OrgAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  revision  OrgBoardRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  node      OrgNode?         @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  actor     User?            @relation("OrgAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  companyId String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([revisionId, createdAt])
   @@index([nodeId, createdAt])
@@ -1144,7 +1409,8 @@ model StatDivision {
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
-  metrics StatMetric[]
+  metrics   StatMetric[]
+  companyId String       @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([orderIndex])
   @@index([deletedAt])
@@ -1156,25 +1422,26 @@ model StatDivision {
 /// user + admins can add data points; everyone with admin/stat
 /// access can view.
 model StatMetric {
-  id          String         @id @default(uuid())
-  divisionId  String         @map("division_id")
-  name        String
-  description String?
-  unit        StatMetricUnit @default(COUNT)
+  id           String         @id @default(uuid())
+  divisionId   String         @map("division_id")
+  name         String
+  description  String?
+  unit         StatMetricUnit @default(COUNT)
   /// User accountable for the metric. Null = unassigned (still
   /// admin-editable). SetNull on user delete so history survives.
-  assignedToId String?       @map("assigned_to_id")
-  orderIndex  Int            @default(0) @map("order_index")
+  assignedToId String?        @map("assigned_to_id")
+  orderIndex   Int            @default(0) @map("order_index")
   /// Optional target value drawn as a horizontal reference line on
   /// the chart. Nullable — a lot of stats don't have hard targets.
-  targetValue Decimal?       @map("target_value") @db.Decimal(18, 4)
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
-  deletedAt   DateTime?      @map("deleted_at")
+  targetValue  Decimal?       @map("target_value") @db.Decimal(18, 4)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  deletedAt    DateTime?      @map("deleted_at")
 
   division   StatDivision    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   assignedTo User?           @relation("StatMetricAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   dataPoints StatDataPoint[]
+  companyId  String          @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([divisionId, orderIndex])
   @@index([assignedToId])
@@ -1198,6 +1465,7 @@ model StatDataPoint {
 
   metric    StatMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
   createdBy User?      @relation("StatDataPointAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  companyId String     @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@unique([metricId, recordedAt])
   @@index([metricId, recordedAt])
