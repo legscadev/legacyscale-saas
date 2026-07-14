@@ -7,7 +7,6 @@ import {
 } from '@/components/ui/tabs'
 import { BrandingCard } from '@/components/admin/settings/branding-card'
 import { DiscordWebhookCard } from '@/components/admin/settings/discord-webhook-card'
-import { DomainCard } from '@/components/admin/settings/domain-card'
 import {
   getAchievementsWebhookSettingAction,
   getDiscordWebhookSettingAction,
@@ -24,29 +23,24 @@ import {
   updateBrandingAction,
   uploadBrandingAssetAction,
 } from './branding-actions'
-import {
-  claimManagedSubdomainAction,
-  getPlatformApexAction,
-  listDomainsAction,
-  removeDomainAction,
-  startCustomDomainAction,
-  verifyCustomDomainAction,
-} from './domain-actions'
+// Domain actions + DomainCard are intentionally left imported-but-not-
+// used-here would fail lint, so they're removed until the tab is
+// brought back. The action file itself is untouched so the API stays
+// live for future work.
 
 export default async function AdminSettingsPage() {
-  const [
-    discordSetting,
-    achievementsSetting,
-    currentBranding,
-    domains,
-    apexDomain,
-  ] = await Promise.all([
-    getDiscordWebhookSettingAction(),
-    getAchievementsWebhookSettingAction(),
-    getCurrentBrandingAction(),
-    listDomainsAction(),
-    getPlatformApexAction(),
-  ])
+  // Domains tab is hidden for now — the surface + Vercel-side plumbing
+  // stays wired up, but the fetch calls (listDomainsAction /
+  // getPlatformApexAction) are skipped so we don't pay for them on
+  // every settings render. Re-enable by restoring both the awaits and
+  // the <TabsTrigger value="domains"/> + <TabsContent value="domains"/>
+  // pair below.
+  const [discordSetting, achievementsSetting, currentBranding] =
+    await Promise.all([
+      getDiscordWebhookSettingAction(),
+      getAchievementsWebhookSettingAction(),
+      getCurrentBrandingAction(),
+    ])
 
   return (
     <div className="space-y-6">
@@ -55,7 +49,6 @@ export default async function AdminSettingsPage() {
       <Tabs defaultValue="branding" className="gap-6">
         <TabsList>
           <TabsTrigger value="branding">Branding</TabsTrigger>
-          <TabsTrigger value="domains">Domains</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
@@ -65,17 +58,6 @@ export default async function AdminSettingsPage() {
             action={updateBrandingAction}
             clearAction={clearBrandingAction}
             uploadAction={uploadBrandingAssetAction}
-          />
-        </TabsContent>
-
-        <TabsContent value="domains" className="space-y-6">
-          <DomainCard
-            initialDomains={domains}
-            apexDomain={apexDomain}
-            claimAction={claimManagedSubdomainAction}
-            removeAction={removeDomainAction}
-            startCustomAction={startCustomDomainAction}
-            verifyAction={verifyCustomDomainAction}
           />
         </TabsContent>
 
