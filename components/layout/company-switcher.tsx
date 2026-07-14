@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Building2, Check, ChevronDown, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -43,7 +42,6 @@ export function CompanySwitcher({
   currentUserIsSuperAdmin,
   collapsed = false,
 }: CompanySwitcherProps) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [pending, startTransition] = useTransition()
 
@@ -69,9 +67,15 @@ export function CompanySwitcher({
         return
       }
       setOpen(false)
-      // Router refresh re-runs the layout so every server component
-      // picks up the new active-company cookie without a full reload.
-      router.refresh()
+      // Hard navigation — router.refresh() alone doesn't invalidate
+      // Next's client route cache in production, so stale RSC payloads
+      // from the previous tenant kept rendering (Members count,
+      // Newest members panel, etc. all showed the old tenant's data
+      // until the user manually reloaded). window.location.href reset
+      // to the same pathname is unambiguous: server layouts re-run,
+      // caches are bypassed, and every client component remounts with
+      // the new tenant's server-rendered payload.
+      window.location.href = window.location.pathname
     })
   }
 
