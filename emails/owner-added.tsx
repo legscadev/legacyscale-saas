@@ -64,7 +64,7 @@ export function OwnerAddedEmail({
   return (
     <Html>
       <Head />
-      <Preview>{`You're now the owner of ${companyName}`}</Preview>
+      <Preview>{`Your ${branding.productName} workspace is ready — sign in to open ${companyName}.`}</Preview>
       <Body style={s.main}>
         <Container style={s.container}>
           <BrandHeader branding={branding} styles={s} />
@@ -80,11 +80,6 @@ export function OwnerAddedEmail({
                 Open {companyName}
               </Button>
             </Section>
-
-            <Text style={s.paragraph}>
-              If this wasn&apos;t expected, reply to this email — the
-              super-admin who made the assignment will hear about it.
-            </Text>
           </Section>
 
           <BrandFooter branding={branding} styles={s} />

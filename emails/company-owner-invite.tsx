@@ -46,7 +46,7 @@ export function CompanyOwnerInviteEmail({
   return (
     <Html>
       <Head />
-      <Preview>{`You're the owner of ${companyName} on ${branding.productName}`}</Preview>
+      <Preview>{`Your ${branding.productName} workspace is ready — set a password to open ${companyName}.`}</Preview>
       <Body style={s.main}>
         <Container style={s.container}>
           <BrandHeader branding={branding} styles={s} />

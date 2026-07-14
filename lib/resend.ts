@@ -146,7 +146,7 @@ export async function sendCompanyOwnerInvite(
     to,
     purpose: 'welcome',
     fromName: branding.fromName,
-    subject: `You're the owner of ${options.companyName} on ${branding.productName}`,
+    subject: `Your ${branding.productName} workspace is ready: ${options.companyName}`,
     react: CompanyOwnerInviteEmail({
       name,
       companyName: options.companyName,
@@ -179,7 +179,7 @@ export async function sendOwnerAddedNotice(
     to,
     purpose: 'welcome',
     fromName: branding.fromName,
-    subject: `You're now the owner of ${options.companyName}`,
+    subject: `Your ${branding.productName} workspace is ready: ${options.companyName}`,
     react: OwnerAddedEmail({
       name,
       companyName: options.companyName,
