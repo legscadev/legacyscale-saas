@@ -34,6 +34,12 @@ export const createCompanySchema = z.object({
    * time. Undefined / null / empty string means "start blank".
    */
   snapshotFromCompanyId: z.string().uuid().optional().or(z.literal('')),
+  /**
+   * Selective clone. Both default true — matches pre-checkbox
+   * behavior. Ignored when snapshotFromCompanyId is blank.
+   */
+  snapshotIncludeCategories: z.boolean().optional().default(true),
+  snapshotIncludeCourses: z.boolean().optional().default(true),
 })
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>
@@ -41,6 +47,8 @@ export type CreateCompanyInput = z.infer<typeof createCompanySchema>
 export const snapshotCompanySchema = z.object({
   sourceCompanyId: z.string().uuid(),
   targetCompanyId: z.string().uuid(),
+  includeCategories: z.boolean().optional().default(true),
+  includeCourses: z.boolean().optional().default(true),
 })
 
 export type SnapshotCompanyInput = z.infer<typeof snapshotCompanySchema>
