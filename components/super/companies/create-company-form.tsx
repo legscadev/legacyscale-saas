@@ -332,7 +332,7 @@ export function CreateCompanyForm({
                   {(() => {
                     const s = snapshotSources.find((x) => x.id === snapshotSource)
                     if (!s) return 'Pick a tenant to clone from'
-                    return `${s.name}${s.isAgency ? ' · Agency' : ''}`
+                    return s.name
                   })()}
                 </SelectValue>
               </SelectTrigger>
@@ -340,7 +340,6 @@ export function CreateCompanyForm({
                 {snapshotSources.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}
-                    {s.isAgency ? ' · Agency' : ''}
                   </SelectItem>
                 ))}
               </SelectContent>

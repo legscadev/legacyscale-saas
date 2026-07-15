@@ -61,14 +61,7 @@ export const companyColumns: ColumnDef<CompanyDirectoryRow, unknown>[] = [
             <Building2 className="size-4" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="truncate font-medium">{c.name}</span>
-              {c.isAgency ? (
-                <span className="rounded bg-brand-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-600">
-                  Agency
-                </span>
-              ) : null}
-            </div>
+            <span className="truncate font-medium">{c.name}</span>
             <div className="truncate text-xs text-muted-foreground">
               {c.slug}
             </div>
