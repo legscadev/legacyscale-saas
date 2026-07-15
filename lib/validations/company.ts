@@ -35,11 +35,19 @@ export const createCompanySchema = z.object({
    */
   snapshotFromCompanyId: z.string().uuid().optional().or(z.literal('')),
   /**
-   * Selective clone. Both default true — matches pre-checkbox
-   * behavior. Ignored when snapshotFromCompanyId is blank.
+   * Selective clone flags. Categories + Courses default true (matches
+   * the historical behavior); everything else defaults false — the
+   * operator opts in via checkboxes. Ignored when snapshotFromCompanyId
+   * is blank.
    */
   snapshotIncludeCategories: z.boolean().optional().default(true),
   snapshotIncludeCourses: z.boolean().optional().default(true),
+  snapshotIncludeTrainings: z.boolean().optional().default(false),
+  snapshotIncludeStatistics: z.boolean().optional().default(false),
+  snapshotIncludeOrgBoard: z.boolean().optional().default(false),
+  snapshotIncludeOnboardingChecklists: z.boolean().optional().default(false),
+  snapshotIncludeMembers: z.boolean().optional().default(false),
+  snapshotIncludeTeam: z.boolean().optional().default(false),
 })
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>
@@ -49,6 +57,12 @@ export const snapshotCompanySchema = z.object({
   targetCompanyId: z.string().uuid(),
   includeCategories: z.boolean().optional().default(true),
   includeCourses: z.boolean().optional().default(true),
+  includeTrainings: z.boolean().optional().default(false),
+  includeStatistics: z.boolean().optional().default(false),
+  includeOrgBoard: z.boolean().optional().default(false),
+  includeOnboardingChecklists: z.boolean().optional().default(false),
+  includeMembers: z.boolean().optional().default(false),
+  includeTeam: z.boolean().optional().default(false),
 })
 
 export type SnapshotCompanyInput = z.infer<typeof snapshotCompanySchema>
