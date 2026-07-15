@@ -130,6 +130,18 @@ function initialState(
   }
 }
 
+/** Same normalisation as the super/create-company form + the
+ *  server-side normalizeSlugInput — mirrors so live client output
+ *  matches what the server would produce on save. */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 function buildFormData(state: FormState): FormData {
   const fd = new FormData()
   for (const [key, value] of Object.entries(state)) {
@@ -156,6 +168,14 @@ export function BrandingCard({
   const namePlaceholder = tenantName ?? 'Legacy Scale'
   const [state, setState] = useState<FormState>(
     initialState(initial, tenantName, tenantSlug),
+  )
+  // Slug auto-follows Company name while the user hasn't explicitly
+  // edited the Slug field. Initial state: if the current tenant's
+  // slug already differs from slugify(name), assume it was set
+  // intentionally and don't clobber it on the first Company name
+  // keystroke.
+  const [slugTouched, setSlugTouched] = useState(
+    () => (tenantSlug ?? '') !== slugify(tenantName ?? ''),
   )
   const [isSaving, startSaving] = useTransition()
   const [isResetting, startReset] = useTransition()
@@ -275,7 +295,14 @@ export function BrandingCard({
                   id="companyName"
                   label="Company name"
                   value={state.companyName}
-                  onChange={(v) => update('companyName', v)}
+                  onChange={(v) => {
+                    setState((prev) => ({
+                      ...prev,
+                      companyName: v,
+                      // Auto-follow slug until the operator edits it.
+                      companySlug: slugTouched ? prev.companySlug : slugify(v),
+                    }))
+                  }}
                   placeholder={namePlaceholder}
                   hint="Canonical tenant name — shown in /super, in the sidebar wordmark, and as the default 'from' name on emails."
                 />
@@ -283,9 +310,12 @@ export function BrandingCard({
                   id="companySlug"
                   label="Slug"
                   value={state.companySlug}
-                  onChange={(v) => update('companySlug', v)}
+                  onChange={(v) => {
+                    setSlugTouched(true)
+                    update('companySlug', v)
+                  }}
                   placeholder="acme-waste"
-                  hint="URL-safe handle. Lowercase letters, numbers, and hyphens only. Must be unique across the platform."
+                  hint="URL-safe handle. Lowercase letters, numbers, and hyphens only. Auto-follows Company name until you edit it. Must be unique across the platform."
                 />
                 <TextField
                   id="productName"
