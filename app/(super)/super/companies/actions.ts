@@ -123,11 +123,26 @@ export interface CreateCompanyResult {
   companyId?: string
   companySlug?: string
   ownerWasNewlyCreated?: boolean
-  /** Populated only when snapshotFromCompanyId was set + succeeded. */
+  /** Populated only when snapshotFromCompanyId was set + succeeded.
+   *  Same shape as SnapshotCompanyResult.summary — kept in sync so
+   *  the client toast can list every category the operator selected. */
   snapshot?: {
-    coursesCopied: number
     categoriesCopied: number
+    coursesCopied: number
+    trainingsCopied: number
+    modulesCopied: number
+    chaptersCopied: number
     lessonsCopied: number
+    quizQuestionsCopied: number
+    lessonResourcesCopied: number
+    statDivisionsCopied: number
+    statMetricsCopied: number
+    orgRevisionsCopied: number
+    orgNodesCopied: number
+    positionDetailsCopied: number
+    onboardingItemsCopied: number
+    membersCopied: number
+    teamCopied: number
   }
   /** Populated when the company was created but the snapshot pass
    *  failed. The company still exists; the admin can retry the
@@ -199,12 +214,15 @@ export async function createCompanyAction(
           targetCompanyId: result.company.id,
           includeCategories: parsed.data.snapshotIncludeCategories,
           includeCourses: parsed.data.snapshotIncludeCourses,
+          includeTrainings: parsed.data.snapshotIncludeTrainings,
+          includeStatistics: parsed.data.snapshotIncludeStatistics,
+          includeOrgBoard: parsed.data.snapshotIncludeOrgBoard,
+          includeOnboardingChecklists:
+            parsed.data.snapshotIncludeOnboardingChecklists,
+          includeMembers: parsed.data.snapshotIncludeMembers,
+          includeTeam: parsed.data.snapshotIncludeTeam,
         })
-        snapshotResult = {
-          coursesCopied: summary.coursesCopied,
-          categoriesCopied: summary.categoriesCopied,
-          lessonsCopied: summary.lessonsCopied,
-        }
+        snapshotResult = summary
       } catch (err) {
         console.error('snapshotCompany failed after create:', err)
         snapshotError =
@@ -330,9 +348,20 @@ export interface SnapshotCompanyResult {
   summary?: {
     categoriesCopied: number
     coursesCopied: number
+    trainingsCopied: number
     modulesCopied: number
     chaptersCopied: number
     lessonsCopied: number
+    quizQuestionsCopied: number
+    lessonResourcesCopied: number
+    statDivisionsCopied: number
+    statMetricsCopied: number
+    orgRevisionsCopied: number
+    orgNodesCopied: number
+    positionDetailsCopied: number
+    onboardingItemsCopied: number
+    membersCopied: number
+    teamCopied: number
   }
   error?: string
 }
@@ -356,10 +385,19 @@ export async function snapshotCompanyAction(
     return { ok: false, error: 'Source and target must be different companies' }
   }
 
-  if (!parsed.data.includeCategories && !parsed.data.includeCourses) {
+  const anythingChecked =
+    parsed.data.includeCategories ||
+    parsed.data.includeCourses ||
+    parsed.data.includeTrainings ||
+    parsed.data.includeStatistics ||
+    parsed.data.includeOrgBoard ||
+    parsed.data.includeOnboardingChecklists ||
+    parsed.data.includeMembers ||
+    parsed.data.includeTeam
+  if (!anythingChecked) {
     return {
       ok: false,
-      error: 'Pick at least one thing to copy (categories or courses).',
+      error: 'Pick at least one thing to copy.',
     }
   }
 
@@ -369,6 +407,12 @@ export async function snapshotCompanyAction(
       targetCompanyId: parsed.data.targetCompanyId,
       includeCategories: parsed.data.includeCategories,
       includeCourses: parsed.data.includeCourses,
+      includeTrainings: parsed.data.includeTrainings,
+      includeStatistics: parsed.data.includeStatistics,
+      includeOrgBoard: parsed.data.includeOrgBoard,
+      includeOnboardingChecklists: parsed.data.includeOnboardingChecklists,
+      includeMembers: parsed.data.includeMembers,
+      includeTeam: parsed.data.includeTeam,
     })
     return { ok: true, summary }
   } catch (err) {
