@@ -197,6 +197,8 @@ export async function createCompanyAction(
         const summary = await snapshotCompany({
           sourceCompanyId: sourceId,
           targetCompanyId: result.company.id,
+          includeCategories: parsed.data.snapshotIncludeCategories,
+          includeCourses: parsed.data.snapshotIncludeCourses,
         })
         snapshotResult = {
           coursesCopied: summary.coursesCopied,
@@ -354,10 +356,19 @@ export async function snapshotCompanyAction(
     return { ok: false, error: 'Source and target must be different companies' }
   }
 
+  if (!parsed.data.includeCategories && !parsed.data.includeCourses) {
+    return {
+      ok: false,
+      error: 'Pick at least one thing to copy (categories or courses).',
+    }
+  }
+
   try {
     const summary = await snapshotCompany({
       sourceCompanyId: parsed.data.sourceCompanyId,
       targetCompanyId: parsed.data.targetCompanyId,
+      includeCategories: parsed.data.includeCategories,
+      includeCourses: parsed.data.includeCourses,
     })
     return { ok: true, summary }
   } catch (err) {

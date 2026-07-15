@@ -6,6 +6,7 @@ import { ArrowRight, Copy, Loader2, MoreHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -62,6 +63,8 @@ export function CompanyRowActions({
   const [sources, setSources] = useState<SnapshotSourceOption[]>([])
   const [sourceLoading, setSourceLoading] = useState(false)
   const [selectedSource, setSelectedSource] = useState<string>('')
+  const [cloneCategories, setCloneCategories] = useState(true)
+  const [cloneCourses, setCloneCourses] = useState(true)
   const [running, setRunning] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
@@ -114,6 +117,8 @@ export function CompanyRowActions({
       const result = await snapshotCompanyAction({
         sourceCompanyId: selectedSource,
         targetCompanyId: companyId,
+        includeCategories: cloneCategories,
+        includeCourses: cloneCourses,
       })
       if (!result.ok) {
         toast.error(result.error ?? 'Snapshot failed')
@@ -236,6 +241,59 @@ export function CompanyRowActions({
               </Select>
             )}
           </div>
+
+          {sources.length > 0 ? (
+            <div className="space-y-2 rounded-md border border-dashed p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                What to copy
+              </p>
+              <label
+                htmlFor={`clone-cats-${companyId}`}
+                className="flex cursor-pointer select-none items-start gap-3 rounded-md p-2 transition-colors hover:bg-muted/40"
+              >
+                <Checkbox
+                  id={`clone-cats-${companyId}`}
+                  checked={cloneCategories}
+                  onCheckedChange={(v) => setCloneCategories(v === true)}
+                  disabled={running}
+                  className="mt-0.5"
+                />
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium leading-none">Categories</p>
+                  <p className="text-xs text-muted-foreground">
+                    Category names, slugs, and descriptions. Course→category
+                    links are re-mapped.
+                  </p>
+                </div>
+              </label>
+              <label
+                htmlFor={`clone-courses-${companyId}`}
+                className="flex cursor-pointer select-none items-start gap-3 rounded-md p-2 transition-colors hover:bg-muted/40"
+              >
+                <Checkbox
+                  id={`clone-courses-${companyId}`}
+                  checked={cloneCourses}
+                  onCheckedChange={(v) => setCloneCourses(v === true)}
+                  disabled={running}
+                  className="mt-0.5"
+                />
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium leading-none">Courses</p>
+                  <p className="text-xs text-muted-foreground">
+                    Course metadata + modules + chapters + lessons. All
+                    copied as DRAFT. Videos and uploaded files are not
+                    cloned.
+                  </p>
+                </div>
+              </label>
+              {!cloneCategories && !cloneCourses ? (
+                <p className="text-xs text-destructive">
+                  Pick at least one — otherwise the clone is a no-op.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <DialogFooter>
             <Button
               type="button"
@@ -249,7 +307,10 @@ export function CompanyRowActions({
               type="button"
               onClick={runSnapshot}
               disabled={
-                running || sources.length === 0 || !selectedSource
+                running ||
+                sources.length === 0 ||
+                !selectedSource ||
+                (!cloneCategories && !cloneCourses)
               }
             >
               {running ? (

@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -72,6 +73,8 @@ export function CreateCompanyForm({
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerName, setOwnerName] = useState('')
   const [snapshotSource, setSnapshotSource] = useState<string>(NONE_SOURCE)
+  const [cloneCategories, setCloneCategories] = useState(true)
+  const [cloneCourses, setCloneCourses] = useState(true)
   const [pending, setPending] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [ownerLookup, setOwnerLookup] = useState<OwnerLookup | null>(null)
@@ -131,6 +134,8 @@ export function CreateCompanyForm({
         ownerName: ownerMode === 'self' ? '' : ownerName,
         snapshotFromCompanyId:
           snapshotSource === NONE_SOURCE ? undefined : snapshotSource,
+        snapshotIncludeCategories: cloneCategories,
+        snapshotIncludeCourses: cloneCourses,
       })
       if (!result.ok) {
         if (result.fieldErrors) setFieldErrors(result.fieldErrors)
@@ -345,12 +350,47 @@ export function CreateCompanyForm({
                 {fieldErrors.snapshotFromCompanyId[0]}
               </p>
             ) : null}
+
+            <div className="space-y-2 rounded-md border border-dashed p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                What to copy
+              </p>
+              <CloneCheckbox
+                id="clone-categories"
+                label="Categories"
+                description="Category names, slugs, and descriptions. Course→category links are re-mapped."
+                checked={cloneCategories}
+                onCheckedChange={setCloneCategories}
+                disabled={pending}
+              />
+              <CloneCheckbox
+                id="clone-courses"
+                label="Courses"
+                description="Course metadata + modules + chapters + lessons. All copied as DRAFT. Videos and uploaded files are not cloned."
+                checked={cloneCourses}
+                onCheckedChange={setCloneCourses}
+                disabled={pending}
+              />
+              {!cloneCategories && !cloneCourses ? (
+                <p className="text-xs text-destructive">
+                  Pick at least one — otherwise the clone is a no-op.
+                </p>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
 
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={pending}>
+        <Button
+          type="submit"
+          disabled={
+            pending ||
+            (snapshotSource !== NONE_SOURCE &&
+              !cloneCategories &&
+              !cloneCourses)
+          }
+        >
           {pending ? (
             <>
               <Loader2 className="animate-spin" />
@@ -427,6 +467,46 @@ interface FormRowProps {
   description?: string
   error?: string[]
   children: React.ReactNode
+}
+
+interface CloneCheckboxProps {
+  id: string
+  label: string
+  description: string
+  checked: boolean
+  onCheckedChange: (v: boolean) => void
+  disabled?: boolean
+}
+
+function CloneCheckbox({
+  id,
+  label,
+  description,
+  checked,
+  onCheckedChange,
+  disabled,
+}: CloneCheckboxProps) {
+  return (
+    <label
+      htmlFor={id}
+      className={cn(
+        'flex cursor-pointer select-none items-start gap-3 rounded-md p-2 transition-colors hover:bg-muted/40',
+        disabled && 'cursor-not-allowed opacity-60',
+      )}
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(v) => onCheckedChange(v === true)}
+        disabled={disabled}
+        className="mt-0.5"
+      />
+      <div className="space-y-0.5">
+        <p className="text-sm font-medium leading-none">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+    </label>
+  )
 }
 
 function FormRow({ id, label, description, error, children }: FormRowProps) {
