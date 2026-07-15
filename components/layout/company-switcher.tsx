@@ -125,14 +125,7 @@ export function CompanySwitcher({
               className="gap-2"
             >
               <Building2 className="size-4 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">
-                {company.name}
-                {company.isAgency ? (
-                  <span className="ml-1 text-[10px] font-medium uppercase tracking-wider text-brand-500">
-                    · Agency
-                  </span>
-                ) : null}
-              </span>
+              <span className="min-w-0 flex-1 truncate">{company.name}</span>
               {isActive ? (
                 <Check className="size-3.5 text-brand-400" />
               ) : null}

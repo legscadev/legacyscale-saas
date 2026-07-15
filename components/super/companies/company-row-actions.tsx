@@ -226,7 +226,7 @@ export function CompanyRowActions({
                     {(() => {
                       const s = sources.find((x) => x.id === selectedSource)
                       if (!s) return 'Pick a tenant'
-                      return `${s.name}${s.isAgency ? ' · Agency' : ''}`
+                      return s.name
                     })()}
                   </SelectValue>
                 </SelectTrigger>
@@ -234,7 +234,6 @@ export function CompanyRowActions({
                   {sources.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.name}
-                      {s.isAgency ? ' · Agency' : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
