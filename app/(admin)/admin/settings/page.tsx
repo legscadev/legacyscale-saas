@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/tabs'
 import { BrandingCard } from '@/components/admin/settings/branding-card'
 import { DiscordWebhookCard } from '@/components/admin/settings/discord-webhook-card'
+import { getActiveCompany } from '@/lib/tenancy/active-company'
 import {
   getAchievementsWebhookSettingAction,
   getDiscordWebhookSettingAction,
@@ -35,11 +36,12 @@ export default async function AdminSettingsPage() {
   // every settings render. Re-enable by restoring both the awaits and
   // the <TabsTrigger value="domains"/> + <TabsContent value="domains"/>
   // pair below.
-  const [discordSetting, achievementsSetting, currentBranding] =
+  const [discordSetting, achievementsSetting, currentBranding, activeCompany] =
     await Promise.all([
       getDiscordWebhookSettingAction(),
       getAchievementsWebhookSettingAction(),
       getCurrentBrandingAction(),
+      getActiveCompany(),
     ])
 
   return (
@@ -55,6 +57,7 @@ export default async function AdminSettingsPage() {
         <TabsContent value="branding" className="space-y-6">
           <BrandingCard
             initial={currentBranding}
+            tenantName={activeCompany?.name ?? null}
             action={updateBrandingAction}
             clearAction={clearBrandingAction}
             uploadAction={uploadBrandingAssetAction}
