@@ -194,6 +194,47 @@ export async function updateBrandingAction(
     }
   }
 
+  // Company identity fields (name + slug) live on the Company row,
+  // not the brand JSON, and are extracted before the branding parse.
+  // Both are optional on the wire — omitting them is a no-op for that
+  // field. Uniqueness on slug is enforced with a lookup here so the
+  // operator gets an inline field error instead of a raw DB error.
+  const companyNameRaw = formData.get('companyName')
+  const companySlugRaw = formData.get('companySlug')
+  const companyPatch: { name?: string; slug?: string } = {}
+  if (typeof companyNameRaw === 'string') {
+    const trimmed = companyNameRaw.trim()
+    if (trimmed !== '' && trimmed !== company.name) {
+      if (trimmed.length > 120) {
+        return { ok: false, error: 'Company name must be at most 120 chars.' }
+      }
+      companyPatch.name = trimmed
+    }
+  }
+  if (typeof companySlugRaw === 'string') {
+    const normalized = normalizeSlugInput(companySlugRaw)
+    if (normalized !== '' && normalized !== company.slug) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalized)) {
+        return {
+          ok: false,
+          error:
+            'Slug can only contain lowercase letters, numbers, and hyphens.',
+        }
+      }
+      if (normalized.length < 2 || normalized.length > 60) {
+        return { ok: false, error: 'Slug must be 2–60 characters.' }
+      }
+      const clash = await prisma.company.findFirst({
+        where: { slug: normalized, id: { not: company.id }, deletedAt: null },
+        select: { id: true },
+      })
+      if (clash) {
+        return { ok: false, error: 'This slug is already in use.' }
+      }
+      companyPatch.slug = normalized
+    }
+  }
+
   const raw: Record<string, unknown> = {}
   for (const key of STRING_KEYS) {
     const value = formData.get(key)
@@ -230,9 +271,12 @@ export async function updateBrandingAction(
     const hasAny = Object.keys(parsed.data).length > 0
     await prisma.company.update({
       where: { id: company.id },
-      data: hasAny
-        ? { brand: parsed.data as unknown as Prisma.InputJsonValue }
-        : { brand: Prisma.DbNull as unknown as Prisma.InputJsonValue },
+      data: {
+        ...companyPatch,
+        brand: hasAny
+          ? (parsed.data as unknown as Prisma.InputJsonValue)
+          : (Prisma.DbNull as unknown as Prisma.InputJsonValue),
+      },
     })
     // Layouts + root metadata both call getBranding(); revalidate the
     // whole layout tree so the sidebar / <title> / favicon pick up
@@ -243,4 +287,15 @@ export async function updateBrandingAction(
     console.error('updateBrandingAction failed:', err)
     return { ok: false, error: 'Could not save branding' }
   }
+}
+
+/** Same normalisation the super/create-company path uses — accept
+ *  mixed case + spaces on input, spit out a URL-safe slug. */
+function normalizeSlugInput(raw: string): string {
+  return raw
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
 }

@@ -45,11 +45,14 @@ import {
 
 interface BrandingCardProps {
   initial: BrandingInput | null
-  /** The active tenant's Company.name — used as the placeholder /
-   *  preview fallback for productName + fromName so an un-branded
-   *  tenant sees its own name suggested (not "Kondense") when
-   *  filling the form for the first time. Null when tenancy is off. */
+  /** The active tenant's Company.name — used as the initial value
+   *  for the Company name input, and as the placeholder / preview
+   *  fallback for the "from" and legal-company fields. Null when
+   *  tenancy is off. */
   tenantName: string | null
+  /** The active tenant's Company.slug — initial value for the Slug
+   *  input. Null when tenancy is off. */
+  tenantSlug: string | null
   action: (fd: FormData) => Promise<BrandingSaveResult>
   /** Explicit clear — sets Company.brand to NULL so the theme lock
    *  releases and the visitor light/dark toggle works again. */
@@ -66,6 +69,12 @@ interface BrandingCardProps {
 // ────────────────────────────────────────────
 
 interface FormState {
+  /** Company.name — edits the tenant's canonical name. Separate from
+   *  brand.productName below (the brand override still exists as an
+   *  advanced field, but this is what most tenants edit). */
+  companyName: string
+  /** Company.slug — URL-safe handle for the tenant. */
+  companySlug: string
   productName: string
   tagline: string
   supportEmail: string
@@ -89,8 +98,14 @@ interface FormState {
   darkModeDefault: boolean
 }
 
-function initialState(initial: BrandingInput | null): FormState {
+function initialState(
+  initial: BrandingInput | null,
+  tenantName: string | null,
+  tenantSlug: string | null,
+): FormState {
   return {
+    companyName: tenantName ?? '',
+    companySlug: tenantSlug ?? '',
     productName: initial?.productName ?? '',
     tagline: initial?.tagline ?? '',
     supportEmail: initial?.supportEmail ?? '',
@@ -130,6 +145,7 @@ function buildFormData(state: FormState): FormData {
 export function BrandingCard({
   initial,
   tenantName,
+  tenantSlug,
   action,
   clearAction,
   uploadAction,
@@ -138,7 +154,9 @@ export function BrandingCard({
   // else the platform default. Un-branded tenants show themselves,
   // not "Kondense" (now "Legacy Scale").
   const namePlaceholder = tenantName ?? 'Legacy Scale'
-  const [state, setState] = useState<FormState>(initialState(initial))
+  const [state, setState] = useState<FormState>(
+    initialState(initial, tenantName, tenantSlug),
+  )
   const [isSaving, startSaving] = useTransition()
   const [isResetting, startReset] = useTransition()
 
@@ -212,10 +230,11 @@ export function BrandingCard({
                     toast.error(result.error ?? 'Could not reset')
                     return
                   }
-                  // Clear the form back to empty so the placeholder
-                  // "Kondense" values show through — matches the
-                  // just-cleared DB state.
-                  setState(initialState(null))
+                  // Clear brand-JSON fields back to empty so the
+                  // fallback values show through. Keep the tenant's
+                  // own Company.name + slug — Reset touches brand
+                  // only, not the identity.
+                  setState(initialState(null, tenantName, tenantSlug))
                   toast.success(
                     'Reverted to platform defaults — light/dark toggle is live again',
                   )
@@ -253,11 +272,28 @@ export function BrandingCard({
 
               <TabsContent value="identity" className="space-y-4">
                 <TextField
+                  id="companyName"
+                  label="Company name"
+                  value={state.companyName}
+                  onChange={(v) => update('companyName', v)}
+                  placeholder={namePlaceholder}
+                  hint="Canonical tenant name — shown in /super, in the sidebar wordmark, and as the default 'from' name on emails."
+                />
+                <TextField
+                  id="companySlug"
+                  label="Slug"
+                  value={state.companySlug}
+                  onChange={(v) => update('companySlug', v)}
+                  placeholder="acme-waste"
+                  hint="URL-safe handle. Lowercase letters, numbers, and hyphens only. Must be unique across the platform."
+                />
+                <TextField
                   id="productName"
-                  label="Product name"
+                  label="Public product name (override)"
                   value={state.productName}
                   onChange={(v) => update('productName', v)}
                   placeholder={namePlaceholder}
+                  hint="Optional — leave blank to use the Company name above. Set only when your members should see a different name than your internal company name."
                 />
                 <TextField
                   id="tagline"
