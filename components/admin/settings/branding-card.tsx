@@ -45,6 +45,11 @@ import {
 
 interface BrandingCardProps {
   initial: BrandingInput | null
+  /** The active tenant's Company.name — used as the placeholder /
+   *  preview fallback for productName + fromName so an un-branded
+   *  tenant sees its own name suggested (not "Kondense") when
+   *  filling the form for the first time. Null when tenancy is off. */
+  tenantName: string | null
   action: (fd: FormData) => Promise<BrandingSaveResult>
   /** Explicit clear — sets Company.brand to NULL so the theme lock
    *  releases and the visitor light/dark toggle works again. */
@@ -124,10 +129,15 @@ function buildFormData(state: FormState): FormData {
 
 export function BrandingCard({
   initial,
+  tenantName,
   action,
   clearAction,
   uploadAction,
 }: BrandingCardProps) {
+  // Placeholder + preview fallback: tenant's own name if we know it,
+  // else the platform default. Un-branded tenants show themselves,
+  // not "Kondense" (now "Legacy Scale").
+  const namePlaceholder = tenantName ?? 'Legacy Scale'
   const [state, setState] = useState<FormState>(initialState(initial))
   const [isSaving, startSaving] = useTransition()
   const [isResetting, startReset] = useTransition()
@@ -247,7 +257,7 @@ export function BrandingCard({
                   label="Product name"
                   value={state.productName}
                   onChange={(v) => update('productName', v)}
-                  placeholder="Kondense"
+                  placeholder={namePlaceholder}
                 />
                 <TextField
                   id="tagline"
@@ -263,7 +273,7 @@ export function BrandingCard({
                   type="email"
                   value={state.supportEmail}
                   onChange={(v) => update('supportEmail', v)}
-                  placeholder="support@kondense.ai"
+                  placeholder="support@example.com"
                 />
                 <TextField
                   id="supportUrl"
@@ -278,7 +288,7 @@ export function BrandingCard({
                   label="Email 'from' name"
                   value={state.fromName}
                   onChange={(v) => update('fromName', v)}
-                  placeholder="Kondense"
+                  placeholder={namePlaceholder}
                   hint="Sender name on transactional emails."
                 />
                 <TextField
@@ -286,7 +296,7 @@ export function BrandingCard({
                   label="Legal company name"
                   value={state.legalCompany}
                   onChange={(v) => update('legalCompany', v)}
-                  placeholder="Kondense"
+                  placeholder={namePlaceholder}
                   hint="Renders in email footers + PDF certificates."
                 />
               </TabsContent>
@@ -463,7 +473,7 @@ export function BrandingCard({
           </form>
 
           {/* ── Live preview ── */}
-          <ThemePreview state={state} />
+          <ThemePreview state={state} namePlaceholder={namePlaceholder} />
         </div>
       </CardContent>
     </Card>
@@ -749,7 +759,13 @@ function ToggleField({
 // Live theme preview
 // ────────────────────────────────────────────
 
-function ThemePreview({ state }: { state: FormState }) {
+function ThemePreview({
+  state,
+  namePlaceholder,
+}: {
+  state: FormState
+  namePlaceholder: string
+}) {
   const radiusPx =
     state.borderRadius === 'sharp'
       ? '2px'
@@ -768,7 +784,7 @@ function ThemePreview({ state }: { state: FormState }) {
       : state.fontFamily === 'system'
         ? 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
         : 'var(--font-sans), -apple-system, sans-serif'
-  const productLabel = state.productName || 'Kondense'
+  const productLabel = state.productName || namePlaceholder
 
   return (
     <div className="space-y-3">

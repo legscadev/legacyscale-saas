@@ -27,7 +27,23 @@ export const getBranding = cache(async (): Promise<Branding> => {
   const tenant =
     (await safeGetTenantFromHeaders()) ?? (await safeGetActiveCompany())
 
-  if (!tenant || !tenant.brand) return DEFAULT_BRANDING
+  // No tenant context at all → fall back to the platform defaults.
+  if (!tenant) return DEFAULT_BRANDING
+
+  // Company.name is a sensible tenant-specific default for the two
+  // "human-readable name of this product" fields — otherwise every
+  // un-branded tenant borrows the platform's productName in emails,
+  // sidebar, browser title. That surprises operators: the tenant is
+  // called "Acme Waste" but their members see "Legacy Scale" until
+  // someone edits the brand JSON.
+  const tenantDefaults = {
+    productName: tenant.name,
+    fromName: tenant.name,
+  }
+
+  if (!tenant.brand) {
+    return { ...DEFAULT_BRANDING, ...tenantDefaults }
+  }
 
   const parsed = brandingInputSchema.safeParse(tenant.brand)
   if (!parsed.success) {
@@ -37,10 +53,14 @@ export const getBranding = cache(async (): Promise<Branding> => {
       `[branding] ignoring invalid brand JSON on company ${tenant.id}:`,
       parsed.error.flatten(),
     )
-    return DEFAULT_BRANDING
+    return { ...DEFAULT_BRANDING, ...tenantDefaults }
   }
 
-  return { ...DEFAULT_BRANDING, ...parsed.data }
+  // Precedence: DEFAULT_BRANDING → tenant name defaults → saved brand
+  // overrides. So a tenant that saved a custom productName still wins;
+  // an un-set field falls to the tenant name; anything totally absent
+  // uses the platform default.
+  return { ...DEFAULT_BRANDING, ...tenantDefaults, ...parsed.data }
 })
 
 /** Read-only projection of `Branding` fit for client components
