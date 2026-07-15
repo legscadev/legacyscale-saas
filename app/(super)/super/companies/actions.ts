@@ -14,6 +14,7 @@ import { snapshotCompany } from '@/lib/services/company-snapshot'
 import { setActiveCompanyCookie } from '@/lib/tenancy/active-company'
 import { isTenancyEnabled } from '@/lib/tenancy/feature-flag'
 import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
+import { PLATFORM_SEED_COMPANY_ID } from '@/lib/tenancy/seed'
 import {
   createCompanySchema,
   snapshotCompanySchema,
@@ -449,14 +450,14 @@ export async function deleteCompanyAction(input: {
   return runAsSuperAdmin(async () => {
     const company = await prisma.company.findFirst({
       where: { id: input.companyId, deletedAt: null },
-      select: { id: true, name: true, slug: true },
+      select: { id: true, name: true },
     })
     if (!company) return { ok: false, error: 'Company not found' }
 
-    // Protect only the Kondense platform seed row — soft-deleting it
-    // would collapse the entire /super surface. Every other tenant
-    // (including legacy `isAgency` rows) is deletable.
-    if (company.slug === 'kondense') {
+    // Protect the platform seed row — soft-deleting it would collapse
+    // the entire /super surface. Keys off the seed id (immutable) so
+    // renaming the tenant / slug can't accidentally lift the guard.
+    if (company.id === PLATFORM_SEED_COMPANY_ID) {
       return {
         ok: false,
         error: 'The platform seed tenant cannot be deleted.',

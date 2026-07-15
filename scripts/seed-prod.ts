@@ -18,10 +18,11 @@
 //   DATABASE_URL=... DIRECT_URL=... pnpm exec tsx scripts/seed-prod.ts
 
 import { prisma } from '@/lib/prisma'
+import { PLATFORM_SEED_COMPANY_ID } from '@/lib/tenancy/seed'
 
-const KONDENSE_ID = '00000000-0000-0000-0000-000000000001'
-const KONDENSE_SLUG = 'kondense'
-const KONDENSE_NAME = 'Kondense'
+const KONDENSE_ID = PLATFORM_SEED_COMPANY_ID
+const KONDENSE_SLUG = 'legacy-scale'
+const KONDENSE_NAME = 'Legacy Scale'
 
 const OPERATOR_EMAIL = (
   process.env.FIRST_SUPER_ADMIN_EMAIL ?? 'ruel@legacyscale.co'

@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BrandMark } from '@/components/layout/brand-mark'
 import { prisma } from '@/lib/prisma'
+import { PLATFORM_SEED_COMPANY_ID } from '@/lib/tenancy/seed'
 import { AdminPasswordOnboarding } from './admin-password-onboarding'
 import { OnboardingWizard } from './onboarding-wizard'
 
@@ -47,11 +48,13 @@ export default async function OnboardingPage({
       const company = invite.companyId
         ? await prisma.company.findFirst({
             where: { id: invite.companyId, deletedAt: null },
-            select: { name: true, slug: true },
+            select: { id: true, name: true },
           })
         : null
       const companyName =
-        company && company.slug !== 'kondense' ? company.name : null
+        company && company.id !== PLATFORM_SEED_COMPANY_ID
+          ? company.name
+          : null
       return (
         <AdminPasswordOnboarding token={token!} companyName={companyName} />
       )
