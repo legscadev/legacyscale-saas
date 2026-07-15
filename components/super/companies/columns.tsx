@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { PLATFORM_SEED_COMPANY_ID } from '@/lib/tenancy/seed'
 
 import type { CompanyDirectoryRow } from '@/app/(super)/super/companies/types'
 
@@ -126,7 +127,7 @@ export const companyColumns: ColumnDef<CompanyDirectoryRow, unknown>[] = [
         <CompanyRowActions
           companyId={row.original.id}
           companyName={row.original.name}
-          isProtected={row.original.slug === 'kondense'}
+          isProtected={row.original.id === PLATFORM_SEED_COMPANY_ID}
         />
       </div>
     ),
