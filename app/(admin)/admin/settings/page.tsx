@@ -58,6 +58,7 @@ export default async function AdminSettingsPage() {
           <BrandingCard
             initial={currentBranding}
             tenantName={activeCompany?.name ?? null}
+            tenantSlug={activeCompany?.slug ?? null}
             action={updateBrandingAction}
             clearAction={clearBrandingAction}
             uploadAction={uploadBrandingAssetAction}
