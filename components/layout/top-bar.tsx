@@ -13,6 +13,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
+import { TaskNotificationsBell } from '@/components/admin/tasks/task-notifications-bell'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -276,6 +277,8 @@ export function TopBar({
                 : 'Announcements'}
             </TooltipContent>
           </Tooltip>
+
+          {role === 'admin' ? <TaskNotificationsBell /> : null}
 
           <ThemeToggle locked={themeLocked} />
           <div className="ml-1 lg:hidden">

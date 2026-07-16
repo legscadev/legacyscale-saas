@@ -17,6 +17,7 @@ import {
   logDiffIfChanged,
   taskActivityService,
 } from '@/lib/services/task-activity-service'
+import { taskNotificationService } from '@/lib/services/task-notification-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type {
   CreateTaskOutput,
@@ -553,13 +554,25 @@ class TaskService {
       // Activity log — one row per changed facet. Inside the tx so
       // the log commits atomically with the mutation. Membership
       // changes log the id sets; scalar changes log from/to values.
-      if (input.statusId !== undefined) {
+      if (input.statusId !== undefined && input.statusId !== existing.statusId) {
         await logDiffIfChanged({
           taskId: id,
           actorId,
           action: 'status_changed',
           from: existing.statusId,
           to: input.statusId,
+          tx,
+        })
+        const watchers = await tx.taskWatcher.findMany({
+          where: { taskId: id },
+          select: { userId: true },
+        })
+        await taskNotificationService.notifyStatusChanged({
+          taskId: id,
+          actorId,
+          watcherIds: watchers.map((w) => w.userId),
+          fromStatusId: existing.statusId,
+          toStatusId: input.statusId,
           tx,
         })
       }
@@ -594,14 +607,26 @@ class TaskService {
         })
       }
       if (input.assigneeIds !== undefined) {
+        const beforeAssignees = existing.assignees.map((a) => a.userId)
         await logDiffIfChanged({
           taskId: id,
           actorId,
           action: 'assigned',
-          from: existing.assignees.map((a) => a.userId).sort(),
+          from: [...beforeAssignees].sort(),
           to: [...input.assigneeIds].sort(),
           tx,
         })
+        // Notify the newly-added assignees.
+        const beforeSet = new Set(beforeAssignees)
+        const added = input.assigneeIds.filter((v) => !beforeSet.has(v))
+        if (added.length > 0) {
+          await taskNotificationService.notifyAssigned({
+            taskId: id,
+            actorId,
+            assigneeIds: added,
+            tx,
+          })
+        }
       }
       if (input.watcherIds !== undefined) {
         await logDiffIfChanged({
@@ -771,13 +796,26 @@ class TaskService {
       data: { statusId, orderIndex: finalOrderIndex },
     })
 
-    await logDiffIfChanged({
-      taskId: id,
-      actorId,
-      action: 'status_changed',
-      from: existing.statusId,
-      to: statusId,
-    })
+    if (statusId !== existing.statusId) {
+      await logDiffIfChanged({
+        taskId: id,
+        actorId,
+        action: 'status_changed',
+        from: existing.statusId,
+        to: statusId,
+      })
+      const watchers = await prisma.taskWatcher.findMany({
+        where: { taskId: id },
+        select: { userId: true },
+      })
+      await taskNotificationService.notifyStatusChanged({
+        taskId: id,
+        actorId,
+        watcherIds: watchers.map((w) => w.userId),
+        fromStatusId: existing.statusId,
+        toStatusId: statusId,
+      })
+    }
     return this.get(id)
   }
 }

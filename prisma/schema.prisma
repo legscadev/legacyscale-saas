@@ -271,6 +271,9 @@ model User {
   taskChecklistCompletes TaskChecklistItem[] @relation("TaskChecklistDoneBy")
   taskAttachmentsUploaded TaskAttachment[]   @relation("TaskAttachmentUploader")
   taskActivityLogs       TaskActivityLog[]   @relation("TaskActivityActor")
+  taskNotifications      TaskNotification[]  @relation("TaskNotificationRecipient")
+  taskNotificationsCaused TaskNotification[] @relation("TaskNotificationActor")
+  taskSavedViews         TaskSavedView[]
 
   @@index([role])
   @@index([isActive])
@@ -1634,6 +1637,7 @@ model Task {
   checklists    TaskChecklist[]
   attachments   TaskAttachment[]
   activityLogs  TaskActivityLog[]
+  notifications TaskNotification[]
 
   companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
@@ -1801,4 +1805,57 @@ model TaskActivityLog {
 
   @@index([companyId, taskId, createdAt])
   @@map("task_activity_logs")
+}
+
+/// In-app notification. One row per recipient per event — a
+/// broadcast to N watchers becomes N rows so read state stays per
+/// user. Tenant-scoped like the rest of the tracker; every
+/// notification anchors to the task it fires for so cascade cleans
+/// up when the task is hard-deleted.
+model TaskNotification {
+  id          String   @id @default(uuid())
+  taskId      String   @map("task_id")
+  recipientId String   @map("recipient_id")
+  actorId     String?  @map("actor_id")
+  /// Short verb tag, same catalog as TaskActivityLog.action so the
+  /// notification renderer can reuse the activity sentence
+  /// mappings. Kept as a plain String rather than an enum so
+  /// adding a new event doesn't need a migration.
+  kind        String
+  /// Snapshot JSON (from/to values, comment excerpt, etc.) so the
+  /// bell dropdown can render without a re-query.
+  payload     Json?
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  task      Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipient User  @relation("TaskNotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User? @relation("TaskNotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([recipientId, readAt, createdAt])
+  @@index([companyId, taskId])
+  @@map("task_notifications")
+}
+
+/// A named saved view = a URL query string the operator captured.
+/// Per-user (no sharing yet) so my saved "Overdue on me" doesn't
+/// pollute someone else's dropdown. Tenant-scoped so the same
+/// user across companies keeps distinct view sets.
+model TaskSavedView {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  /// URL query string as stored on save — e.g. "priority=HIGH&assignee=<id>&sort=dueDate&dir=asc".
+  /// The tasks shell splats this into the URL when the operator picks the view.
+  query     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([userId, companyId, name])
+  @@index([companyId, userId])
+  @@map("task_saved_views")
 }

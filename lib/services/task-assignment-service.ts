@@ -8,6 +8,7 @@ import {
   logDiffIfChanged,
   taskActivityService,
 } from '@/lib/services/task-activity-service'
+import { taskNotificationService } from '@/lib/services/task-notification-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type {
   AssignTaskInput,
@@ -54,6 +55,16 @@ class TaskAssignmentService {
         to: [...input.userIds].sort(),
         tx,
       })
+      const beforeSet = new Set(before.map((a) => a.userId))
+      const added = input.userIds.filter((v) => !beforeSet.has(v))
+      if (added.length > 0) {
+        await taskNotificationService.notifyAssigned({
+          taskId: input.taskId,
+          actorId,
+          assigneeIds: added,
+          tx,
+        })
+      }
     }, { timeout: 15_000 })
   }
 
@@ -145,6 +156,11 @@ class TaskAssignmentService {
         actorId,
         action: 'assigned',
         toValue: { userId },
+      })
+      await taskNotificationService.notifyAssigned({
+        taskId,
+        actorId,
+        assigneeIds: [userId],
       })
     }
   }

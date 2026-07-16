@@ -10,6 +10,7 @@ import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { taskActivityService } from '@/lib/services/task-activity-service'
+import { taskNotificationService } from '@/lib/services/task-notification-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type {
   AddCommentInput,
@@ -127,6 +128,24 @@ class TaskCommentService {
         actorId: authorId,
         action: 'comment_added',
         toValue: { commentId: c.id },
+        tx,
+      })
+
+      // Notification fan-out: every current watcher gets a bell
+      // ping. Reading the watcher list *inside* the tx after the
+      // upsert above picks up any newly-added watchers so they
+      // don't miss the notification for the comment that added
+      // them.
+      const watchers = await tx.taskWatcher.findMany({
+        where: { taskId: input.taskId },
+        select: { userId: true },
+      })
+      await taskNotificationService.notifyCommentAdded({
+        taskId: input.taskId,
+        actorId: authorId,
+        watcherIds: watchers.map((w) => w.userId),
+        commentId: c.id,
+        excerpt: input.body.slice(0, 120),
         tx,
       })
 
