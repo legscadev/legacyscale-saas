@@ -17,6 +17,7 @@ import type { TaskWorkspacePayload } from '@/app/(admin)/admin/tasks/actions'
 
 import { CreateTaskDialog } from './create-task-dialog'
 import { KanbanBoard } from './kanban-board'
+import { SavedViewsMenu } from './saved-views-menu'
 import { TaskDetailDrawer } from './task-detail-drawer'
 import { TasksFilterBar } from './tasks-filter-bar'
 import { TasksStatStrip } from './tasks-stat-strip'
@@ -41,8 +42,16 @@ export function TasksShell({ initialData }: TasksShellProps) {
   const [isNavigating, startNavigation] = useTransition()
   const [createOpen, setCreateOpen] = useState(false)
 
-  const { tasks, stats, statuses, categories, labels, members, currentUserId } =
-    initialData
+  const {
+    tasks,
+    stats,
+    statuses,
+    categories,
+    labels,
+    members,
+    currentUserId,
+    savedViews,
+  } = initialData
 
   // View comes from ?view=; defaults to list.
   const view: TasksViewMode =
@@ -131,12 +140,20 @@ export function TasksShell({ initialData }: TasksShellProps) {
 
       <TasksStatStrip stats={stats} />
 
-      <TasksFilterBar
-        statuses={statuses}
-        categories={categories}
-        labels={labels}
-        members={members}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <SavedViewsMenu
+          savedViews={savedViews}
+          onChanged={refreshWorkspace}
+        />
+        <div className="min-w-0 flex-1">
+          <TasksFilterBar
+            statuses={statuses}
+            categories={categories}
+            labels={labels}
+            members={members}
+          />
+        </div>
+      </div>
 
       <div
         aria-busy={isNavigating}

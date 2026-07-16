@@ -24,6 +24,12 @@ import {
   type TaskAttachmentRow,
 } from '@/lib/services/task-attachment-service'
 import {
+  taskSavedViewService,
+  DuplicateSavedViewError,
+  SavedViewNotFoundError,
+  type SavedViewRow,
+} from '@/lib/services/task-saved-view-service'
+import {
   taskChecklistService,
   ChecklistItemNotFoundError,
   ChecklistNotFoundError,
@@ -103,7 +109,9 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
     err instanceof CommentNotFoundError ||
     err instanceof ChecklistNotFoundError ||
     err instanceof ChecklistItemNotFoundError ||
-    err instanceof TaskAttachmentNotFoundError
+    err instanceof TaskAttachmentNotFoundError ||
+    err instanceof SavedViewNotFoundError ||
+    err instanceof DuplicateSavedViewError
   ) {
     return { ok: false, error: err.message }
   }
@@ -332,6 +340,9 @@ export interface TaskWorkspacePayload {
    *  which comments the current viewer authored (and can therefore
    *  edit inline). Admins can delete any comment via the row menu. */
   currentUserId: string
+  /** Saved views authored by the current user in the current
+   *  tenant. Populates the "Views" dropdown next to the filter bar. */
+  savedViews: SavedViewRow[]
 }
 
 /** Sum counts for the "open"/"in-progress"/"blocked"/"done"/etc.
@@ -409,7 +420,7 @@ export async function fetchTaskWorkspaceAction(
 
   try {
     const tenantScope = await memberTenantScope()
-    const [statuses, categories, labels, members, tasks, stats] =
+    const [statuses, categories, labels, members, tasks, stats, savedViews] =
       await Promise.all([
         prisma.taskStatus.findMany({
           orderBy: { orderIndex: 'asc' },
@@ -456,6 +467,7 @@ export async function fetchTaskWorkspaceAction(
           dueSoon: 0,
           archived: 0,
         }),
+        taskSavedViewService.listMine(currentUser.id),
       ])
 
     return {
@@ -468,6 +480,7 @@ export async function fetchTaskWorkspaceAction(
         tasks,
         stats,
         currentUserId: currentUser.id,
+        savedViews,
       },
     }
   } catch (err) {
@@ -831,5 +844,43 @@ export async function unwatchTaskAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not unwatch task')
+  }
+}
+
+// ============================================
+// SAVED VIEWS
+// ============================================
+
+export async function createSavedViewAction(input: {
+  name: string
+  query: string
+}): Promise<MutationResult<SavedViewRow>> {
+  const user = await requireAdmin()
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  if (name.length > 60) return { ok: false, error: 'Name is too long (max 60)' }
+  try {
+    const data = await taskSavedViewService.create({
+      userId: user.id,
+      name,
+      query: input.query,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not save view')
+  }
+}
+
+export async function deleteSavedViewAction(
+  id: string,
+): Promise<MutationResult> {
+  const user = await requireAdmin()
+  try {
+    await taskSavedViewService.delete({ id, userId: user.id })
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete view')
   }
 }
