@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import type { TaskWorkspacePayload } from '@/app/(admin)/admin/tasks/actions'
 
 import { CreateTaskDialog } from './create-task-dialog'
+import { TasksFilterBar } from './tasks-filter-bar'
 import { TasksStatStrip } from './tasks-stat-strip'
 import { TasksTable } from './tasks-table'
 
@@ -36,7 +37,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
   const [isNavigating, startNavigation] = useTransition()
   const [createOpen, setCreateOpen] = useState(false)
 
-  const { tasks, stats, statuses, categories } = initialData
+  const { tasks, stats, statuses, categories, labels, members } = initialData
 
   // Sort state comes from the URL — page.tsx re-fetches with the
   // new params on router.push. Defaults mirror taskFilterSchema.
@@ -81,6 +82,13 @@ export function TasksShell({ initialData }: TasksShellProps) {
       />
 
       <TasksStatStrip stats={stats} />
+
+      <TasksFilterBar
+        statuses={statuses}
+        categories={categories}
+        labels={labels}
+        members={members}
+      />
 
       <div
         aria-busy={isNavigating}
