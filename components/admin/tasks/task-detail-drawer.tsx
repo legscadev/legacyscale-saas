@@ -32,6 +32,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TaskDetail, TaskUserRef } from '@/lib/services/task-service'
 
+import { TaskCommentsPanel } from './task-comments-panel'
 import {
   EditableCategory,
   EditableDate,
@@ -53,6 +54,7 @@ interface TaskDetailDrawerProps {
   categories: WorkflowCategory[]
   labels: WorkflowLabel[]
   members: TeamMember[]
+  currentUserId: string
   onOpenChange: (open: boolean) => void
   /** Fires after any drawer mutation succeeds so the shell can
    *  revalidate the stat strip + list/board counts. */
@@ -65,6 +67,7 @@ export function TaskDetailDrawer({
   categories,
   labels,
   members,
+  currentUserId,
   onOpenChange,
   onChanged,
 }: TaskDetailDrawerProps) {
@@ -137,7 +140,9 @@ export function TaskDetailDrawer({
               categories={categories}
               labels={labels}
               members={members}
+              currentUserId={currentUserId}
               onPatch={applyPatch}
+              onCommentsChanged={onChanged}
             />
           ) : null}
         </SheetBody>
@@ -175,7 +180,9 @@ interface EditableBodyProps {
   categories: WorkflowCategory[]
   labels: WorkflowLabel[]
   members: TeamMember[]
+  currentUserId: string
   onPatch: (patch: Partial<TaskDetail>) => void
+  onCommentsChanged?: () => void
 }
 
 function EditableBody({
@@ -184,7 +191,9 @@ function EditableBody({
   categories,
   labels,
   members,
+  currentUserId,
   onPatch,
+  onCommentsChanged,
 }: EditableBodyProps) {
   const { task, comments, checklists, activity } = payload
   const totalChecklistItems = checklists.reduce(
@@ -252,8 +261,16 @@ function EditableBody({
         <SubtasksBlock subtasks={task.subtasks} />
       ) : null}
 
+      <Section label={`Comments (${comments.length})`}>
+        <TaskCommentsPanel
+          taskId={task.id}
+          comments={comments}
+          currentUserId={currentUserId}
+          onChanged={onCommentsChanged}
+        />
+      </Section>
+
       <CountsBlock
-        comments={comments.length}
         checklistTotal={totalChecklistItems}
         checklistDone={doneChecklistItems}
         activity={activity.length}
@@ -379,20 +396,17 @@ function SubtasksBlock({
 }
 
 function CountsBlock({
-  comments,
   checklistTotal,
   checklistDone,
   activity,
 }: {
-  comments: number
   checklistTotal: number
   checklistDone: number
   activity: number
 }) {
   return (
     <Section label="Activity summary">
-      <div className="grid grid-cols-3 gap-3 text-center">
-        <CountCell label="Comments" value={comments} />
+      <div className="grid grid-cols-2 gap-3 text-center">
         <CountCell
           label="Checklist"
           value={
@@ -404,8 +418,7 @@ function CountsBlock({
         <CountCell label="Events" value={activity} />
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        Comment composer, checklist CRUD, and the activity timeline
-        land in Phase 4.4 → 4.6.
+        Checklist CRUD and the activity timeline land in Phase 4.5 → 4.6.
       </p>
     </Section>
   )

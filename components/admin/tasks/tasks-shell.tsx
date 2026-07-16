@@ -40,7 +40,8 @@ export function TasksShell({ initialData }: TasksShellProps) {
   const [isNavigating, startNavigation] = useTransition()
   const [createOpen, setCreateOpen] = useState(false)
 
-  const { tasks, stats, statuses, categories, labels, members } = initialData
+  const { tasks, stats, statuses, categories, labels, members, currentUserId } =
+    initialData
 
   // View comes from ?view=; defaults to list.
   const view: TasksViewMode =
@@ -155,6 +156,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
         categories={categories}
         labels={labels}
         members={members}
+        currentUserId={currentUserId}
         onOpenChange={(open) => {
           if (!open) closeTask()
         }}

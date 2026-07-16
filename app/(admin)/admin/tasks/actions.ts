@@ -249,6 +249,10 @@ export interface TaskWorkspacePayload {
   members: TeamMember[]
   tasks: TaskListResult
   stats: TaskStats
+  /** Current viewer's user id — the client uses this to decide
+   *  which comments the current viewer authored (and can therefore
+   *  edit inline). Admins can delete any comment via the row menu. */
+  currentUserId: string
 }
 
 /** Sum counts for the "open"/"in-progress"/"blocked"/"done"/etc.
@@ -312,7 +316,7 @@ async function loadStats(companyId: string): Promise<TaskStats> {
 export async function fetchTaskWorkspaceAction(
   filters: Record<string, unknown> = {},
 ): Promise<MutationResult<TaskWorkspacePayload>> {
-  await requireAdmin()
+  const currentUser = await requireAdmin()
   const companyId = await getRequestCompanyId()
   if (companyId) await ensureWorkflowReady(companyId)
 
@@ -377,7 +381,15 @@ export async function fetchTaskWorkspaceAction(
 
     return {
       ok: true,
-      data: { statuses, categories, labels, members, tasks, stats },
+      data: {
+        statuses,
+        categories,
+        labels,
+        members,
+        tasks,
+        stats,
+        currentUserId: currentUser.id,
+      },
     }
   } catch (err) {
     return toMutationErr(err, 'Could not load task workspace')
