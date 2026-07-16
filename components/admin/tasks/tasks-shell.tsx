@@ -108,6 +108,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
             statuses={statuses}
             tasks={tasks.items}
             onCreate={() => setCreateOpen(true)}
+            onChanged={refreshWorkspace}
           />
         ) : (
           <TasksTable
