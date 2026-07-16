@@ -130,6 +130,11 @@ export const taskFilterSchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 })
 export type TaskFilterInput = z.input<typeof taskFilterSchema>
+/**
+ * Post-parse shape passed to the service — defaults filled in, dates
+ * coerced. Actions parse with the schema then hand this shape down.
+ */
+export type TaskFilterOutput = z.output<typeof taskFilterSchema>
 
 // ============================================
 // COMMENTS
@@ -167,13 +172,13 @@ export type RenameChecklistInput = z.input<typeof renameChecklistSchema>
 
 export const addChecklistItemSchema = z.object({
   checklistId: z.string().uuid(),
-  label: z.string().trim().min(1, 'Label is required').max(200),
+  text: z.string().trim().min(1, 'Text is required').max(200),
 })
 export type AddChecklistItemInput = z.input<typeof addChecklistItemSchema>
 
 export const updateChecklistItemSchema = z.object({
   itemId: z.string().uuid(),
-  label: z.string().trim().min(1).max(200).optional(),
+  text: z.string().trim().min(1).max(200).optional(),
   isDone: z.boolean().optional(),
 })
 export type UpdateChecklistItemInput = z.input<typeof updateChecklistItemSchema>
@@ -228,10 +233,10 @@ export type ChangeStatusInput = z.input<typeof changeStatusSchema>
  */
 export const registerAttachmentSchema = z.object({
   taskId: z.string().uuid(),
-  storagePath: z.string().min(1).max(500),
-  fileName: z.string().trim().min(1).max(255),
+  path: z.string().min(1).max(500),
+  name: z.string().trim().min(1).max(255),
   mimeType: z.string().max(100),
-  sizeBytes: z.number().int().min(0).max(50 * 1024 * 1024),
+  size: z.number().int().min(0).max(50 * 1024 * 1024),
 })
 export type RegisterAttachmentInput = z.input<typeof registerAttachmentSchema>
 
