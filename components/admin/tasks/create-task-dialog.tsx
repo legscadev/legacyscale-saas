@@ -2,13 +2,14 @@
 
 // Create-task dialog. Kept intentionally scoped to the fields the
 // list view needs at creation time — title, description, status,
-// priority, category, due date. Assignees / watchers / labels are
-// editable from the detail drawer (Phase 4) so the create form
-// stays focused on "get a row in".
+// priority, category, assignees, due date. Labels + watchers +
+// attachments still live on the drawer.
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
+import { Check, Search, Users } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { AvatarGroup } from '@/components/shared/avatar-group'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -18,6 +19,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -28,9 +34,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
 
 import {
   createTaskAction,
+  type TeamMember,
   type WorkflowCategory,
   type WorkflowStatus,
 } from '@/app/(admin)/admin/tasks/actions'
@@ -44,6 +52,7 @@ interface CreateTaskDialogProps {
   onCreated: () => void | Promise<void>
   statuses: WorkflowStatus[]
   categories: WorkflowCategory[]
+  members: TeamMember[]
 }
 
 // Sentinel value used by the "no category" option. Radix Select
@@ -56,6 +65,7 @@ export function CreateTaskDialog({
   onCreated,
   statuses,
   categories,
+  members,
 }: CreateTaskDialogProps) {
   const defaultStatus =
     statuses.find((s) => s.isDefault) ?? statuses[0] ?? null
@@ -66,6 +76,7 @@ export function CreateTaskDialog({
   const [priority, setPriority] = useState<PriorityValue>('MEDIUM')
   const [categoryId, setCategoryId] = useState<string>(NO_CATEGORY)
   const [dueDate, setDueDate] = useState('')
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([])
 
   const [errors, setErrors] = useState<Record<string, string[]>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -78,6 +89,7 @@ export function CreateTaskDialog({
     setPriority('MEDIUM')
     setCategoryId(NO_CATEGORY)
     setDueDate('')
+    setAssigneeIds([])
     setErrors({})
     setFormError(null)
   }
@@ -101,7 +113,7 @@ export function CreateTaskDialog({
         priority,
         categoryId: categoryId === NO_CATEGORY ? null : categoryId,
         dueDate: dueDate || '',
-        assigneeIds: [],
+        assigneeIds,
         watcherIds: [],
         labelIds: [],
       })
@@ -254,6 +266,16 @@ export function CreateTaskDialog({
                 disabled={isSaving}
               />
             </div>
+
+            <div className="col-span-2 space-y-2">
+              <Label>Assignees</Label>
+              <AssigneesPicker
+                members={members}
+                selectedIds={assigneeIds}
+                onChange={setAssigneeIds}
+                disabled={isSaving}
+              />
+            </div>
           </div>
 
           {formError ? (
@@ -276,5 +298,142 @@ export function CreateTaskDialog({
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// =========================================================
+// Assignees picker (self-contained — the drawer's shared
+// AssigneePicker expects a full TaskDetail we don't have yet).
+// =========================================================
+
+interface AssigneesPickerProps {
+  members: TeamMember[]
+  selectedIds: string[]
+  onChange: (next: string[]) => void
+  disabled?: boolean
+}
+
+function AssigneesPicker({
+  members,
+  selectedIds,
+  onChange,
+  disabled,
+}: AssigneesPickerProps) {
+  const [query, setQuery] = useState('')
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const selectedMembers = useMemo(
+    () => members.filter((m) => selectedSet.has(m.id)),
+    [members, selectedSet],
+  )
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return members
+    return members.filter(
+      (m) =>
+        (m.name?.toLowerCase().includes(q) ?? false) ||
+        m.email.toLowerCase().includes(q),
+    )
+  }, [members, query])
+
+  function toggle(id: string) {
+    onChange(
+      selectedSet.has(id)
+        ? selectedIds.filter((v) => v !== id)
+        : [...selectedIds, id],
+    )
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        render={
+          <button
+            type="button"
+            className={cn(
+              'flex h-9 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-xs transition-colors',
+              'hover:bg-accent hover:text-accent-foreground disabled:opacity-50',
+            )}
+          />
+        }
+      >
+        {selectedMembers.length === 0 ? (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <Users className="size-3.5" aria-hidden />
+            Unassigned
+          </span>
+        ) : (
+          <>
+            <AvatarGroup
+              users={selectedMembers.map((m) => ({
+                name: m.name ?? m.email,
+                avatarUrl: null,
+              }))}
+              size="sm"
+              max={4}
+            />
+            <span className="truncate text-muted-foreground">
+              {selectedMembers.length === 1
+                ? (selectedMembers[0]!.name ??
+                    selectedMembers[0]!.email.split('@')[0])
+                : `${selectedMembers.length} assigned`}
+            </span>
+          </>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72 p-0">
+        <div className="border-b p-2">
+          <div className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search team…"
+              className="h-8 pl-7 text-sm"
+              autoFocus
+            />
+          </div>
+        </div>
+        <div className="max-h-64 overflow-auto p-1">
+          {filtered.length === 0 ? (
+            <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+              No team members found.
+            </p>
+          ) : (
+            filtered.map((m) => {
+              const checked = selectedSet.has(m.id)
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => toggle(m.id)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+                >
+                  <div
+                    className={cn(
+                      'flex size-4 shrink-0 items-center justify-center rounded-sm border',
+                      checked
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-input',
+                    )}
+                  >
+                    {checked ? <Check className="size-3" /> : null}
+                  </div>
+                  <span className="min-w-0 flex-1 truncate">
+                    {m.name ?? m.email}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {m.email.split('@')[0]}
+                  </span>
+                </button>
+              )
+            })
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

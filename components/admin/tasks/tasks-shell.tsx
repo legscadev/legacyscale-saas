@@ -215,6 +215,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
         }}
         statuses={statuses}
         categories={categories}
+        members={members}
       />
     </div>
   )
