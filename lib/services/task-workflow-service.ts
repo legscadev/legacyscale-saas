@@ -52,24 +52,28 @@ const DEFAULT_STATUSES = [
   { name: 'Done',        slug: 'done',         color: '#22c55e', orderIndex: 5, isDefault: false, isTerminal: true  },
 ] as const
 
-/** Common engineering / delivery categories. Admins can rename or
- *  delete these from the workflow-admin surface (Phase 6). */
+/** Cross-role default categories. The tracker isn't dev-only —
+ *  it also covers content production, design, sales, and internal
+ *  ops. Admins rename/delete these from the workflow-admin surface
+ *  (Phase 6). */
 const DEFAULT_CATEGORIES = [
-  { name: 'Bug',           color: '#ef4444' },
-  { name: 'Feature',       color: '#22c55e' },
-  { name: 'Enhancement',   color: '#3b82f6' },
-  { name: 'Documentation', color: '#8b5cf6' },
-  { name: 'Ops',           color: '#f59e0b' },
+  { name: 'Content',  color: '#f59e0b' },
+  { name: 'Design',   color: '#ec4899' },
+  { name: 'Sales',    color: '#22c55e' },
+  { name: 'Ops',      color: '#3b82f6' },
+  { name: 'Meeting',  color: '#8b5cf6' },
 ] as const
 
-/** Cross-cutting labels usable across categories. */
+/** Cross-cutting labels — free-form tags a task can carry any
+ *  number of. Kept short + generic so a fresh tenant has useful
+ *  chips without wading through a dev-flavored preset list. */
 const DEFAULT_LABELS = [
-  { name: 'backend',        color: '#0ea5e9' },
-  { name: 'frontend',       color: '#ec4899' },
-  { name: 'database',       color: '#f59e0b' },
-  { name: 'api',            color: '#8b5cf6' },
-  { name: 'infrastructure', color: '#64748b' },
-  { name: 'urgent',         color: '#ef4444' },
+  { name: 'video',      color: '#0ea5e9' },
+  { name: 'graphic',    color: '#ec4899' },
+  { name: 'data',       color: '#f59e0b' },
+  { name: 'call',       color: '#22c55e' },
+  { name: 'follow-up',  color: '#8b5cf6' },
+  { name: 'urgent',     color: '#ef4444' },
 ] as const
 
 export interface WorkflowSeedResult {
