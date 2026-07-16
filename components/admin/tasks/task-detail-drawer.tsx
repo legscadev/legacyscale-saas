@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { TaskDetail, TaskUserRef } from '@/lib/services/task-service'
 
 import { TaskActivityPanel } from './task-activity-panel'
+import { TaskAttachmentsPanel } from './task-attachments-panel'
 import { TaskChecklistsPanel } from './task-checklists-panel'
 import { TaskCommentsPanel } from './task-comments-panel'
 import {
@@ -211,7 +212,7 @@ function EditableBody({
   onPatch,
   onRefetch,
 }: EditableBodyProps) {
-  const { task, comments, checklists, activity } = payload
+  const { task, comments, checklists, activity, attachments } = payload
   const totalChecklistItems = checklists.reduce(
     (n, c) => n + c.items.length,
     0,
@@ -292,6 +293,14 @@ function EditableBody({
         <TaskChecklistsPanel
           taskId={task.id}
           checklists={checklists}
+          onChanged={onRefetch}
+        />
+      </Section>
+
+      <Section label={`Attachments (${attachments.length})`}>
+        <TaskAttachmentsPanel
+          taskId={task.id}
+          attachments={attachments}
           onChanged={onRefetch}
         />
       </Section>
