@@ -1,12 +1,26 @@
 'use client'
 
-// Create-task dialog. Kept intentionally scoped to the fields the
-// list view needs at creation time — title, description, status,
-// priority, category, assignees, due date. Labels + watchers +
-// attachments still live on the drawer.
+// Create-task dialog. Covers title, description (rich text),
+// status, priority, category, assignees, due date, and attachments
+// (files + links). Labels + watchers still live on the drawer.
+//
+// Attachments are inherently a two-phase submit — we need a
+// task_id before we can write a task_attachment. On save we
+// create the task first, then upload buffered files / register
+// buffered link URLs in parallel; per-attachment failures surface
+// as separate toasts but don't roll back the task.
 
-import { useMemo, useState, useTransition } from 'react'
-import { Check, Search, Users } from 'lucide-react'
+import { useMemo, useRef, useState, useTransition } from 'react'
+import {
+  Check,
+  ExternalLink,
+  Link2,
+  Paperclip,
+  Search,
+  Upload,
+  Users,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { AvatarGroup } from '@/components/shared/avatar-group'
@@ -26,6 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import {
   Select,
   SelectContent,
@@ -33,16 +48,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
 import {
   createTaskAction,
+  registerTaskLinkAttachmentAction,
+  uploadTaskAttachmentAction,
   type TeamMember,
   type WorkflowCategory,
   type WorkflowStatus,
 } from '@/app/(admin)/admin/tasks/actions'
 import { TASK_PRIORITY_LABELS } from '@/lib/validations/tasks'
+
+const MAX_ATTACHMENT_MB = 10
 
 type PriorityValue = keyof typeof TASK_PRIORITY_LABELS
 
@@ -77,6 +95,10 @@ export function CreateTaskDialog({
   const [categoryId, setCategoryId] = useState<string>(NO_CATEGORY)
   const [dueDate, setDueDate] = useState('')
   const [assigneeIds, setAssigneeIds] = useState<string[]>([])
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [pendingLinks, setPendingLinks] = useState<
+    Array<{ name: string; url: string }>
+  >([])
 
   const [errors, setErrors] = useState<Record<string, string[]>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -90,6 +112,8 @@ export function CreateTaskDialog({
     setCategoryId(NO_CATEGORY)
     setDueDate('')
     setAssigneeIds([])
+    setPendingFiles([])
+    setPendingLinks([])
     setErrors({})
     setFormError(null)
   }
@@ -106,9 +130,15 @@ export function CreateTaskDialog({
     }
 
     startSave(async () => {
+      // Description is stored as HTML from Tiptap; empty-doc case
+      // is either '' or '<p></p>' — normalize both to null.
+      const desc = description.trim()
+      const normalizedDesc =
+        !desc || desc === '<p></p>' ? null : desc
+
       const result = await createTaskAction({
         title: trimmedTitle,
-        description: description.trim() || null,
+        description: normalizedDesc,
         statusId: statusId || undefined,
         priority,
         categoryId: categoryId === NO_CATEGORY ? null : categoryId,
@@ -124,6 +154,39 @@ export function CreateTaskDialog({
         return
       }
 
+      // Task created. Fan out attachment work — task-id is required
+      // (we can't write task_attachment rows without it), so this
+      // is a two-phase flow. Per-attachment failures surface as
+      // toasts but don't roll back the task itself.
+      const taskId = result.data.id
+      const attachmentJobs: Array<Promise<unknown>> = []
+      for (const file of pendingFiles) {
+        const fd = new FormData()
+        fd.set('taskId', taskId)
+        fd.set('file', file)
+        attachmentJobs.push(
+          uploadTaskAttachmentAction(fd).then((res) => {
+            if (!res.ok) {
+              toast.error(`"${file.name}" upload failed: ${res.error ?? 'unknown error'}`)
+            }
+          }),
+        )
+      }
+      for (const link of pendingLinks) {
+        attachmentJobs.push(
+          registerTaskLinkAttachmentAction({
+            taskId,
+            name: link.name,
+            url: link.url,
+          }).then((res) => {
+            if (!res.ok) {
+              toast.error(`Link "${link.name || link.url}" failed: ${res.error ?? 'unknown error'}`)
+            }
+          }),
+        )
+      }
+      if (attachmentJobs.length > 0) await Promise.all(attachmentJobs)
+
       toast.success('Task created')
       resetForm()
       await onCreated()
@@ -138,7 +201,7 @@ export function CreateTaskDialog({
         onOpenChange(o)
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New task</DialogTitle>
           <DialogDescription>
@@ -165,14 +228,13 @@ export function CreateTaskDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="task-description">Description</Label>
-            <Textarea
-              id="task-description"
+            <Label>Description</Label>
+            <RichTextEditor
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
               placeholder="Optional. Add context, acceptance criteria, links."
-              rows={4}
               disabled={isSaving}
+              size="sm"
             />
           </div>
 
@@ -273,6 +335,17 @@ export function CreateTaskDialog({
                 members={members}
                 selectedIds={assigneeIds}
                 onChange={setAssigneeIds}
+                disabled={isSaving}
+              />
+            </div>
+
+            <div className="col-span-2 space-y-2">
+              <Label>Attachments</Label>
+              <AttachmentBuffer
+                files={pendingFiles}
+                links={pendingLinks}
+                onFilesChange={setPendingFiles}
+                onLinksChange={setPendingLinks}
                 disabled={isSaving}
               />
             </div>
@@ -436,4 +509,242 @@ function AssigneesPicker({
       </DropdownMenuContent>
     </DropdownMenu>
   )
+}
+
+// =========================================================
+// Attachment buffer — local File[] + link[] until we have a
+// task_id to associate them with. Rendered above the DialogFooter
+// so operators can review what they'll attach before hitting Save.
+// =========================================================
+
+interface AttachmentBufferProps {
+  files: File[]
+  links: Array<{ name: string; url: string }>
+  onFilesChange: (files: File[]) => void
+  onLinksChange: (links: Array<{ name: string; url: string }>) => void
+  disabled?: boolean
+}
+
+function AttachmentBuffer({
+  files,
+  links,
+  onFilesChange,
+  onLinksChange,
+  disabled,
+}: AttachmentBufferProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [linkFormOpen, setLinkFormOpen] = useState(false)
+
+  function handleFiles(picked: FileList | null) {
+    if (!picked || picked.length === 0) return
+    const accepted: File[] = []
+    for (const f of Array.from(picked)) {
+      if (f.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
+        toast.error(
+          `"${f.name}" is ${(f.size / 1024 / 1024).toFixed(1)} MB — max ${MAX_ATTACHMENT_MB} MB.`,
+        )
+        continue
+      }
+      accepted.push(f)
+    }
+    if (accepted.length > 0) onFilesChange([...files, ...accepted])
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  const hasAny = files.length > 0 || links.length > 0
+
+  return (
+    <div className="space-y-2">
+      {hasAny ? (
+        <ul className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+          {files.map((f, i) => (
+            <li
+              key={`f-${i}-${f.name}`}
+              className="flex items-center gap-2 text-sm"
+            >
+              <Paperclip
+                className="size-3.5 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate">{f.name}</span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {formatBytes(f.size)}
+              </span>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                type="button"
+                onClick={() =>
+                  onFilesChange(files.filter((_, idx) => idx !== i))
+                }
+                disabled={disabled}
+                aria-label={`Remove ${f.name}`}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="size-3.5" />
+              </Button>
+            </li>
+          ))}
+          {links.map((l, i) => (
+            <li
+              key={`l-${i}-${l.url}`}
+              className="flex items-center gap-2 text-sm"
+            >
+              <Link2
+                className="size-3.5 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate">
+                {l.name || safeHost(l.url)}
+              </span>
+              <ExternalLink
+                className="size-3 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                type="button"
+                onClick={() =>
+                  onLinksChange(links.filter((_, idx) => idx !== i))
+                }
+                disabled={disabled}
+                aria-label={`Remove ${l.name || l.url}`}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="size-3.5" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+          disabled={disabled}
+          className="flex-1 justify-start text-muted-foreground"
+        >
+          <Upload className="size-3.5" />
+          Upload (max {MAX_ATTACHMENT_MB} MB)
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setLinkFormOpen((v) => !v)}
+          disabled={disabled}
+          className="flex-1 justify-start text-muted-foreground"
+        >
+          <Link2 className="size-3.5" />
+          Add link
+        </Button>
+      </div>
+
+      {linkFormOpen ? (
+        <PendingLinkForm
+          onCancel={() => setLinkFormOpen(false)}
+          onAdd={(next) => {
+            onLinksChange([...links, next])
+            setLinkFormOpen(false)
+          }}
+          disabled={disabled}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+interface PendingLinkFormProps {
+  onCancel: () => void
+  onAdd: (next: { name: string; url: string }) => void
+  disabled?: boolean
+}
+
+function PendingLinkForm({ onCancel, onAdd, disabled }: PendingLinkFormProps) {
+  const [url, setUrl] = useState('')
+  const [name, setName] = useState('')
+
+  function commit() {
+    const trimmedUrl = url.trim()
+    if (!trimmedUrl) return
+    // Basic client-side validation — server re-checks protocol.
+    try {
+      const parsed = new URL(trimmedUrl)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        toast.error('URL must start with http:// or https://')
+        return
+      }
+    } catch {
+      toast.error('Invalid URL')
+      return
+    }
+    onAdd({ name: name.trim(), url: trimmedUrl })
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+      <Input
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://drive.google.com/… or https://figma.com/…"
+        type="url"
+        disabled={disabled}
+        autoFocus
+        className="h-8 text-sm"
+      />
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Display name (optional — defaults to the URL host)"
+        disabled={disabled}
+        className="h-8 text-sm"
+      />
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={disabled}
+        >
+          <X className="size-3.5" />
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={commit}
+          disabled={disabled || !url.trim()}
+        >
+          Save link
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
 }
