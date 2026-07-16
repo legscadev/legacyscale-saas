@@ -26,6 +26,7 @@ import {
 } from '@/app/(admin)/admin/tasks/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import {
   Select,
   SelectContent,
@@ -33,7 +34,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import type { TaskDetail } from '@/lib/services/task-service'
 import {
@@ -162,16 +162,14 @@ export function EditableDescription({ task, onSaved }: CommonProps) {
         type="button"
         onClick={() => setEditing(true)}
         className={cn(
-          'group/desc block w-full rounded-md border border-transparent p-2 text-left text-sm transition-colors',
+          'group/desc block w-full rounded-md border border-transparent p-2 text-left transition-colors',
           'hover:border-border hover:bg-muted/40',
         )}
       >
         {task.description ? (
-          <span className="whitespace-pre-wrap text-foreground">
-            {task.description}
-          </span>
+          <DescriptionHtml html={task.description} />
         ) : (
-          <span className="italic text-muted-foreground">
+          <span className="text-sm italic text-muted-foreground">
             Click to add a description
           </span>
         )}
@@ -181,13 +179,12 @@ export function EditableDescription({ task, onSaved }: CommonProps) {
 
   return (
     <div className="space-y-2">
-      <Textarea
+      <RichTextEditor
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        rows={5}
-        autoFocus
-        disabled={isSaving}
+        onChange={setDraft}
         placeholder="Add context, acceptance criteria, links…"
+        disabled={isSaving}
+        size="sm"
       />
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={commit} disabled={isSaving}>
@@ -208,6 +205,38 @@ export function EditableDescription({ task, onSaved }: CommonProps) {
         </Button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Read-view renderer for the stored rich-text HTML. Uses the same
+ * .tiptap selector conventions the editor writes to so paragraphs,
+ * headings, lists, blockquotes, and links look continuous between
+ * edit and read modes.
+ *
+ * dangerouslySetInnerHTML is safe here because the HTML string is
+ * produced by Tiptap's getHTML() (schema-escaped) and stored back
+ * unchanged. When user-generated HTML surfaces on a member-facing
+ * page we'll add a DOMPurify boundary — for the admin-only drawer
+ * writer + reader are both trusted admins.
+ */
+function DescriptionHtml({ html }: { html: string }) {
+  return (
+    <div
+      className={cn(
+        'tiptap text-sm text-foreground',
+        '[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
+        '[&_h2]:text-base [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:mt-3 [&_h2]:mb-1',
+        '[&_h3]:text-sm [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:mt-3 [&_h3]:mb-1',
+        '[&_ul]:my-2 [&_ul]:pl-5 [&_ul]:list-disc',
+        '[&_ol]:my-2 [&_ol]:pl-5 [&_ol]:list-decimal',
+        '[&_li]:my-0.5',
+        '[&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground',
+        '[&_a]:text-primary [&_a]:underline [&_a]:underline-offset-2',
+        '[&_strong]:font-semibold [&_em]:italic',
+      )}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   )
 }
 
