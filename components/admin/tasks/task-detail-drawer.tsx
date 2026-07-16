@@ -16,7 +16,9 @@ import { useEffect, useState } from 'react'
 import {
   fetchTaskDrawerAction,
   type TaskDrawerPayload,
+  type TeamMember,
   type WorkflowCategory,
+  type WorkflowLabel,
   type WorkflowStatus,
 } from '@/app/(admin)/admin/tasks/actions'
 import { AvatarGroup } from '@/components/shared/avatar-group'
@@ -30,7 +32,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TaskDetail, TaskUserRef } from '@/lib/services/task-service'
 
-import { LabelChip } from './task-pills'
 import {
   EditableCategory,
   EditableDate,
@@ -40,11 +41,18 @@ import {
   EditableStatus,
   EditableTitle,
 } from './task-detail-fields'
+import {
+  AssigneePicker,
+  LabelPicker,
+  WatcherPicker,
+} from './task-multiselect'
 
 interface TaskDetailDrawerProps {
   taskId: string | null
   statuses: WorkflowStatus[]
   categories: WorkflowCategory[]
+  labels: WorkflowLabel[]
+  members: TeamMember[]
   onOpenChange: (open: boolean) => void
   /** Fires after any drawer mutation succeeds so the shell can
    *  revalidate the stat strip + list/board counts. */
@@ -55,6 +63,8 @@ export function TaskDetailDrawer({
   taskId,
   statuses,
   categories,
+  labels,
+  members,
   onOpenChange,
   onChanged,
 }: TaskDetailDrawerProps) {
@@ -125,6 +135,8 @@ export function TaskDetailDrawer({
               payload={payload}
               statuses={statuses}
               categories={categories}
+              labels={labels}
+              members={members}
               onPatch={applyPatch}
             />
           ) : null}
@@ -161,6 +173,8 @@ interface EditableBodyProps {
   payload: TaskDrawerPayload
   statuses: WorkflowStatus[]
   categories: WorkflowCategory[]
+  labels: WorkflowLabel[]
+  members: TeamMember[]
   onPatch: (patch: Partial<TaskDetail>) => void
 }
 
@@ -168,6 +182,8 @@ function EditableBody({
   payload,
   statuses,
   categories,
+  labels,
+  members,
   onPatch,
 }: EditableBodyProps) {
   const { task, comments, checklists, activity } = payload
@@ -202,13 +218,35 @@ function EditableBody({
 
       <MetaGrid task={task} onPatch={onPatch} />
 
-      <PeopleBlock
-        reporter={task.reporter}
-        assignees={task.assignees}
-        watchers={task.watchers}
-      />
+      <Section label="People">
+        <div className="space-y-2">
+          <ReporterRow reporter={task.reporter} />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Assignees
+            </p>
+            <AssigneePicker
+              task={task}
+              members={members}
+              onSaved={onPatch}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Watchers
+            </p>
+            <WatcherPicker
+              task={task}
+              members={members}
+              onSaved={onPatch}
+            />
+          </div>
+        </div>
+      </Section>
 
-      <LabelsBlock labels={task.labels} />
+      <Section label="Labels">
+        <LabelPicker task={task} labels={labels} onSaved={onPatch} />
+      </Section>
 
       {task.subtasks.length > 0 ? (
         <SubtasksBlock subtasks={task.subtasks} />
@@ -286,81 +324,33 @@ function MetaCell({
   )
 }
 
-function PeopleBlock({
-  reporter,
-  assignees,
-  watchers,
-}: {
-  reporter: TaskUserRef | null
-  assignees: TaskUserRef[]
-  watchers: TaskUserRef[]
-}) {
-  return (
-    <Section label="People">
-      <div className="space-y-3">
-        <PersonRow label="Reporter" people={reporter ? [reporter] : []} />
-        <PersonRow label="Assignees" people={assignees} />
-        <PersonRow label="Watchers" people={watchers} />
-      </div>
-    </Section>
-  )
-}
-
-function PersonRow({
-  label,
-  people,
-}: {
-  label: string
-  people: TaskUserRef[]
-}) {
+function ReporterRow({ reporter }: { reporter: TaskUserRef | null }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      {people.length === 0 ? (
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <User className="size-3" aria-hidden />
-          Unassigned
-        </span>
-      ) : (
+      <p className="text-xs font-medium text-muted-foreground">Reporter</p>
+      {reporter ? (
         <div className="flex items-center gap-2">
           <AvatarGroup
-            users={people.map((p) => ({
-              name: p.name ?? p.email,
-              avatarUrl: null,
-            }))}
+            users={[
+              {
+                name: reporter.name ?? reporter.email,
+                avatarUrl: null,
+              },
+            ]}
             size="sm"
-            max={5}
+            max={1}
           />
           <span className="text-xs text-muted-foreground">
-            {people
-              .slice(0, 3)
-              .map((p) => p.name ?? p.email.split('@')[0])
-              .join(', ')}
-            {people.length > 3 ? ` +${people.length - 3}` : ''}
+            {reporter.name ?? reporter.email.split('@')[0]}
           </span>
         </div>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <User className="size-3" aria-hidden />
+          System
+        </span>
       )}
     </div>
-  )
-}
-
-function LabelsBlock({
-  labels,
-}: {
-  labels: Array<{ id: string; name: string; color: string }>
-}) {
-  return (
-    <Section label="Labels">
-      {labels.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No labels attached.</p>
-      ) : (
-        <div className="flex flex-wrap gap-1">
-          {labels.map((l) => (
-            <LabelChip key={l.id} name={l.name} color={l.color} />
-          ))}
-        </div>
-      )}
-    </Section>
   )
 }
 

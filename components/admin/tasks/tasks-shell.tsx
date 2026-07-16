@@ -153,6 +153,8 @@ export function TasksShell({ initialData }: TasksShellProps) {
         taskId={openTaskId}
         statuses={statuses}
         categories={categories}
+        labels={labels}
+        members={members}
         onOpenChange={(open) => {
           if (!open) closeTask()
         }}
