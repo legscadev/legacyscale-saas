@@ -10,12 +10,11 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { Search, SlidersHorizontal, X } from 'lucide-react'
+import { Check, Search, SlidersHorizontal, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuLabel,
@@ -308,16 +307,31 @@ function FacetDropdown({
             No options
           </p>
         ) : (
-          options.map((opt) => (
-            <DropdownMenuCheckboxItem
-              key={opt.id}
-              checked={selectedSet.has(opt.id)}
-              onCheckedChange={(checked) => onToggle(opt.id, checked)}
-              closeOnClick={false}
-            >
-              {opt.name}
-            </DropdownMenuCheckboxItem>
-          ))
+          <div className="p-1">
+            {options.map((opt) => {
+              const checked = selectedSet.has(opt.id)
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => onToggle(opt.id, !checked)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+                >
+                  <div
+                    className={cn(
+                      'flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
+                      checked
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-input',
+                    )}
+                  >
+                    {checked ? <Check className="size-3" /> : null}
+                  </div>
+                  <span className="min-w-0 flex-1 truncate">{opt.name}</span>
+                </button>
+              )
+            })}
+          </div>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
