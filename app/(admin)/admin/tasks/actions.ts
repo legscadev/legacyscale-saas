@@ -248,6 +248,43 @@ export async function uploadTaskAttachmentAction(
   }
 }
 
+/**
+ * Register a link attachment (Google Drive / Frame.io / Figma /
+ * arbitrary URL) — no bytes uploaded, just a bookmark on the task.
+ * The URL is validated as an http(s) URL before the row is written
+ * so pasted rubbish doesn't sneak into the drawer.
+ */
+export async function registerTaskLinkAttachmentAction(input: {
+  taskId: string
+  name: string
+  url: string
+}): Promise<MutationResult<TaskAttachmentRow>> {
+  const user = await requireAdmin()
+  const url = input.url.trim()
+  if (!url) return { ok: false, error: 'URL is required' }
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return { ok: false, error: 'Invalid URL' }
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, error: 'URL must start with http:// or https://' }
+  }
+  try {
+    const data = await taskAttachmentService.registerLink({
+      taskId: input.taskId,
+      name: input.name,
+      url,
+      actorId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not add link')
+  }
+}
+
 export async function deleteTaskAttachmentAction(
   attachmentId: string,
 ): Promise<MutationResult> {

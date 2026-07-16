@@ -55,9 +55,10 @@ export function TasksShell({ initialData }: TasksShellProps) {
     savedViews,
   } = initialData
 
-  // View comes from ?view=; defaults to list.
+  // View comes from ?view=; defaults to board. Explicit ?view=list
+  // opts back into the table.
   const view: TasksViewMode =
-    searchParams.get('view') === 'board' ? 'board' : 'list'
+    searchParams.get('view') === 'list' ? 'list' : 'board'
 
   // Drawer open state is URL-driven — ?task=<id>. Deep-linkable +
   // survives refresh. Clicking a row or card sets it; the drawer's

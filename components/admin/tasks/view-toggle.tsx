@@ -22,8 +22,8 @@ const OPTIONS: Array<{
   label: string
   icon: React.ComponentType<{ className?: string }>
 }> = [
-  { value: 'list', label: 'List', icon: List },
   { value: 'board', label: 'Board', icon: KanbanSquare },
+  { value: 'list', label: 'List', icon: List },
 ]
 
 export function ViewToggle({ value }: ViewToggleProps) {
@@ -39,8 +39,9 @@ export function ViewToggle({ value }: ViewToggleProps) {
   function switchTo(mode: TasksViewMode) {
     if (mode === value) return
     const next = new URLSearchParams(paramsCopy)
-    if (mode === 'list') {
-      // Default view; drop the param for a cleaner URL.
+    if (mode === 'board') {
+      // Default view; drop the param for a cleaner URL. Also clear
+      // list-only sort keys — the board sorts by orderIndex.
       next.delete('view')
       next.delete('sort')
       next.delete('dir')

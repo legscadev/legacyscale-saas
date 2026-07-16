@@ -1771,6 +1771,11 @@ model TaskAttachment {
   size         Int
   mimeType     String   @map("mime_type")
   uploadedById String?  @map("uploaded_by_id")
+  /// External URL for "link" attachments (Google Drive, Frame.io,
+  /// Figma, etc.). When set, path/size/mimeType are placeholder
+  /// values (empty / 0 / "link/external") and the download flow
+  /// opens sourceUrl in a new tab instead of signing a storage URL.
+  sourceUrl    String?  @map("source_url")
   createdAt    DateTime @default(now()) @map("created_at")
 
   task       Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)

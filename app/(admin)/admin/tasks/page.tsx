@@ -44,10 +44,11 @@ export default async function AdminTasksPage({
   const raw = await searchParams
   const filters = parseFiltersFromSearchParams(raw)
 
-  // Board view needs the full open set to distribute across
-  // columns, so lift the default page cap. List view stays paged.
+  // Board is the default view — lift the page cap + force
+  // orderIndex sort so cards land in their column positions. Only
+  // ?view=list opts back into the paged table.
   const view = Array.isArray(raw.view) ? raw.view[0] : raw.view
-  if (view === 'board') {
+  if (view !== 'list') {
     filters.limit = 500
     filters.sortBy = 'orderIndex'
     filters.sortOrder = 'asc'

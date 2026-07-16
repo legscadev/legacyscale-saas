@@ -300,6 +300,26 @@ export function KanbanBoard({
     }
   }
 
+  // Translate vertical mouse-wheel into horizontal scroll on the
+  // board strip — desktop users without a horizontal-swipe input
+  // otherwise can't pan without grabbing the scrollbar. Only kicks
+  // in when the strip actually overflows horizontally; otherwise
+  // we let the wheel bubble so the page scrolls normally.
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
+    const el = scrollRef.current
+    if (!el) return
+    // Only intercept the pure-vertical wheel (touchpad two-finger
+    // horizontal already sends deltaX). Skip when the shift key is
+    // held — the browser already remaps shift+wheel to horizontal
+    // and doubling would jump twice as far.
+    if (e.deltaY === 0 || e.shiftKey) return
+    // No-op if nothing to scroll.
+    if (el.scrollWidth <= el.clientWidth) return
+    el.scrollLeft += e.deltaY
+    e.preventDefault()
+  }
+
   if (columns.length === 0) {
     return (
       <EmptyState
@@ -319,7 +339,11 @@ export function KanbanBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="-mx-2 overflow-x-auto pb-2">
+      <div
+        ref={scrollRef}
+        onWheel={handleWheel}
+        className="-mx-2 overflow-x-auto pb-2"
+      >
         <div className="flex min-w-full gap-3 px-2">
           {columns.map((col) => (
             <KanbanColumn

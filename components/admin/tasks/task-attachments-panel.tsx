@@ -13,20 +13,25 @@
 import { formatDistanceToNow } from 'date-fns'
 import {
   Download,
+  ExternalLink,
+  Link2,
   Loader2,
   Paperclip,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react'
 import { useRef, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
 import {
   deleteTaskAttachmentAction,
+  registerTaskLinkAttachmentAction,
   signTaskAttachmentUrlAction,
   uploadTaskAttachmentAction,
 } from '@/app/(admin)/admin/tasks/actions'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { TaskAttachmentRow } from '@/lib/services/task-attachment-service'
 
 const MAX_MB = 10
@@ -44,6 +49,7 @@ export function TaskAttachmentsPanel({
 }: TaskAttachmentsPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isUploading, startUpload] = useTransition()
+  const [linkFormOpen, setLinkFormOpen] = useState(false)
 
   function pick() {
     inputRef.current?.click()
@@ -104,21 +110,120 @@ export function TaskAttachmentsPanel({
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={pick}
-        disabled={isUploading}
-        className="w-full justify-start text-muted-foreground"
-      >
-        {isUploading ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : (
-          <Upload className="size-3.5" />
-        )}
-        {isUploading ? 'Uploading…' : `Upload files (max ${MAX_MB} MB each)`}
-      </Button>
+      <div className="flex gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={pick}
+          disabled={isUploading}
+          className="flex-1 justify-start text-muted-foreground"
+        >
+          {isUploading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Upload className="size-3.5" />
+          )}
+          {isUploading ? 'Uploading…' : `Upload (max ${MAX_MB} MB)`}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLinkFormOpen((v) => !v)}
+          className="flex-1 justify-start text-muted-foreground"
+        >
+          <Link2 className="size-3.5" />
+          Add link
+        </Button>
+      </div>
+
+      {linkFormOpen ? (
+        <AddLinkForm
+          taskId={taskId}
+          onCancel={() => setLinkFormOpen(false)}
+          onAdded={() => {
+            setLinkFormOpen(false)
+            onChanged?.()
+          }}
+        />
+      ) : null}
     </div>
+  )
+}
+
+// =========================================================
+// Add-link inline form
+// =========================================================
+
+function AddLinkForm({
+  taskId,
+  onCancel,
+  onAdded,
+}: {
+  taskId: string
+  onCancel: () => void
+  onAdded: () => void
+}) {
+  const [url, setUrl] = useState('')
+  const [name, setName] = useState('')
+  const [isSaving, startSave] = useTransition()
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const trimmedUrl = url.trim()
+    if (!trimmedUrl) return
+    startSave(async () => {
+      const res = await registerTaskLinkAttachmentAction({
+        taskId,
+        name: name.trim(),
+        url: trimmedUrl,
+      })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not add link')
+        return
+      }
+      toast.success('Link added')
+      onAdded()
+    })
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="space-y-2 rounded-md border bg-muted/20 p-2"
+    >
+      <Input
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://drive.google.com/… or https://figma.com/…"
+        type="url"
+        disabled={isSaving}
+        autoFocus
+        className="h-8 text-sm"
+      />
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Display name (optional — defaults to the URL host)"
+        disabled={isSaving}
+        className="h-8 text-sm"
+      />
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={isSaving}
+        >
+          <X className="size-3.5" />
+          Cancel
+        </Button>
+        <Button size="sm" type="submit" disabled={isSaving || !url.trim()}>
+          {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          Save link
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -159,20 +264,28 @@ function AttachmentRow({ attachment, onDeleted }: AttachmentRowProps) {
     })
   }
 
-  const uploaderName =
-    attachment.uploadedBy?.name ?? 'someone'
+  const uploaderName = attachment.uploadedBy?.name ?? 'someone'
+  const isLink = attachment.sourceUrl !== null
+  const Icon = isLink ? Link2 : Paperclip
+  const OpenIcon = isLink ? ExternalLink : Download
+  const openLabel = isLink ? 'Open link' : 'Download'
+  // Sub-line: uploaded rows show size, links show the URL host so
+  // operators can tell Frame.io from Drive at a glance.
+  const subLine = isLink
+    ? safeHost(attachment.sourceUrl ?? '')
+    : formatBytes(attachment.size)
 
   return (
     <li className="group/att flex items-center gap-2 rounded-md border p-2">
       <div className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-        <Paperclip className="size-3.5" aria-hidden />
+        <Icon className="size-3.5" aria-hidden />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-foreground">
           {attachment.name}
         </p>
-        <p className="text-[11px] text-muted-foreground">
-          {formatBytes(attachment.size)} · {uploaderName} ·{' '}
+        <p className="truncate text-[11px] text-muted-foreground">
+          {subLine} · {uploaderName} ·{' '}
           {formatDistanceToNow(attachment.createdAt, { addSuffix: true })}
         </p>
       </div>
@@ -182,9 +295,9 @@ function AttachmentRow({ attachment, onDeleted }: AttachmentRowProps) {
           variant="ghost"
           onClick={download}
           disabled={isBusy}
-          aria-label={`Download ${attachment.name}`}
+          aria-label={`${openLabel} ${attachment.name}`}
         >
-          <Download className="size-3.5" />
+          <OpenIcon className="size-3.5" />
         </Button>
         <Button
           size="icon-sm"
@@ -199,6 +312,17 @@ function AttachmentRow({ attachment, onDeleted }: AttachmentRowProps) {
       </div>
     </li>
   )
+}
+
+/** Best-effort URL → host extraction; falls back to the raw string
+ *  if the URL doesn't parse (already validated server-side, but
+ *  cheap safety net for stale local state). */
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
 }
 
 // =========================================================

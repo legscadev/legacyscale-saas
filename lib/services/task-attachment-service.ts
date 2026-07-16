@@ -85,9 +85,18 @@ export interface TaskAttachmentRow {
   path: string
   size: number
   mimeType: string
+  /** Set for link attachments — an external URL (Google Drive,
+   *  Frame.io, Figma, etc.) instead of storage bytes. When
+   *  present, the client opens this directly and never touches
+   *  Supabase Storage for this row. */
+  sourceUrl: string | null
   uploadedBy: { id: string; name: string | null } | null
   createdAt: Date
 }
+
+/** Marker mimeType we stamp on link rows so filters, badges, and
+ *  future export code can branch on kind without a schema join. */
+export const LINK_MIMETYPE = 'link/external'
 
 const ATTACHMENT_INCLUDE = {
   uploadedBy: { select: { id: true, name: true } },
@@ -105,6 +114,7 @@ function mapRow(row: AttachmentWithIncludes): TaskAttachmentRow {
     path: row.path,
     size: row.size,
     mimeType: row.mimeType,
+    sourceUrl: row.sourceUrl,
     uploadedBy: row.uploadedBy,
     createdAt: row.createdAt,
   }
@@ -231,33 +241,87 @@ class TaskAttachmentService {
     return mapRow(created)
   }
 
-  /** Remove metadata + storage bytes. Metadata delete first — if
-   *  storage remove fails the DB row is gone and the file becomes
-   *  an orphan; that's the safer failure mode (row is the source of
-   *  truth for what's attached, bytes are recoverable via a bucket
-   *  audit). */
+  /**
+   * Register a link attachment — a URL bookmark that lives on the
+   * task without any storage bytes. Fills path/size/mimeType with
+   * placeholder values so the columns stay NOT NULL; the sourceUrl
+   * column is the discriminator every read path branches on.
+   */
+  async registerLink(args: {
+    taskId: string
+    name: string
+    url: string
+    actorId: string | null
+  }): Promise<TaskAttachmentRow> {
+    const task = await prisma.task.findFirst({
+      where: { id: args.taskId, deletedAt: null },
+      select: { id: true },
+    })
+    if (!task) throw new Error('Task not found')
+
+    // Normalize display name — if the caller left it blank, fall
+    // back to the URL host so the row is scannable in the drawer.
+    const displayName = args.name.trim() || safeHostFromUrl(args.url)
+
+    const created = await prisma.taskAttachment.create({
+      data: {
+        taskId: args.taskId,
+        name: displayName,
+        path: '',
+        size: 0,
+        mimeType: LINK_MIMETYPE,
+        sourceUrl: args.url,
+        uploadedById: args.actorId,
+      },
+      include: ATTACHMENT_INCLUDE,
+    })
+
+    await taskActivityService.logEvent({
+      taskId: args.taskId,
+      actorId: args.actorId,
+      action: 'attachment_added',
+      toValue: { id: created.id, name: displayName, url: args.url },
+    })
+
+    return mapRow(created)
+  }
+
+  /** Remove metadata + (for uploaded rows) storage bytes. Metadata
+   *  delete first — if storage remove fails the DB row is gone and
+   *  the file becomes an orphan; safer failure mode (row is the
+   *  source of truth, bytes are recoverable via a bucket audit).
+   *  Link rows skip the storage remove entirely — there's nothing
+   *  to clean up server-side. */
   async delete(
     attachmentId: string,
     actorId: string | null,
   ): Promise<void> {
     const row = await prisma.taskAttachment.findUnique({
       where: { id: attachmentId },
-      select: { id: true, taskId: true, path: true, name: true },
+      select: {
+        id: true,
+        taskId: true,
+        path: true,
+        name: true,
+        sourceUrl: true,
+      },
     })
     if (!row) throw new TaskAttachmentNotFoundError()
 
     await prisma.taskAttachment.delete({ where: { id: attachmentId } })
 
-    const supabase = createAdminClient()
-    await supabase.storage
-      .from(TASK_ATTACHMENT_BUCKET)
-      .remove([row.path])
-      .catch((err) => {
-        console.error(
-          `[task-attachments] orphaned storage object ${row.path}:`,
-          err,
-        )
-      })
+    if (row.sourceUrl === null && row.path) {
+      const supabase = createAdminClient()
+      await supabase.storage
+        .from(TASK_ATTACHMENT_BUCKET)
+        .remove([row.path])
+        .catch((err) => {
+          console.error(
+            `[task-attachments] orphaned storage object ${row.path}:`,
+            err,
+          )
+        })
+    }
 
     await taskActivityService.logEvent({
       taskId: row.taskId,
@@ -267,15 +331,19 @@ class TaskAttachmentService {
     })
   }
 
-  /** Create a short-lived signed URL a client can navigate to for
-   *  download. Verifies the attachment exists in the current tenant
-   *  before minting the URL. */
+  /**
+   * Resolve a "download" URL. For uploaded rows, mints a short-
+   * lived signed Supabase URL. For link rows, returns sourceUrl
+   * unchanged — the caller just window.open's it.
+   */
   async signDownloadUrl(attachmentId: string): Promise<string> {
     const row = await prisma.taskAttachment.findUnique({
       where: { id: attachmentId },
-      select: { id: true, path: true, name: true },
+      select: { id: true, path: true, name: true, sourceUrl: true },
     })
     if (!row) throw new TaskAttachmentNotFoundError()
+
+    if (row.sourceUrl) return row.sourceUrl
 
     const supabase = createAdminClient()
     const { data, error } = await supabase.storage
@@ -287,6 +355,17 @@ class TaskAttachmentService {
       throw new Error(`Could not sign download URL: ${error?.message}`)
     }
     return data.signedUrl
+  }
+}
+
+/** Best-effort host extraction for the link-attachment fallback
+ *  display name. Returns the raw URL if parsing fails so the row
+ *  is still identifiable. */
+function safeHostFromUrl(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
   }
 }
 
