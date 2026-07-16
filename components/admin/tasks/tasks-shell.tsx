@@ -16,6 +16,7 @@ import type { TaskWorkspacePayload } from '@/app/(admin)/admin/tasks/actions'
 
 import { CreateTaskDialog } from './create-task-dialog'
 import { KanbanBoard } from './kanban-board'
+import { TaskDetailDrawer } from './task-detail-drawer'
 import { TasksFilterBar } from './tasks-filter-bar'
 import { TasksStatStrip } from './tasks-stat-strip'
 import { TasksTable } from './tasks-table'
@@ -45,6 +46,11 @@ export function TasksShell({ initialData }: TasksShellProps) {
   const view: TasksViewMode =
     searchParams.get('view') === 'board' ? 'board' : 'list'
 
+  // Drawer open state is URL-driven — ?task=<id>. Deep-linkable +
+  // survives refresh. Clicking a row or card sets it; the drawer's
+  // onOpenChange clears it.
+  const openTaskId = searchParams.get('task')
+
   // Sort state comes from the URL — page.tsx re-fetches with the
   // new params on router.push. Defaults mirror taskFilterSchema.
   const sortBy = (searchParams.get('sort') as SortField) ?? 'createdAt'
@@ -58,6 +64,25 @@ export function TasksShell({ initialData }: TasksShellProps) {
   function refreshWorkspace() {
     startNavigation(() => {
       router.refresh()
+    })
+  }
+
+  function openTask(id: string) {
+    const next = new URLSearchParams(paramsCopy)
+    next.set('task', id)
+    startNavigation(() => {
+      router.push(`/admin/tasks?${next.toString()}`, { scroll: false })
+    })
+  }
+
+  function closeTask() {
+    const next = new URLSearchParams(paramsCopy)
+    next.delete('task')
+    startNavigation(() => {
+      router.push(
+        next.toString() ? `/admin/tasks?${next.toString()}` : '/admin/tasks',
+        { scroll: false },
+      )
     })
   }
 
@@ -109,6 +134,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
             tasks={tasks.items}
             onCreate={() => setCreateOpen(true)}
             onChanged={refreshWorkspace}
+            onOpenTask={openTask}
           />
         ) : (
           <TasksTable
@@ -118,9 +144,17 @@ export function TasksShell({ initialData }: TasksShellProps) {
             onSortChange={handleSortChange}
             onRowChanged={refreshWorkspace}
             onCreate={() => setCreateOpen(true)}
+            onOpenTask={openTask}
           />
         )}
       </div>
+
+      <TaskDetailDrawer
+        taskId={openTaskId}
+        onOpenChange={(open) => {
+          if (!open) closeTask()
+        }}
+      />
 
       <CreateTaskDialog
         open={createOpen}

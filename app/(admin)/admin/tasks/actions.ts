@@ -16,15 +16,19 @@ import { prisma } from '@/lib/prisma'
 import {
   taskAssignmentService,
 } from '@/lib/services/task-assignment-service'
+import { taskActivityService } from '@/lib/services/task-activity-service'
+import type { TaskActivityRow } from '@/lib/services/task-activity-service'
 import {
   taskChecklistService,
   ChecklistItemNotFoundError,
   ChecklistNotFoundError,
+  type ChecklistRow,
 } from '@/lib/services/task-checklist-service'
 import {
   taskCommentService,
   CommentForbiddenError,
   CommentNotFoundError,
+  type TaskCommentRow,
 } from '@/lib/services/task-comment-service'
 import {
   taskService,
@@ -148,6 +152,38 @@ export async function fetchTaskAction(
   try {
     const data = await taskService.get(id)
     return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load task')
+  }
+}
+
+/**
+ * Bundled payload for the detail drawer — task + comments +
+ * checklists + activity in one round trip so opening a card
+ * doesn't waterfall four independent fetches.
+ */
+export interface TaskDrawerPayload {
+  task: TaskDetail
+  comments: TaskCommentRow[]
+  checklists: ChecklistRow[]
+  activity: TaskActivityRow[]
+}
+
+export async function fetchTaskDrawerAction(
+  id: string,
+): Promise<MutationResult<TaskDrawerPayload>> {
+  await requireAdmin()
+  try {
+    const [task, comments, checklists, activity] = await Promise.all([
+      taskService.get(id),
+      taskCommentService.list(id),
+      taskChecklistService.listForTask(id),
+      taskActivityService.listForTask(id, { limit: 100 }),
+    ])
+    return {
+      ok: true,
+      data: { task, comments, checklists, activity: activity.items },
+    }
   } catch (err) {
     return toMutationErr(err, 'Could not load task')
   }
