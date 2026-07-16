@@ -151,9 +151,12 @@ export function TasksShell({ initialData }: TasksShellProps) {
 
       <TaskDetailDrawer
         taskId={openTaskId}
+        statuses={statuses}
+        categories={categories}
         onOpenChange={(open) => {
           if (!open) closeTask()
         }}
+        onChanged={refreshWorkspace}
       />
 
       <CreateTaskDialog

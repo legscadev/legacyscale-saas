@@ -2,21 +2,22 @@
 
 // Task detail drawer. Opens whenever ?task=<id> is in the URL —
 // deep-linkable, refresh-safe. Reads a bundled payload (task +
-// comments + checklists + activity) via one server round trip so
-// there's no waterfall.
+// comments + checklists + activity) via one server round trip.
 //
-// Phase 4.1 ships the read-only surface (header + description +
-// meta grid + assignees/watchers/labels + subtasks + counts).
-// Editable inline fields, comment composer, checklist CRUD, and
-// the activity timeline land in 4.2 → 4.6.
+// Local `task` state is kept in sync with the fetched payload;
+// each inline-editable field commits via updateTaskAction and
+// patches the local state on success so the drawer reflects the
+// change without waiting for a full refetch. onChanged bubbles
+// out to the shell so the stat strip and list/board re-hydrate.
 
-import { format } from 'date-fns'
 import { User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import {
   fetchTaskDrawerAction,
   type TaskDrawerPayload,
+  type WorkflowCategory,
+  type WorkflowStatus,
 } from '@/app/(admin)/admin/tasks/actions'
 import { AvatarGroup } from '@/components/shared/avatar-group'
 import {
@@ -27,18 +28,35 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { TaskUserRef } from '@/lib/services/task-service'
+import type { TaskDetail, TaskUserRef } from '@/lib/services/task-service'
 
-import { LabelChip, PriorityPill, StatusPill } from './task-pills'
+import { LabelChip } from './task-pills'
+import {
+  EditableCategory,
+  EditableDate,
+  EditableDescription,
+  EditableHours,
+  EditablePriority,
+  EditableStatus,
+  EditableTitle,
+} from './task-detail-fields'
 
 interface TaskDetailDrawerProps {
   taskId: string | null
+  statuses: WorkflowStatus[]
+  categories: WorkflowCategory[]
   onOpenChange: (open: boolean) => void
+  /** Fires after any drawer mutation succeeds so the shell can
+   *  revalidate the stat strip + list/board counts. */
+  onChanged?: () => void
 }
 
 export function TaskDetailDrawer({
   taskId,
+  statuses,
+  categories,
   onOpenChange,
+  onChanged,
 }: TaskDetailDrawerProps) {
   const open = taskId !== null
   const [payload, setPayload] = useState<TaskDrawerPayload | null>(null)
@@ -70,13 +88,31 @@ export function TaskDetailDrawer({
     }
   }, [taskId])
 
+  /** Merge a patch into the local task state so field edits reflect
+   *  immediately, and bubble a workspace refresh out to the shell. */
+  function applyPatch(patch: Partial<TaskDetail>) {
+    setPayload((prev) =>
+      prev ? { ...prev, task: { ...prev.task, ...patch } } : prev,
+    )
+    onChanged?.()
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle className="text-base font-medium leading-snug">
-            {payload?.task.title ?? (loading ? 'Loading…' : 'Task')}
-          </SheetTitle>
+          {payload ? (
+            <>
+              <SheetTitle className="sr-only">
+                {payload.task.title}
+              </SheetTitle>
+              <EditableTitle task={payload.task} onSaved={applyPatch} />
+            </>
+          ) : (
+            <SheetTitle className="text-base font-medium leading-snug">
+              {loading ? 'Loading…' : 'Task'}
+            </SheetTitle>
+          )}
         </SheetHeader>
 
         <SheetBody className="space-y-5">
@@ -85,7 +121,12 @@ export function TaskDetailDrawer({
           ) : error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : payload ? (
-            <ReadOnlyBody payload={payload} />
+            <EditableBody
+              payload={payload}
+              statuses={statuses}
+              categories={categories}
+              onPatch={applyPatch}
+            />
           ) : null}
         </SheetBody>
       </SheetContent>
@@ -116,11 +157,19 @@ function DrawerSkeleton() {
 // Body
 // =========================================================
 
-interface ReadOnlyBodyProps {
+interface EditableBodyProps {
   payload: TaskDrawerPayload
+  statuses: WorkflowStatus[]
+  categories: WorkflowCategory[]
+  onPatch: (patch: Partial<TaskDetail>) => void
 }
 
-function ReadOnlyBody({ payload }: ReadOnlyBodyProps) {
+function EditableBody({
+  payload,
+  statuses,
+  categories,
+  onPatch,
+}: EditableBodyProps) {
   const { task, comments, checklists, activity } = payload
   const totalChecklistItems = checklists.reduce(
     (n, c) => n + c.items.length,
@@ -134,25 +183,24 @@ function ReadOnlyBody({ payload }: ReadOnlyBodyProps) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
-        <StatusPill name={task.status.name} color={task.status.color} />
-        <PriorityPill priority={task.priority} />
-        {task.category ? (
-          <span
-            className="rounded-md border px-1.5 py-0.5 text-[11px] font-medium"
-            style={{
-              backgroundColor: `${task.category.color}14`,
-              borderColor: `${task.category.color}66`,
-              color: task.category.color,
-            }}
-          >
-            {task.category.name}
-          </span>
-        ) : null}
+        <EditableStatus
+          task={task}
+          statuses={statuses}
+          onSaved={onPatch}
+        />
+        <EditablePriority task={task} onSaved={onPatch} />
+        <EditableCategory
+          task={task}
+          categories={categories}
+          onSaved={onPatch}
+        />
       </div>
 
-      <DescriptionBlock description={task.description} />
+      <Section label="Description">
+        <EditableDescription task={task} onSaved={onPatch} />
+      </Section>
 
-      <MetaGrid task={task} />
+      <MetaGrid task={task} onPatch={onPatch} />
 
       <PeopleBlock
         reporter={task.reporter}
@@ -176,63 +224,64 @@ function ReadOnlyBody({ payload }: ReadOnlyBodyProps) {
   )
 }
 
-// =========================================================
-// Sub-blocks
-// =========================================================
-
-function DescriptionBlock({ description }: { description: string | null }) {
-  if (!description) {
-    return (
-      <Section label="Description">
-        <p className="text-sm text-muted-foreground italic">
-          No description yet.
-        </p>
-      </Section>
-    )
-  }
+function MetaGrid({
+  task,
+  onPatch,
+}: {
+  task: TaskDetail
+  onPatch: (patch: Partial<TaskDetail>) => void
+}) {
   return (
-    <Section label="Description">
-      <p className="whitespace-pre-wrap text-sm text-foreground">
-        {description}
-      </p>
-    </Section>
+    <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/20 p-3">
+      <MetaCell label="Start date">
+        <EditableDate
+          task={task}
+          field="startDate"
+          label="Start date"
+          onSaved={onPatch}
+        />
+      </MetaCell>
+      <MetaCell label="Due date">
+        <EditableDate
+          task={task}
+          field="dueDate"
+          label="Due date"
+          onSaved={onPatch}
+        />
+      </MetaCell>
+      <MetaCell label="Estimated hours">
+        <EditableHours
+          task={task}
+          field="estimatedHours"
+          label="Estimated hours"
+          onSaved={onPatch}
+        />
+      </MetaCell>
+      <MetaCell label="Actual hours">
+        <EditableHours
+          task={task}
+          field="actualHours"
+          label="Actual hours"
+          onSaved={onPatch}
+        />
+      </MetaCell>
+    </div>
   )
 }
 
-function MetaGrid({
-  task,
+function MetaCell({
+  label,
+  children,
 }: {
-  task: TaskDrawerPayload['task']
+  label: string
+  children: React.ReactNode
 }) {
-  const cells: Array<{ label: string; value: React.ReactNode }> = [
-    {
-      label: 'Start date',
-      value: task.startDate ? format(task.startDate, 'MMM d, yyyy') : '—',
-    },
-    {
-      label: 'Due date',
-      value: task.dueDate ? format(task.dueDate, 'MMM d, yyyy') : '—',
-    },
-    {
-      label: 'Estimated hours',
-      value: task.estimatedHours !== null ? `${task.estimatedHours}h` : '—',
-    },
-    {
-      label: 'Actual hours',
-      value: task.actualHours !== null ? `${task.actualHours}h` : '—',
-    },
-  ]
-
   return (
-    <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/20 p-3">
-      {cells.map((cell) => (
-        <div key={cell.label} className="space-y-0.5">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {cell.label}
-          </p>
-          <p className="text-sm text-foreground tabular-nums">{cell.value}</p>
-        </div>
-      ))}
+    <div className="space-y-0.5">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      {children}
     </div>
   )
 }
@@ -318,7 +367,7 @@ function LabelsBlock({
 function SubtasksBlock({
   subtasks,
 }: {
-  subtasks: TaskDrawerPayload['task']['subtasks']
+  subtasks: TaskDetail['subtasks']
 }) {
   return (
     <Section label={`Subtasks (${subtasks.length})`}>
