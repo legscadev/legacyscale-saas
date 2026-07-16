@@ -320,7 +320,7 @@ export async function signTaskAttachmentUrlAction(
 /**
  * Everything the tracker's list/kanban shell needs on first render:
  * tenant workflow rows + team members (for assignee/reporter pickers)
- * + the initial filtered task list + stats.
+ * + the initial filtered task list.
  *
  * One server-side round trip so the client shell hydrates without a
  * flash of empty pickers. Filters + pagination for the task list are
@@ -357,22 +357,12 @@ export interface TeamMember {
   avatarUrl: string | null
 }
 
-export interface TaskStats {
-  total: number
-  openTotal: number
-  byStatus: Array<{ statusId: string; name: string; count: number }>
-  overdue: number
-  dueSoon: number
-  archived: number
-}
-
 export interface TaskWorkspacePayload {
   statuses: WorkflowStatus[]
   categories: WorkflowCategory[]
   labels: WorkflowLabel[]
   members: TeamMember[]
   tasks: TaskListResult
-  stats: TaskStats
   /** Current viewer's user id — the client uses this to decide
    *  which comments the current viewer authored (and can therefore
    *  edit inline). Admins can delete any comment via the row menu. */
@@ -380,63 +370,6 @@ export interface TaskWorkspacePayload {
   /** Saved views authored by the current user in the current
    *  tenant. Populates the "Views" dropdown next to the filter bar. */
   savedViews: SavedViewRow[]
-}
-
-/** Sum counts for the "open"/"in-progress"/"blocked"/"done"/etc.
- *  strip. Reads from the DB directly rather than re-listing tasks
- *  so we don't pay for join hydration on numbers. */
-async function loadStats(companyId: string): Promise<TaskStats> {
-  const now = new Date()
-  const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
-
-  const [byStatusRows, statuses, overdue, dueSoon, archived] = await Promise.all([
-    prisma.task.groupBy({
-      by: ['statusId'],
-      where: { companyId, deletedAt: null, archivedAt: null },
-      _count: { _all: true },
-    }),
-    prisma.taskStatus.findMany({
-      where: { companyId },
-      select: { id: true, name: true, isTerminal: true, orderIndex: true },
-      orderBy: { orderIndex: 'asc' },
-    }),
-    prisma.task.count({
-      where: {
-        companyId,
-        deletedAt: null,
-        archivedAt: null,
-        dueDate: { lt: now },
-        status: { isTerminal: false },
-      },
-    }),
-    prisma.task.count({
-      where: {
-        companyId,
-        deletedAt: null,
-        archivedAt: null,
-        dueDate: { gte: now, lte: in3days },
-        status: { isTerminal: false },
-      },
-    }),
-    prisma.task.count({
-      where: { companyId, deletedAt: null, archivedAt: { not: null } },
-    }),
-  ])
-
-  const countByStatus = new Map(
-    byStatusRows.map((r) => [r.statusId, r._count._all]),
-  )
-  const byStatus = statuses.map((s) => ({
-    statusId: s.id,
-    name: s.name,
-    count: countByStatus.get(s.id) ?? 0,
-  }))
-  const openTotal = statuses
-    .filter((s) => !s.isTerminal)
-    .reduce((sum, s) => sum + (countByStatus.get(s.id) ?? 0), 0)
-  const total = byStatusRows.reduce((sum, r) => sum + r._count._all, 0)
-
-  return { total, openTotal, byStatus, overdue, dueSoon, archived }
 }
 
 /** Sole entry point for `/admin/tasks` first render. */
@@ -457,7 +390,7 @@ export async function fetchTaskWorkspaceAction(
 
   try {
     const tenantScope = await memberTenantScope()
-    const [statuses, categories, labels, members, tasks, stats, savedViews] =
+    const [statuses, categories, labels, members, tasks, savedViews] =
       await Promise.all([
         prisma.taskStatus.findMany({
           orderBy: { orderIndex: 'asc' },
@@ -496,14 +429,6 @@ export async function fetchTaskWorkspaceAction(
           orderBy: [{ name: 'asc' }, { email: 'asc' }],
         }),
         taskService.list(parsedFilters.data),
-        companyId ? loadStats(companyId) : Promise.resolve<TaskStats>({
-          total: 0,
-          openTotal: 0,
-          byStatus: [],
-          overdue: 0,
-          dueSoon: 0,
-          archived: 0,
-        }),
         taskSavedViewService.listMine(currentUser.id),
       ])
 
@@ -515,7 +440,6 @@ export async function fetchTaskWorkspaceAction(
         labels,
         members,
         tasks,
-        stats,
         currentUserId: currentUser.id,
         savedViews,
       },

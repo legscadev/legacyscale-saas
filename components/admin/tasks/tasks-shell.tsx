@@ -21,7 +21,6 @@ import { KanbanBoard } from './kanban-board'
 import { SavedViewsMenu } from './saved-views-menu'
 import { TaskDetailDrawer } from './task-detail-drawer'
 import { TasksFilterBar } from './tasks-filter-bar'
-import { TasksStatStrip } from './tasks-stat-strip'
 import { TasksTable } from './tasks-table'
 import { ViewToggle, type TasksViewMode } from './view-toggle'
 
@@ -46,7 +45,6 @@ export function TasksShell({ initialData }: TasksShellProps) {
 
   const {
     tasks,
-    stats,
     statuses,
     categories,
     labels,
@@ -140,8 +138,6 @@ export function TasksShell({ initialData }: TasksShellProps) {
           </div>
         }
       />
-
-      <TasksStatStrip stats={stats} />
 
       <div className="flex flex-wrap items-center gap-2">
         <SavedViewsMenu
