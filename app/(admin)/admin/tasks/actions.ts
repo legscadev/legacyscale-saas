@@ -12,6 +12,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { prisma } from '@/lib/prisma'
 import {
   taskAssignmentService,
 } from '@/lib/services/task-assignment-service'
@@ -32,7 +33,10 @@ import {
   type TaskListResult,
 } from '@/lib/services/task-service'
 import { ensureWorkflowReady } from '@/lib/services/task-workflow-service'
-import { getRequestCompanyId } from '@/lib/tenancy/request-company'
+import {
+  getRequestCompanyId,
+  memberTenantScope,
+} from '@/lib/tenancy/request-company'
 import {
   addChecklistItemSchema,
   addCommentSchema,
@@ -146,6 +150,201 @@ export async function fetchTaskAction(
     return { ok: true, data }
   } catch (err) {
     return toMutationErr(err, 'Could not load task')
+  }
+}
+
+// ============================================
+// WORKSPACE FETCHER
+// ============================================
+
+/**
+ * Everything the tracker's list/kanban shell needs on first render:
+ * tenant workflow rows + team members (for assignee/reporter pickers)
+ * + the initial filtered task list + stats.
+ *
+ * One server-side round trip so the client shell hydrates without a
+ * flash of empty pickers. Filters + pagination for the task list are
+ * passed through to fetchTasksAction internally so the URL-driven
+ * refetch path shares code with the initial render.
+ */
+export interface WorkflowStatus {
+  id: string
+  name: string
+  slug: string
+  color: string
+  orderIndex: number
+  isDefault: boolean
+  isTerminal: boolean
+  wipLimit: number | null
+}
+
+export interface WorkflowCategory {
+  id: string
+  name: string
+  color: string
+}
+
+export interface WorkflowLabel {
+  id: string
+  name: string
+  color: string
+}
+
+export interface TeamMember {
+  id: string
+  name: string | null
+  email: string
+  avatarUrl: string | null
+}
+
+export interface TaskStats {
+  total: number
+  openTotal: number
+  byStatus: Array<{ statusId: string; name: string; count: number }>
+  overdue: number
+  dueSoon: number
+  archived: number
+}
+
+export interface TaskWorkspacePayload {
+  statuses: WorkflowStatus[]
+  categories: WorkflowCategory[]
+  labels: WorkflowLabel[]
+  members: TeamMember[]
+  tasks: TaskListResult
+  stats: TaskStats
+}
+
+/** Sum counts for the "open"/"in-progress"/"blocked"/"done"/etc.
+ *  strip. Reads from the DB directly rather than re-listing tasks
+ *  so we don't pay for join hydration on numbers. */
+async function loadStats(companyId: string): Promise<TaskStats> {
+  const now = new Date()
+  const in3days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+
+  const [byStatusRows, statuses, overdue, dueSoon, archived] = await Promise.all([
+    prisma.task.groupBy({
+      by: ['statusId'],
+      where: { companyId, deletedAt: null, archivedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.taskStatus.findMany({
+      where: { companyId },
+      select: { id: true, name: true, isTerminal: true, orderIndex: true },
+      orderBy: { orderIndex: 'asc' },
+    }),
+    prisma.task.count({
+      where: {
+        companyId,
+        deletedAt: null,
+        archivedAt: null,
+        dueDate: { lt: now },
+        status: { isTerminal: false },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        companyId,
+        deletedAt: null,
+        archivedAt: null,
+        dueDate: { gte: now, lte: in3days },
+        status: { isTerminal: false },
+      },
+    }),
+    prisma.task.count({
+      where: { companyId, deletedAt: null, archivedAt: { not: null } },
+    }),
+  ])
+
+  const countByStatus = new Map(
+    byStatusRows.map((r) => [r.statusId, r._count._all]),
+  )
+  const byStatus = statuses.map((s) => ({
+    statusId: s.id,
+    name: s.name,
+    count: countByStatus.get(s.id) ?? 0,
+  }))
+  const openTotal = statuses
+    .filter((s) => !s.isTerminal)
+    .reduce((sum, s) => sum + (countByStatus.get(s.id) ?? 0), 0)
+  const total = byStatusRows.reduce((sum, r) => sum + r._count._all, 0)
+
+  return { total, openTotal, byStatus, overdue, dueSoon, archived }
+}
+
+/** Sole entry point for `/admin/tasks` first render. */
+export async function fetchTaskWorkspaceAction(
+  filters: Record<string, unknown> = {},
+): Promise<MutationResult<TaskWorkspacePayload>> {
+  await requireAdmin()
+  const companyId = await getRequestCompanyId()
+  if (companyId) await ensureWorkflowReady(companyId)
+
+  const parsedFilters = taskFilterSchema.safeParse(filters)
+  if (!parsedFilters.success) {
+    return {
+      ok: false,
+      fieldErrors: fieldErrorsFromZod(parsedFilters.error.issues),
+    }
+  }
+
+  try {
+    const tenantScope = await memberTenantScope()
+    const [statuses, categories, labels, members, tasks, stats] =
+      await Promise.all([
+        prisma.taskStatus.findMany({
+          orderBy: { orderIndex: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            color: true,
+            orderIndex: true,
+            isDefault: true,
+            isTerminal: true,
+            wipLimit: true,
+          },
+        }),
+        prisma.taskCategory.findMany({
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, color: true },
+        }),
+        prisma.taskLabel.findMany({
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, color: true },
+        }),
+        prisma.user.findMany({
+          where: {
+            deletedAt: null,
+            isActive: true,
+            role: { in: ['ADMIN', 'TEAM'] },
+            ...tenantScope,
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+          },
+          orderBy: [{ name: 'asc' }, { email: 'asc' }],
+        }),
+        taskService.list(parsedFilters.data),
+        companyId ? loadStats(companyId) : Promise.resolve<TaskStats>({
+          total: 0,
+          openTotal: 0,
+          byStatus: [],
+          overdue: 0,
+          dueSoon: 0,
+          archived: 0,
+        }),
+      ])
+
+    return {
+      ok: true,
+      data: { statuses, categories, labels, members, tasks, stats },
+    }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load task workspace')
   }
 }
 
