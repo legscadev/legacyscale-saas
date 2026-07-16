@@ -77,6 +77,7 @@ export const createTaskSchema = z.object({
   labelIds: z.array(z.string().uuid()).max(50).optional().default([]),
 })
 export type CreateTaskInput = z.input<typeof createTaskSchema>
+export type CreateTaskOutput = z.output<typeof createTaskSchema>
 
 /**
  * Partial update. Every field optional; explicit null clears the value
@@ -100,6 +101,7 @@ export const updateTaskSchema = z.object({
   labelIds: z.array(z.string().uuid()).max(50).optional(),
 })
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>
+export type UpdateTaskOutput = z.output<typeof updateTaskSchema>
 
 // ============================================
 // FILTER / QUERY

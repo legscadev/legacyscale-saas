@@ -19,10 +19,10 @@ import {
 } from '@/lib/services/task-activity-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type {
-  CreateTaskInput,
+  CreateTaskOutput,
   TaskFilterOutput,
   TaskPriorityValue,
-  UpdateTaskInput,
+  UpdateTaskOutput,
 } from '@/lib/validations/tasks'
 import { TASK_PRIORITY_ORDER } from '@/lib/validations/tasks'
 
@@ -390,7 +390,7 @@ class TaskService {
   }
 
   async create(
-    input: CreateTaskInput,
+    input: CreateTaskOutput,
     reporterId: string | null,
   ): Promise<TaskDetail> {
     const companyId = await requireCompanyId()
@@ -455,7 +455,7 @@ class TaskService {
 
   async update(
     id: string,
-    input: UpdateTaskInput,
+    input: UpdateTaskOutput,
     actorId: string | null,
   ): Promise<TaskDetail> {
     const companyId = await requireCompanyId()
