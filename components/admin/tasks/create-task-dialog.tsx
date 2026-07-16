@@ -534,6 +534,7 @@ function AttachmentBuffer({
 }: AttachmentBufferProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [linkFormOpen, setLinkFormOpen] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
 
   function handleFiles(picked: FileList | null) {
     if (!picked || picked.length === 0) return
@@ -551,10 +552,38 @@ function AttachmentBuffer({
     if (inputRef.current) inputRef.current.value = ''
   }
 
+  // Drop-zone glue. dragOver fires continuously; the state flip
+  // itself is idempotent so we don't churn re-renders.
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    if (disabled) return
+    if (!e.dataTransfer.types.includes('Files')) return
+    e.preventDefault()
+    if (!isDragOver) setIsDragOver(true)
+  }
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    // Only fire when leaving the whole zone (not a child).
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setIsDragOver(false)
+  }
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    if (disabled) return
+    e.preventDefault()
+    setIsDragOver(false)
+    handleFiles(e.dataTransfer.files)
+  }
+
   const hasAny = files.length > 0 || links.length > 0
 
   return (
-    <div className="space-y-2">
+    <div
+      className={cn(
+        'space-y-2 rounded-md border border-transparent p-0.5 transition-colors',
+        isDragOver && 'border-primary/50 bg-primary/5',
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {hasAny ? (
         <ul className="space-y-1.5 rounded-md border bg-muted/20 p-2">
           {files.map((f, i) => (
@@ -637,7 +666,7 @@ function AttachmentBuffer({
           className="flex-1 justify-start text-muted-foreground"
         >
           <Upload className="size-3.5" />
-          Upload (max {MAX_ATTACHMENT_MB} MB)
+          Upload files
         </Button>
         <Button
           type="button"
@@ -651,6 +680,11 @@ function AttachmentBuffer({
           Add link
         </Button>
       </div>
+      <p className="text-[11px] text-muted-foreground">
+        {isDragOver
+          ? `Drop to attach — up to ${MAX_ATTACHMENT_MB} MB per file`
+          : `Drop files here or click Upload. Multiple files allowed, ${MAX_ATTACHMENT_MB} MB max each.`}
+      </p>
 
       {linkFormOpen ? (
         <PendingLinkForm
