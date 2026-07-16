@@ -5,9 +5,10 @@
 // copy of the workspace payload that server actions update via
 // revalidate.
 
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMemo, useState, useTransition } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Settings } from 'lucide-react'
 
 import { PageHeader } from '@/components/shared/page-header'
 import { Button } from '@/components/ui/button'
@@ -108,6 +109,18 @@ export function TasksShell({ initialData }: TasksShellProps) {
         actions={
           <div className="flex items-center gap-2">
             <ViewToggle value={view} />
+            <Button
+              variant="outline"
+              size="icon-sm"
+              render={
+                <Link
+                  href="/admin/tasks/settings"
+                  aria-label="Workflow settings"
+                />
+              }
+            >
+              <Settings className="size-4" />
+            </Button>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
               New task
