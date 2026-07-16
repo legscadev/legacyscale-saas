@@ -27,6 +27,7 @@ import { CheckSquare } from 'lucide-react'
 import type { TaskListItem } from '@/lib/services/task-service'
 
 import { LabelChip, PriorityPill, StatusPill } from './task-pills'
+import { TaskRowActions } from './task-row-actions'
 
 type SortField = 'createdAt' | 'updatedAt' | 'dueDate' | 'priority' | 'orderIndex'
 type SortDir = 'asc' | 'desc'
@@ -38,6 +39,9 @@ interface TasksTableProps {
   onSortChange: (field: SortField) => void
   onOpenTask?: (id: string) => void
   onCreate?: () => void
+  /** Called after any row-action mutation completes so the shell
+   *  can refresh the workspace. */
+  onRowChanged: () => void | Promise<void>
 }
 
 export function TasksTable({
@@ -47,6 +51,7 @@ export function TasksTable({
   onSortChange,
   onOpenTask,
   onCreate,
+  onRowChanged,
 }: TasksTableProps) {
   if (items.length === 0) {
     return (
@@ -97,6 +102,7 @@ export function TasksTable({
             </SortableHead>
             <TableHead className="w-32">Labels</TableHead>
             <TableHead className="w-20 text-right">Meta</TableHead>
+            <TableHead className="w-10" aria-label="Actions" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -183,6 +189,9 @@ export function TasksTable({
                 </TableCell>
                 <TableCell className="text-right">
                   <MetaSummary task={task} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <TaskRowActions task={task} onChanged={onRowChanged} />
                 </TableCell>
               </TableRow>
             )
