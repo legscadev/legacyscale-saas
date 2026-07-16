@@ -44,6 +44,15 @@ export default async function AdminTasksPage({
   const raw = await searchParams
   const filters = parseFiltersFromSearchParams(raw)
 
+  // Board view needs the full open set to distribute across
+  // columns, so lift the default page cap. List view stays paged.
+  const view = Array.isArray(raw.view) ? raw.view[0] : raw.view
+  if (view === 'board') {
+    filters.limit = 500
+    filters.sortBy = 'orderIndex'
+    filters.sortOrder = 'asc'
+  }
+
   const result = await fetchTaskWorkspaceAction(filters)
   if (!result.ok) {
     // Bad filter params → strip them and reload with a clean slate.

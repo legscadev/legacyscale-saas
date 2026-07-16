@@ -125,7 +125,7 @@ export const taskFilterSchema = z.object({
   dueAfter: optionalDate.optional(),
   includeArchived: z.boolean().optional().default(false),
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(50),
+  limit: z.coerce.number().int().positive().max(500).default(50),
   sortBy: z
     .enum(['createdAt', 'updatedAt', 'dueDate', 'priority', 'orderIndex'])
     .default('createdAt'),

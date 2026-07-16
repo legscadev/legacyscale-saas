@@ -15,9 +15,11 @@ import { Button } from '@/components/ui/button'
 import type { TaskWorkspacePayload } from '@/app/(admin)/admin/tasks/actions'
 
 import { CreateTaskDialog } from './create-task-dialog'
+import { KanbanBoard } from './kanban-board'
 import { TasksFilterBar } from './tasks-filter-bar'
 import { TasksStatStrip } from './tasks-stat-strip'
 import { TasksTable } from './tasks-table'
+import { ViewToggle, type TasksViewMode } from './view-toggle'
 
 type SortField =
   | 'createdAt'
@@ -38,6 +40,10 @@ export function TasksShell({ initialData }: TasksShellProps) {
   const [createOpen, setCreateOpen] = useState(false)
 
   const { tasks, stats, statuses, categories, labels, members } = initialData
+
+  // View comes from ?view=; defaults to list.
+  const view: TasksViewMode =
+    searchParams.get('view') === 'board' ? 'board' : 'list'
 
   // Sort state comes from the URL — page.tsx re-fetches with the
   // new params on router.push. Defaults mirror taskFilterSchema.
@@ -74,10 +80,13 @@ export function TasksShell({ initialData }: TasksShellProps) {
         title="Tasks"
         description="Track internal work across your team. Filter, prioritize, and hand off."
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4" />
-            New task
-          </Button>
+          <div className="flex items-center gap-2">
+            <ViewToggle value={view} />
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" />
+              New task
+            </Button>
+          </div>
         }
       />
 
@@ -94,14 +103,22 @@ export function TasksShell({ initialData }: TasksShellProps) {
         aria-busy={isNavigating}
         className={isNavigating ? 'opacity-70 transition-opacity' : ''}
       >
-        <TasksTable
-          items={tasks.items}
-          sortBy={sortBy}
-          sortOrder={sortOrder}
-          onSortChange={handleSortChange}
-          onRowChanged={refreshWorkspace}
-          onCreate={() => setCreateOpen(true)}
-        />
+        {view === 'board' ? (
+          <KanbanBoard
+            statuses={statuses}
+            tasks={tasks.items}
+            onCreate={() => setCreateOpen(true)}
+          />
+        ) : (
+          <TasksTable
+            items={tasks.items}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSortChange={handleSortChange}
+            onRowChanged={refreshWorkspace}
+            onCreate={() => setCreateOpen(true)}
+          />
+        )}
       </div>
 
       <CreateTaskDialog
