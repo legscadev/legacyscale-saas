@@ -1,24 +1,31 @@
 'use client'
 
-// Create-task dialog. Covers title, description (rich text),
-// status, priority, category, assignees, due date, and attachments
-// (files + links). Labels + watchers still live on the drawer.
+// Create-task dialog. Jira-style two-column layout: content on the
+// left (title, description, attachments), metadata sidebar on the
+// right (status, priority, due date, category, assignees, labels).
 //
-// Attachments are inherently a two-phase submit — we need a
-// task_id before we can write a task_attachment. On save we
-// create the task first, then upload buffered files / register
-// buffered link URLs in parallel; per-attachment failures surface
-// as separate toasts but don't roll back the task.
+// Attachments are a two-phase submit: create the task, then fan
+// out per-file uploads + per-link registrations against the new
+// task_id. Per-attachment failures toast but don't roll back the
+// task itself.
 
-import { useMemo, useRef, useState, useTransition } from 'react'
+import {
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
 import {
   Check,
   ExternalLink,
+  Flag,
+  Folder,
   Link2,
   Paperclip,
   Search,
+  Tag,
   Upload,
-  Users,
+  UserCircle,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -41,13 +48,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 import {
@@ -56,9 +56,12 @@ import {
   uploadTaskAttachmentAction,
   type TeamMember,
   type WorkflowCategory,
+  type WorkflowLabel,
   type WorkflowStatus,
 } from '@/app/(admin)/admin/tasks/actions'
 import { TASK_PRIORITY_LABELS } from '@/lib/validations/tasks'
+
+import { LabelChip, PriorityPill, StatusPill } from './task-pills'
 
 const MAX_ATTACHMENT_MB = 10
 
@@ -70,12 +73,9 @@ interface CreateTaskDialogProps {
   onCreated: () => void | Promise<void>
   statuses: WorkflowStatus[]
   categories: WorkflowCategory[]
+  labels: WorkflowLabel[]
   members: TeamMember[]
 }
-
-// Sentinel value used by the "no category" option. Radix Select
-// rejects an empty-string value so we swap in / out here.
-const NO_CATEGORY = '__none__'
 
 export function CreateTaskDialog({
   open,
@@ -83,6 +83,7 @@ export function CreateTaskDialog({
   onCreated,
   statuses,
   categories,
+  labels,
   members,
 }: CreateTaskDialogProps) {
   const defaultStatus =
@@ -90,11 +91,12 @@ export function CreateTaskDialog({
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [statusId, setStatusId] = useState(defaultStatus?.id ?? '')
+  const [statusId, setStatusId] = useState<string>(defaultStatus?.id ?? '')
   const [priority, setPriority] = useState<PriorityValue>('MEDIUM')
-  const [categoryId, setCategoryId] = useState<string>(NO_CATEGORY)
+  const [categoryId, setCategoryId] = useState<string | null>(null)
   const [dueDate, setDueDate] = useState('')
   const [assigneeIds, setAssigneeIds] = useState<string[]>([])
+  const [labelIds, setLabelIds] = useState<string[]>([])
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [pendingLinks, setPendingLinks] = useState<
     Array<{ name: string; url: string }>
@@ -109,9 +111,10 @@ export function CreateTaskDialog({
     setDescription('')
     setStatusId(defaultStatus?.id ?? '')
     setPriority('MEDIUM')
-    setCategoryId(NO_CATEGORY)
+    setCategoryId(null)
     setDueDate('')
     setAssigneeIds([])
+    setLabelIds([])
     setPendingFiles([])
     setPendingLinks([])
     setErrors({})
@@ -130,8 +133,6 @@ export function CreateTaskDialog({
     }
 
     startSave(async () => {
-      // Description is stored as HTML from Tiptap; empty-doc case
-      // is either '' or '<p></p>' — normalize both to null.
       const desc = description.trim()
       const normalizedDesc =
         !desc || desc === '<p></p>' ? null : desc
@@ -141,11 +142,11 @@ export function CreateTaskDialog({
         description: normalizedDesc,
         statusId: statusId || undefined,
         priority,
-        categoryId: categoryId === NO_CATEGORY ? null : categoryId,
+        categoryId,
         dueDate: dueDate || '',
         assigneeIds,
         watcherIds: [],
-        labelIds: [],
+        labelIds,
       })
 
       if (!result.ok) {
@@ -154,17 +155,15 @@ export function CreateTaskDialog({
         return
       }
 
-      // Task created. Fan out attachment work — task-id is required
-      // (we can't write task_attachment rows without it), so this
-      // is a two-phase flow. Per-attachment failures surface as
-      // toasts but don't roll back the task itself.
+      // Two-phase attachment submit. Per-attachment failures toast
+      // individually; the task itself stays created.
       const taskId = result.data.id
-      const attachmentJobs: Array<Promise<unknown>> = []
+      const jobs: Array<Promise<unknown>> = []
       for (const file of pendingFiles) {
         const fd = new FormData()
         fd.set('taskId', taskId)
         fd.set('file', file)
-        attachmentJobs.push(
+        jobs.push(
           uploadTaskAttachmentAction(fd).then((res) => {
             if (!res.ok) {
               toast.error(`"${file.name}" upload failed: ${res.error ?? 'unknown error'}`)
@@ -173,7 +172,7 @@ export function CreateTaskDialog({
         )
       }
       for (const link of pendingLinks) {
-        attachmentJobs.push(
+        jobs.push(
           registerTaskLinkAttachmentAction({
             taskId,
             name: link.name,
@@ -185,7 +184,7 @@ export function CreateTaskDialog({
           }),
         )
       }
-      if (attachmentJobs.length > 0) await Promise.all(attachmentJobs)
+      if (jobs.length > 0) await Promise.all(jobs)
 
       toast.success('Task created')
       resetForm()
@@ -201,146 +200,44 @@ export function CreateTaskDialog({
         onOpenChange(o)
       }}
     >
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>New task</DialogTitle>
-          <DialogDescription>
-            Add a task to your team&apos;s tracker. You can assign people
-            and tag labels from the task itself.
+      <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader className="border-b p-5">
+          <DialogTitle>Create task</DialogTitle>
+          <DialogDescription className="sr-only">
+            Create a task in your team&apos;s tracker.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="task-title">Title</Label>
-            <Input
-              id="task-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Migrate the billing service"
-              disabled={isSaving}
-              autoFocus
-              aria-invalid={!!errors.title}
-            />
-            {errors.title?.[0] ? (
-              <p className="text-xs text-destructive">{errors.title[0]}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <RichTextEditor
-              value={description}
-              onChange={setDescription}
-              placeholder="Optional. Add context, acceptance criteria, links."
-              disabled={isSaving}
-              size="sm"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="task-status">Status</Label>
-              <Select
-                value={statusId}
-                onValueChange={(v) => setStatusId(v ?? '')}
-                disabled={isSaving}
-              >
-                <SelectTrigger id="task-status">
-                  <SelectValue placeholder="Pick a status">
-                    {(v: string) =>
-                      statuses.find((s) => s.id === v)?.name ?? ''
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {statuses.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="task-priority">Priority</Label>
-              <Select
-                value={priority}
-                onValueChange={(v) => setPriority(v as PriorityValue)}
-                disabled={isSaving}
-              >
-                <SelectTrigger id="task-priority">
-                  <SelectValue>
-                    {(v: string) =>
-                      TASK_PRIORITY_LABELS[v as PriorityValue] ?? ''
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {(
-                    Object.entries(TASK_PRIORITY_LABELS) as Array<
-                      [PriorityValue, string]
-                    >
-                  ).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="task-category">Category</Label>
-              <Select
-                value={categoryId}
-                onValueChange={(v) => setCategoryId(v ?? NO_CATEGORY)}
-                disabled={isSaving}
-              >
-                <SelectTrigger id="task-category">
-                  <SelectValue>
-                    {(v: string) =>
-                      v === NO_CATEGORY
-                        ? 'None'
-                        : categories.find((c) => c.id === v)?.name ?? 'None'
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_CATEGORY}>None</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="task-due">Due date</Label>
+        <form
+          id="create-task-form"
+          onSubmit={handleSubmit}
+          className="grid max-h-[calc(92vh-14rem)] grid-cols-1 gap-0 overflow-hidden sm:grid-cols-[minmax(0,1fr)_260px]"
+        >
+          {/* Left column — content. */}
+          <div className="min-w-0 space-y-5 overflow-y-auto border-b p-5 sm:border-b-0 sm:border-r">
+            <FieldRow label="Summary" required error={errors.title?.[0]}>
               <Input
-                id="task-due"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                id="task-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="What needs to be done?"
                 disabled={isSaving}
+                autoFocus
+                aria-invalid={!!errors.title}
               />
-            </div>
+            </FieldRow>
 
-            <div className="col-span-2 space-y-2">
-              <Label>Assignees</Label>
-              <AssigneesPicker
-                members={members}
-                selectedIds={assigneeIds}
-                onChange={setAssigneeIds}
+            <FieldRow label="Description">
+              <RichTextEditor
+                value={description}
+                onChange={setDescription}
+                placeholder="Add a description…"
                 disabled={isSaving}
+                size="sm"
               />
-            </div>
+            </FieldRow>
 
-            <div className="col-span-2 space-y-2">
-              <Label>Attachments</Label>
+            <FieldRow label="Attachments">
               <AttachmentBuffer
                 files={pendingFiles}
                 links={pendingLinks}
@@ -348,56 +245,351 @@ export function CreateTaskDialog({
                 onLinksChange={setPendingLinks}
                 disabled={isSaving}
               />
-            </div>
+            </FieldRow>
           </div>
 
-          {formError ? (
-            <p className="text-sm text-destructive">{formError}</p>
-          ) : null}
+          {/* Right sidebar — metadata. */}
+          <aside className="space-y-4 overflow-y-auto bg-muted/20 p-5">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Details
+            </p>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSaving || !statusId}>
-              {isSaving ? 'Creating…' : 'Create task'}
-            </Button>
-          </DialogFooter>
+            <SidebarField label="Status">
+              <StatusField
+                statuses={statuses}
+                value={statusId}
+                onChange={setStatusId}
+                disabled={isSaving}
+              />
+            </SidebarField>
+
+            <SidebarField label="Priority">
+              <PriorityField
+                value={priority}
+                onChange={setPriority}
+                disabled={isSaving}
+              />
+            </SidebarField>
+
+            <SidebarField label="Due date">
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                disabled={isSaving}
+                className="h-9 text-sm"
+              />
+              {dueDate ? (
+                <button
+                  type="button"
+                  onClick={() => setDueDate('')}
+                  className="mt-1 text-[11px] text-muted-foreground hover:text-destructive"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </SidebarField>
+
+            <SidebarField label="Category">
+              <CategoryField
+                categories={categories}
+                value={categoryId}
+                onChange={setCategoryId}
+                disabled={isSaving}
+              />
+            </SidebarField>
+
+            <SidebarField label="Assignees">
+              <AssigneesField
+                members={members}
+                value={assigneeIds}
+                onChange={setAssigneeIds}
+                disabled={isSaving}
+              />
+            </SidebarField>
+
+            <SidebarField label="Labels">
+              <LabelsField
+                labels={labels}
+                value={labelIds}
+                onChange={setLabelIds}
+                disabled={isSaving}
+              />
+            </SidebarField>
+          </aside>
         </form>
+
+        {formError ? (
+          <p className="border-t px-5 pt-3 text-sm text-destructive">
+            {formError}
+          </p>
+        ) : null}
+
+        <DialogFooter className="border-t bg-background p-4">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={isSaving}
+          >
+            Cancel
+          </Button>
+          <Button
+            // The footer sits outside the form (keeps the two-
+            // column grid clean); the `form` attribute wires the
+            // submit button to the outer <form id="create-task-form">.
+            type="submit"
+            form="create-task-form"
+            disabled={isSaving || !statusId || !title.trim()}
+          >
+            {isSaving ? 'Creating…' : 'Create task'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
 
 // =========================================================
-// Assignees picker (self-contained — the drawer's shared
-// AssigneePicker expects a full TaskDetail we don't have yet).
+// Left-column field row — label on top, control below. Mirrors
+// Jira's create-issue layout: field label + optional required
+// marker + inline error.
 // =========================================================
 
-interface AssigneesPickerProps {
-  members: TeamMember[]
-  selectedIds: string[]
-  onChange: (next: string[]) => void
-  disabled?: boolean
+function FieldRow({
+  label,
+  required,
+  error,
+  children,
+}: {
+  label: string
+  required?: boolean
+  error?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-muted-foreground">
+        {label}
+        {required ? <span className="ml-0.5 text-destructive">*</span> : null}
+      </Label>
+      {children}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  )
 }
 
-function AssigneesPicker({
-  members,
-  selectedIds,
+/** Right-sidebar field — tighter, always compact. */
+function SidebarField({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      {children}
+    </div>
+  )
+}
+
+// =========================================================
+// Metadata fields — each renders a click-to-open picker sized for
+// the right sidebar (full-width trigger, dropdown flush left).
+// =========================================================
+
+function StatusField({
+  statuses,
+  value,
   onChange,
   disabled,
-}: AssigneesPickerProps) {
-  const [query, setQuery] = useState('')
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
-  const selectedMembers = useMemo(
-    () => members.filter((m) => selectedSet.has(m.id)),
-    [members, selectedSet],
+}: {
+  statuses: WorkflowStatus[]
+  value: string
+  onChange: (id: string) => void
+  disabled?: boolean
+}) {
+  const current = statuses.find((s) => s.id === value)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        render={
+          <button
+            type="button"
+            className={cn(
+              'flex h-9 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-xs',
+              'hover:bg-accent hover:text-foreground disabled:opacity-50',
+            )}
+          />
+        }
+      >
+        {current ? (
+          <StatusPill name={current.name} color={current.color} />
+        ) : (
+          <span className="text-muted-foreground">Select status</span>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56 p-1">
+        {statuses.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onChange(s.id)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+          >
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: s.color }}
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1 truncate">{s.name}</span>
+            {value === s.id ? <Check className="size-3.5 text-primary" /> : null}
+          </button>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
+}
+
+function PriorityField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: PriorityValue
+  onChange: (next: PriorityValue) => void
+  disabled?: boolean
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        render={
+          <button
+            type="button"
+            className={cn(
+              'flex h-9 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-xs',
+              'hover:bg-accent hover:text-foreground disabled:opacity-50',
+            )}
+          />
+        }
+      >
+        <PriorityPill priority={value} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-44 p-1">
+        {(Object.entries(TASK_PRIORITY_LABELS) as Array<[PriorityValue, string]>).map(
+          ([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => onChange(val)}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            >
+              <Flag className="size-3 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+              {value === val ? <Check className="size-3.5 text-primary" /> : null}
+            </button>
+          ),
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function CategoryField({
+  categories,
+  value,
+  onChange,
+  disabled,
+}: {
+  categories: WorkflowCategory[]
+  value: string | null
+  onChange: (id: string | null) => void
+  disabled?: boolean
+}) {
+  const current = categories.find((c) => c.id === value)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        render={
+          <button
+            type="button"
+            className={cn(
+              'flex h-9 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-xs',
+              'hover:bg-accent hover:text-foreground disabled:opacity-50',
+            )}
+          />
+        }
+      >
+        {current ? (
+          <>
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: current.color }}
+              aria-hidden
+            />
+            {current.name}
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <Folder className="size-3.5" />
+            None
+          </span>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56 p-1">
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent"
+        >
+          <span className="size-2 rounded-full border" aria-hidden />
+          No category
+          {value === null ? (
+            <Check className="ml-auto size-3.5 text-primary" />
+          ) : null}
+        </button>
+        {categories.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onChange(c.id)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+          >
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: c.color }}
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1 truncate">{c.name}</span>
+            {value === c.id ? (
+              <Check className="size-3.5 text-primary" />
+            ) : null}
+          </button>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function AssigneesField({
+  members,
+  value,
+  onChange,
+  disabled,
+}: {
+  members: TeamMember[]
+  value: string[]
+  onChange: (ids: string[]) => void
+  disabled?: boolean
+}) {
+  const [query, setQuery] = useState('')
+  const selectedSet = useMemo(() => new Set(value), [value])
+  const selectedMembers = members.filter((m) => selectedSet.has(m.id))
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return members
@@ -410,9 +602,7 @@ function AssigneesPicker({
 
   function toggle(id: string) {
     onChange(
-      selectedSet.has(id)
-        ? selectedIds.filter((v) => v !== id)
-        : [...selectedIds, id],
+      selectedSet.has(id) ? value.filter((v) => v !== id) : [...value, id],
     )
   }
 
@@ -424,15 +614,15 @@ function AssigneesPicker({
           <button
             type="button"
             className={cn(
-              'flex h-9 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-xs transition-colors',
-              'hover:bg-accent hover:text-accent-foreground disabled:opacity-50',
+              'flex min-h-9 w-full items-center gap-2 rounded-md border bg-background px-3 py-1 text-left text-sm shadow-xs',
+              'hover:bg-accent hover:text-foreground disabled:opacity-50',
             )}
           />
         }
       >
         {selectedMembers.length === 0 ? (
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <Users className="size-3.5" aria-hidden />
+            <UserCircle className="size-3.5" />
             Unassigned
           </span>
         ) : (
@@ -443,18 +633,18 @@ function AssigneesPicker({
                 avatarUrl: null,
               }))}
               size="sm"
-              max={4}
+              max={3}
             />
-            <span className="truncate text-muted-foreground">
+            <span className="min-w-0 truncate text-muted-foreground">
               {selectedMembers.length === 1
-                ? (selectedMembers[0]!.name ??
-                    selectedMembers[0]!.email.split('@')[0])
-                : `${selectedMembers.length} assigned`}
+                ? selectedMembers[0]?.name ??
+                  selectedMembers[0]?.email.split('@')[0]
+                : `${selectedMembers.length} assignees`}
             </span>
           </>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72 p-0">
+      <DropdownMenuContent align="end" className="w-64 p-0">
         <div className="border-b p-2">
           <div className="relative">
             <Search
@@ -470,7 +660,7 @@ function AssigneesPicker({
             />
           </div>
         </div>
-        <div className="max-h-64 overflow-auto p-1">
+        <div className="max-h-60 overflow-auto p-1">
           {filtered.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-muted-foreground">
               No team members found.
@@ -498,9 +688,116 @@ function AssigneesPicker({
                   <span className="min-w-0 flex-1 truncate">
                     {m.name ?? m.email}
                   </span>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
-                    {m.email.split('@')[0]}
-                  </span>
+                </button>
+              )
+            })
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function LabelsField({
+  labels,
+  value,
+  onChange,
+  disabled,
+}: {
+  labels: WorkflowLabel[]
+  value: string[]
+  onChange: (ids: string[]) => void
+  disabled?: boolean
+}) {
+  const [query, setQuery] = useState('')
+  const selectedSet = useMemo(() => new Set(value), [value])
+  const selectedLabels = labels.filter((l) => selectedSet.has(l.id))
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return labels
+    return labels.filter((l) => l.name.toLowerCase().includes(q))
+  }, [labels, query])
+
+  function toggle(id: string) {
+    onChange(
+      selectedSet.has(id) ? value.filter((v) => v !== id) : [...value, id],
+    )
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        render={
+          <button
+            type="button"
+            className={cn(
+              'flex min-h-9 w-full items-center gap-2 rounded-md border bg-background px-3 py-1 text-left text-sm shadow-xs',
+              'hover:bg-accent hover:text-foreground disabled:opacity-50',
+            )}
+          />
+        }
+      >
+        {selectedLabels.length === 0 ? (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <Tag className="size-3.5" />
+            No labels
+          </span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1">
+            {selectedLabels.map((l) => (
+              <LabelChip key={l.id} name={l.name} color={l.color} />
+            ))}
+          </div>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64 p-0">
+        <div className="border-b p-2">
+          <div className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search labels…"
+              className="h-8 pl-7 text-sm"
+              autoFocus
+            />
+          </div>
+        </div>
+        <div className="max-h-60 overflow-auto p-1">
+          {filtered.length === 0 ? (
+            <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+              No labels found.
+            </p>
+          ) : (
+            filtered.map((l) => {
+              const checked = selectedSet.has(l.id)
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => toggle(l.id)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+                >
+                  <div
+                    className={cn(
+                      'flex size-4 shrink-0 items-center justify-center rounded-sm border',
+                      checked
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-input',
+                    )}
+                  >
+                    {checked ? <Check className="size-3" /> : null}
+                  </div>
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: l.color }}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate">{l.name}</span>
                 </button>
               )
             })
@@ -513,8 +810,7 @@ function AssigneesPicker({
 
 // =========================================================
 // Attachment buffer — local File[] + link[] until we have a
-// task_id to associate them with. Rendered above the DialogFooter
-// so operators can review what they'll attach before hitting Save.
+// task_id to associate them with. Drag-and-drop supported.
 // =========================================================
 
 interface AttachmentBufferProps {
@@ -552,8 +848,6 @@ function AttachmentBuffer({
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  // Drop-zone glue. dragOver fires continuously; the state flip
-  // itself is idempotent so we don't churn re-renders.
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
     if (disabled) return
     if (!e.dataTransfer.types.includes('Files')) return
@@ -561,7 +855,6 @@ function AttachmentBuffer({
     if (!isDragOver) setIsDragOver(true)
   }
   function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
-    // Only fire when leaving the whole zone (not a child).
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
     setIsDragOver(false)
   }
@@ -577,19 +870,19 @@ function AttachmentBuffer({
   return (
     <div
       className={cn(
-        'space-y-2 rounded-md border border-transparent p-0.5 transition-colors',
-        isDragOver && 'border-primary/50 bg-primary/5',
+        'space-y-2 rounded-md border border-dashed p-3 transition-colors',
+        isDragOver ? 'border-primary/60 bg-primary/5' : 'border-border/60',
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {hasAny ? (
-        <ul className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+        <ul className="space-y-1">
           {files.map((f, i) => (
             <li
               key={`f-${i}-${f.name}`}
-              className="flex items-center gap-2 text-sm"
+              className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1 text-sm"
             >
               <Paperclip
                 className="size-3.5 shrink-0 text-muted-foreground"
@@ -617,7 +910,7 @@ function AttachmentBuffer({
           {links.map((l, i) => (
             <li
               key={`l-${i}-${l.url}`}
-              className="flex items-center gap-2 text-sm"
+              className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1 text-sm"
             >
               <Link2
                 className="size-3.5 shrink-0 text-muted-foreground"
@@ -656,35 +949,37 @@ function AttachmentBuffer({
         onChange={(e) => handleFiles(e.target.files)}
       />
 
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => inputRef.current?.click()}
-          disabled={disabled}
-          className="flex-1 justify-start text-muted-foreground"
-        >
-          <Upload className="size-3.5" />
-          Upload files
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setLinkFormOpen((v) => !v)}
-          disabled={disabled}
-          className="flex-1 justify-start text-muted-foreground"
-        >
-          <Link2 className="size-3.5" />
-          Add link
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-muted-foreground">
+          {isDragOver
+            ? `Drop to attach — up to ${MAX_ATTACHMENT_MB} MB per file`
+            : `Drop files here or use the buttons. Max ${MAX_ATTACHMENT_MB} MB each.`}
+        </p>
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => inputRef.current?.click()}
+            disabled={disabled}
+            className="h-7 text-xs"
+          >
+            <Upload className="size-3.5" />
+            Upload files
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setLinkFormOpen((v) => !v)}
+            disabled={disabled}
+            className="h-7 text-xs"
+          >
+            <Link2 className="size-3.5" />
+            Add link
+          </Button>
+        </div>
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        {isDragOver
-          ? `Drop to attach — up to ${MAX_ATTACHMENT_MB} MB per file`
-          : `Drop files here or click Upload. Multiple files allowed, ${MAX_ATTACHMENT_MB} MB max each.`}
-      </p>
 
       {linkFormOpen ? (
         <PendingLinkForm
@@ -713,7 +1008,6 @@ function PendingLinkForm({ onCancel, onAdd, disabled }: PendingLinkFormProps) {
   function commit() {
     const trimmedUrl = url.trim()
     if (!trimmedUrl) return
-    // Basic client-side validation — server re-checks protocol.
     try {
       const parsed = new URL(trimmedUrl)
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -728,7 +1022,7 @@ function PendingLinkForm({ onCancel, onAdd, disabled }: PendingLinkFormProps) {
   }
 
   return (
-    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+    <div className="space-y-2 rounded-md border bg-background p-2">
       <Input
         value={url}
         onChange={(e) => setUrl(e.target.value)}
@@ -782,3 +1076,4 @@ function safeHost(url: string): string {
     return url
   }
 }
+
