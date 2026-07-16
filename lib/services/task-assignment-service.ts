@@ -54,7 +54,7 @@ class TaskAssignmentService {
         to: [...input.userIds].sort(),
         tx,
       })
-    })
+    }, { timeout: 15_000 })
   }
 
   async setWatchers(
@@ -85,7 +85,7 @@ class TaskAssignmentService {
         to: [...input.userIds].sort(),
         tx,
       })
-    })
+    }, { timeout: 15_000 })
   }
 
   /** Add a single user as watcher (self-follow). Idempotent — the

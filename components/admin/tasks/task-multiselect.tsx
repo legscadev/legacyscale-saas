@@ -56,6 +56,9 @@ interface MultiSelectPopoverProps {
   emptyLabel?: string
   searchPlaceholder?: string
   disabled?: boolean
+  /** Stretch the trigger button to fill its container — used by
+   *  the label picker so the whole row is clickable. */
+  fullWidth?: boolean
 }
 
 function MultiSelectPopover({
@@ -66,6 +69,7 @@ function MultiSelectPopover({
   emptyLabel = 'No results.',
   searchPlaceholder = 'Search…',
   disabled,
+  fullWidth,
 }: MultiSelectPopoverProps) {
   const [query, setQuery] = useState('')
   const selectedSet = useMemo(() => new Set(selected), [selected])
@@ -82,7 +86,19 @@ function MultiSelectPopover({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger disabled={disabled} render={<div />}>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        render={
+          <button
+            type="button"
+            className={cn(
+              'rounded-md border border-transparent px-1.5 py-1 text-left transition-colors',
+              'hover:border-border hover:bg-muted/40 disabled:opacity-50',
+              fullWidth && 'w-full',
+            )}
+          />
+        }
+      >
         {trigger}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72 p-0">
@@ -188,10 +204,7 @@ export function AssigneePicker({
   return (
     <MultiSelectPopover
       trigger={
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-md border border-transparent px-1.5 py-1 hover:border-border hover:bg-muted/40"
-        >
+        <span className="inline-flex items-center gap-2">
           {task.assignees.length === 0 ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <User className="size-3" aria-hidden />
@@ -212,7 +225,7 @@ export function AssigneePicker({
               </span>
             </>
           )}
-        </button>
+        </span>
       }
       options={members.map((m) => ({
         id: m.id,
@@ -260,10 +273,7 @@ export function WatcherPicker({
   return (
     <MultiSelectPopover
       trigger={
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-md border border-transparent px-1.5 py-1 hover:border-border hover:bg-muted/40"
-        >
+        <span className="inline-flex items-center gap-2">
           {task.watchers.length === 0 ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Users className="size-3" aria-hidden />
@@ -284,7 +294,7 @@ export function WatcherPicker({
               </span>
             </>
           )}
-        </button>
+        </span>
       }
       options={members.map((m) => ({
         id: m.id,
@@ -332,23 +342,19 @@ export function LabelPicker({ task, labels, onSaved }: LabelPickerProps) {
 
   return (
     <MultiSelectPopover
+      fullWidth
       trigger={
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 rounded-md border border-transparent p-1.5 text-left transition-colors hover:border-border hover:bg-muted/40"
-        >
-          {task.labels.length === 0 ? (
-            <span className="text-xs italic text-muted-foreground">
-              Click to add labels
-            </span>
-          ) : (
-            <div className="flex flex-wrap gap-1">
-              {task.labels.map((l) => (
-                <LabelChip key={l.id} name={l.name} color={l.color} />
-              ))}
-            </div>
-          )}
-        </button>
+        task.labels.length === 0 ? (
+          <span className="text-xs italic text-muted-foreground">
+            Click to add labels
+          </span>
+        ) : (
+          <span className="flex flex-wrap gap-1">
+            {task.labels.map((l) => (
+              <LabelChip key={l.id} name={l.name} color={l.color} />
+            ))}
+          </span>
+        )
       }
       options={labels.map((l) => ({
         id: l.id,

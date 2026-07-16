@@ -623,7 +623,7 @@ class TaskService {
           tx,
         })
       }
-    })
+    }, { timeout: 15_000 })
 
     return this.get(id)
   }

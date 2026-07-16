@@ -95,6 +95,10 @@ class TaskCommentService {
     const watcherSet = new Set<string>(mentions)
     if (authorId) watcherSet.add(authorId)
 
+    // 15s tx timeout — Supabase pooler round-trips can push the
+    // three writes (comment + watcher upsert + activity log) past
+    // Prisma's 5s default in dev. Interactive txs still commit on
+    // first return; the higher ceiling is just headroom.
     const created = await prisma.$transaction(async (tx) => {
       const c = await tx.taskComment.create({
         data: {
@@ -127,7 +131,7 @@ class TaskCommentService {
       })
 
       return c
-    })
+    }, { timeout: 15_000 })
 
     return mapRow(created)
   }

@@ -11,7 +11,7 @@
 // out to the shell so the stat strip and list/board re-hydrate.
 
 import { User } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
   fetchTaskDrawerAction,
@@ -32,6 +32,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TaskDetail, TaskUserRef } from '@/lib/services/task-service'
 
+import { TaskActivityPanel } from './task-activity-panel'
 import { TaskChecklistsPanel } from './task-checklists-panel'
 import { TaskCommentsPanel } from './task-comments-panel'
 import {
@@ -102,6 +103,17 @@ export function TaskDetailDrawer({
     }
   }, [taskId])
 
+  /** Silent re-fetch of the drawer payload — called by the
+   *  comment / checklist panels after a mutation so their section
+   *  counts + the activity timeline pick up the change without a
+   *  visible loading flash. */
+  const refetch = useCallback(async () => {
+    if (!taskId) return
+    const res = await fetchTaskDrawerAction(taskId)
+    if (res.ok) setPayload(res.data)
+    onChanged?.()
+  }, [taskId, onChanged])
+
   /** Merge a patch into the local task state so field edits reflect
    *  immediately, and bubble a workspace refresh out to the shell. */
   function applyPatch(patch: Partial<TaskDetail>) {
@@ -143,7 +155,7 @@ export function TaskDetailDrawer({
               members={members}
               currentUserId={currentUserId}
               onPatch={applyPatch}
-              onCommentsChanged={onChanged}
+              onRefetch={refetch}
             />
           ) : null}
         </SheetBody>
@@ -183,7 +195,10 @@ interface EditableBodyProps {
   members: TeamMember[]
   currentUserId: string
   onPatch: (patch: Partial<TaskDetail>) => void
-  onCommentsChanged?: () => void
+  /** Refetch the drawer payload — used by comment/checklist
+   *  panels after a mutation so section counts + the activity
+   *  timeline pick up the change. */
+  onRefetch: () => void | Promise<void>
 }
 
 function EditableBody({
@@ -194,7 +209,7 @@ function EditableBody({
   members,
   currentUserId,
   onPatch,
-  onCommentsChanged,
+  onRefetch,
 }: EditableBodyProps) {
   const { task, comments, checklists, activity } = payload
   const totalChecklistItems = checklists.reduce(
@@ -204,6 +219,15 @@ function EditableBody({
   const doneChecklistItems = checklists.reduce(
     (n, c) => n + c.items.filter((i) => i.isDone).length,
     0,
+  )
+
+  // Id → name maps handed to the activity panel so it can render
+  // human-readable diffs without another fetch.
+  const statusNameById = new Map(statuses.map((s) => [s.id, s.name]))
+  const categoryNameById = new Map(categories.map((c) => [c.id, c.name]))
+  const labelNameById = new Map(labels.map((l) => [l.id, l.name]))
+  const memberNameById = new Map(
+    members.map((m) => [m.id, m.name ?? m.email.split('@')[0] ?? m.email]),
   )
 
   return (
@@ -268,7 +292,7 @@ function EditableBody({
         <TaskChecklistsPanel
           taskId={task.id}
           checklists={checklists}
-          onChanged={onCommentsChanged}
+          onChanged={onRefetch}
         />
       </Section>
 
@@ -277,11 +301,19 @@ function EditableBody({
           taskId={task.id}
           comments={comments}
           currentUserId={currentUserId}
-          onChanged={onCommentsChanged}
+          onChanged={onRefetch}
         />
       </Section>
 
-      <CountsBlock activity={activity.length} />
+      <Section label={`Activity (${activity.length})`}>
+        <TaskActivityPanel
+          activity={activity}
+          statusNameById={statusNameById}
+          categoryNameById={categoryNameById}
+          labelNameById={labelNameById}
+          memberNameById={memberNameById}
+        />
+      </Section>
     </div>
   )
 }
@@ -402,16 +434,6 @@ function SubtasksBlock({
   )
 }
 
-function CountsBlock({ activity }: { activity: number }) {
-  return (
-    <Section label="Activity">
-      <p className="text-xs text-muted-foreground">
-        {activity} event{activity === 1 ? '' : 's'} logged. Timeline
-        renderer lands in Phase 4.6.
-      </p>
-    </Section>
-  )
-}
 
 function Section({
   label,
