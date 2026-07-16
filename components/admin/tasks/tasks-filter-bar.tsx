@@ -17,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -287,18 +288,20 @@ function FacetDropdown({
         ) : null}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56 max-h-72 overflow-auto">
-        <DropdownMenuLabel className="flex items-center justify-between">
-          <span>{label}</span>
-          {selectedCount > 0 ? (
-            <button
-              type="button"
-              onClick={onClear}
-              className="text-xs font-normal text-muted-foreground hover:text-foreground"
-            >
-              Clear
-            </button>
-          ) : null}
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex items-center justify-between">
+            <span>{label}</span>
+            {selectedCount > 0 ? (
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-xs font-normal text-muted-foreground hover:text-foreground"
+              >
+                Clear
+              </button>
+            ) : null}
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         {options.length === 0 ? (
           <p className="px-2 py-1.5 text-xs text-muted-foreground">
@@ -310,7 +313,7 @@ function FacetDropdown({
               key={opt.id}
               checked={selectedSet.has(opt.id)}
               onCheckedChange={(checked) => onToggle(opt.id, checked)}
-              onSelect={(e) => e.preventDefault()}
+              closeOnClick={false}
             >
               {opt.name}
             </DropdownMenuCheckboxItem>

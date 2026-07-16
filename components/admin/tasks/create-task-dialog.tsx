@@ -173,7 +173,11 @@ export function CreateTaskDialog({
                 disabled={isSaving}
               >
                 <SelectTrigger id="task-status">
-                  <SelectValue placeholder="Pick a status" />
+                  <SelectValue placeholder="Pick a status">
+                    {(v: string) =>
+                      statuses.find((s) => s.id === v)?.name ?? ''
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {statuses.map((s) => (
@@ -193,7 +197,11 @@ export function CreateTaskDialog({
                 disabled={isSaving}
               >
                 <SelectTrigger id="task-priority">
-                  <SelectValue />
+                  <SelectValue>
+                    {(v: string) =>
+                      TASK_PRIORITY_LABELS[v as PriorityValue] ?? ''
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(
@@ -217,7 +225,13 @@ export function CreateTaskDialog({
                 disabled={isSaving}
               >
                 <SelectTrigger id="task-category">
-                  <SelectValue />
+                  <SelectValue>
+                    {(v: string) =>
+                      v === NO_CATEGORY
+                        ? 'None'
+                        : categories.find((c) => c.id === v)?.name ?? 'None'
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_CATEGORY}>None</SelectItem>

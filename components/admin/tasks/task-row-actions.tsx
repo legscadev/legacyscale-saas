@@ -75,7 +75,7 @@ export function TaskRowActions({ task, onChanged }: TaskRowActionsProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
         <DropdownMenuItem
-          onSelect={() =>
+          onClick={() =>
             run('Duplicate', () => duplicateTaskAction(task.id))
           }
         >
@@ -85,7 +85,7 @@ export function TaskRowActions({ task, onChanged }: TaskRowActionsProps) {
 
         {isArchived ? (
           <DropdownMenuItem
-            onSelect={() =>
+            onClick={() =>
               run('Restore', () => restoreTaskAction(task.id))
             }
           >
@@ -94,7 +94,7 @@ export function TaskRowActions({ task, onChanged }: TaskRowActionsProps) {
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem
-            onSelect={() =>
+            onClick={() =>
               run('Archive', () => archiveTaskAction(task.id))
             }
           >
@@ -106,7 +106,7 @@ export function TaskRowActions({ task, onChanged }: TaskRowActionsProps) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
-          onSelect={() =>
+          onClick={() =>
             run('Delete', () => deleteTaskAction(task.id))
           }
         >
