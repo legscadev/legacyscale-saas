@@ -14,7 +14,29 @@
 // whichever tenant is active.
 
 import { prisma } from '@/lib/prisma'
-import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
+import {
+  getRequestCompanyId,
+  runAsSuperAdmin,
+} from '@/lib/tenancy/request-company'
+import type {
+  UpsertCategoryInput,
+  UpsertLabelInput,
+  UpsertStatusInput,
+} from '@/lib/validations/tasks'
+
+export class StatusInUseError extends Error {
+  constructor(message = 'Cannot delete a status that still holds tasks') {
+    super(message)
+    this.name = 'StatusInUseError'
+  }
+}
+
+export class LastStatusError extends Error {
+  constructor(message = 'A tenant must keep at least one status') {
+    super(message)
+    this.name = 'LastStatusError'
+  }
+}
 
 /** Six starter statuses covering the common workflow. Ordered by
  *  orderIndex; `To Do` is the default target for freshly-created
@@ -113,3 +135,292 @@ export async function ensureWorkflowReady(companyId: string): Promise<void> {
   if (existing > 0) return
   await seedDefaultWorkflow(companyId)
 }
+
+// ============================================
+// CRUD for admin surfaces (Phase 6)
+// ============================================
+
+async function requireCompanyId(): Promise<string> {
+  const id = await getRequestCompanyId()
+  if (!id) throw new Error('task-workflow-service: no active company')
+  return id
+}
+
+export interface StatusListItem {
+  id: string
+  name: string
+  slug: string
+  color: string
+  orderIndex: number
+  isDefault: boolean
+  isTerminal: boolean
+  wipLimit: number | null
+  /** How many non-archived, non-deleted tasks currently sit in this
+   *  status. Drives the "in use" warning on delete + the empty-row
+   *  affordance in the admin table. */
+  taskCount: number
+}
+
+export interface CategoryListItem {
+  id: string
+  name: string
+  color: string
+  taskCount: number
+}
+
+export interface LabelListItem {
+  id: string
+  name: string
+  color: string
+  taskCount: number
+}
+
+class TaskWorkflowAdminService {
+  // -------- STATUSES --------
+
+  async listStatuses(): Promise<StatusListItem[]> {
+    const statuses = await prisma.taskStatus.findMany({
+      orderBy: { orderIndex: 'asc' },
+      include: {
+        _count: {
+          select: {
+            tasks: {
+              where: { deletedAt: null, archivedAt: null },
+            },
+          },
+        },
+      },
+    })
+    return statuses.map((s) => ({
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+      color: s.color,
+      orderIndex: s.orderIndex,
+      isDefault: s.isDefault,
+      isTerminal: s.isTerminal,
+      wipLimit: s.wipLimit,
+      taskCount: s._count.tasks,
+    }))
+  }
+
+  /**
+   * Create or update a status. If isDefault is flipped on we clear
+   * it on every other row in the same tenant — the workspace layer
+   * assumes exactly one default status exists.
+   */
+  async upsertStatus(input: UpsertStatusInput): Promise<StatusListItem> {
+    const companyId = await requireCompanyId()
+
+    const upserted = await prisma.$transaction(async (tx) => {
+      // Sole-default guarantee.
+      if (input.isDefault) {
+        await tx.taskStatus.updateMany({
+          where: { companyId, isDefault: true, ...(input.id ? { NOT: { id: input.id } } : {}) },
+          data: { isDefault: false },
+        })
+      }
+
+      if (input.id) {
+        return tx.taskStatus.update({
+          where: { id: input.id },
+          data: {
+            name: input.name,
+            slug: input.slug,
+            color: input.color,
+            orderIndex: input.orderIndex,
+            isDefault: input.isDefault,
+            isTerminal: input.isTerminal,
+            wipLimit: input.wipLimit ?? null,
+          },
+        })
+      }
+
+      // Nested create — the tenancy extension only auto-stamps
+      // top-level writes, but the field default handles the rest.
+      return tx.taskStatus.create({
+        data: {
+          name: input.name,
+          slug: input.slug,
+          color: input.color,
+          orderIndex: input.orderIndex,
+          isDefault: input.isDefault,
+          isTerminal: input.isTerminal,
+          wipLimit: input.wipLimit ?? null,
+        },
+      })
+    }, { timeout: 15_000 })
+
+    const withCount = await prisma.taskStatus.findUnique({
+      where: { id: upserted.id },
+      include: {
+        _count: {
+          select: {
+            tasks: { where: { deletedAt: null, archivedAt: null } },
+          },
+        },
+      },
+    })
+    if (!withCount) throw new Error('Status vanished after upsert')
+    return {
+      id: withCount.id,
+      name: withCount.name,
+      slug: withCount.slug,
+      color: withCount.color,
+      orderIndex: withCount.orderIndex,
+      isDefault: withCount.isDefault,
+      isTerminal: withCount.isTerminal,
+      wipLimit: withCount.wipLimit,
+      taskCount: withCount._count.tasks,
+    }
+  }
+
+  /**
+   * Delete a status. Blocked if any task still references it
+   * (Restrict FK) — the admin has to move those tasks first.
+   * Also blocked if this is the last status in the tenant, which
+   * would leave no drop target for new tasks.
+   */
+  async deleteStatus(id: string): Promise<void> {
+    const [row, totalStatuses] = await Promise.all([
+      prisma.taskStatus.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: {
+              tasks: { where: { deletedAt: null } },
+            },
+          },
+        },
+      }),
+      prisma.taskStatus.count(),
+    ])
+    if (!row) throw new Error('Status not found')
+    if (row._count.tasks > 0) throw new StatusInUseError()
+    if (totalStatuses <= 1) throw new LastStatusError()
+    await prisma.taskStatus.delete({ where: { id } })
+  }
+
+  /** Rewrite orderIndex for the tenant's statuses. Caller sends the
+   *  desired order as an id array. */
+  async reorderStatuses(ids: string[]): Promise<void> {
+    await prisma.$transaction(
+      ids.map((id, index) =>
+        prisma.taskStatus.update({
+          where: { id },
+          data: { orderIndex: index },
+        }),
+      ),
+    )
+  }
+
+  // -------- CATEGORIES --------
+
+  async listCategories(): Promise<CategoryListItem[]> {
+    const rows = await prisma.taskCategory.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: {
+            tasks: { where: { deletedAt: null } },
+          },
+        },
+      },
+    })
+    return rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      taskCount: c._count.tasks,
+    }))
+  }
+
+  async upsertCategory(input: UpsertCategoryInput): Promise<CategoryListItem> {
+    if (input.id) {
+      const row = await prisma.taskCategory.update({
+        where: { id: input.id },
+        data: { name: input.name, color: input.color },
+        include: {
+          _count: { select: { tasks: { where: { deletedAt: null } } } },
+        },
+      })
+      return {
+        id: row.id,
+        name: row.name,
+        color: row.color,
+        taskCount: row._count.tasks,
+      }
+    }
+    const row = await prisma.taskCategory.create({
+      data: { name: input.name, color: input.color },
+      include: {
+        _count: { select: { tasks: { where: { deletedAt: null } } } },
+      },
+    })
+    return {
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      taskCount: row._count.tasks,
+    }
+  }
+
+  /** Categories are optional on tasks (FK is SetNull), so a delete
+   *  simply detaches the association from any tasks holding it. */
+  async deleteCategory(id: string): Promise<void> {
+    await prisma.taskCategory.delete({ where: { id } })
+  }
+
+  // -------- LABELS --------
+
+  async listLabels(): Promise<LabelListItem[]> {
+    const rows = await prisma.taskLabel.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: { links: true },
+        },
+      },
+    })
+    return rows.map((l) => ({
+      id: l.id,
+      name: l.name,
+      color: l.color,
+      taskCount: l._count.links,
+    }))
+  }
+
+  async upsertLabel(input: UpsertLabelInput): Promise<LabelListItem> {
+    if (input.id) {
+      const row = await prisma.taskLabel.update({
+        where: { id: input.id },
+        data: { name: input.name, color: input.color },
+        include: { _count: { select: { links: true } } },
+      })
+      return {
+        id: row.id,
+        name: row.name,
+        color: row.color,
+        taskCount: row._count.links,
+      }
+    }
+    const row = await prisma.taskLabel.create({
+      data: { name: input.name, color: input.color },
+      include: { _count: { select: { links: true } } },
+    })
+    return {
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      taskCount: row._count.links,
+    }
+  }
+
+  /** Labels cascade-delete on the join table, so a delete quietly
+   *  detaches from every task that carried it. */
+  async deleteLabel(id: string): Promise<void> {
+    await prisma.taskLabel.delete({ where: { id } })
+  }
+}
+
+export const taskWorkflowAdminService = new TaskWorkflowAdminService()
