@@ -42,6 +42,10 @@ interface TasksTableProps {
   /** Called after any row-action mutation completes so the shell
    *  can refresh the workspace. */
   onRowChanged: () => void | Promise<void>
+  /** Set of currently-selected task ids (owned by the shell so the
+   *  bulk-action bar can read it). */
+  selectedIds: Set<string>
+  onSelectionChange: (next: Set<string>) => void
 }
 
 export function TasksTable({
@@ -52,7 +56,30 @@ export function TasksTable({
   onOpenTask,
   onCreate,
   onRowChanged,
+  selectedIds,
+  onSelectionChange,
 }: TasksTableProps) {
+  const visibleIds = items.map((t) => t.id)
+  const allSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id))
+  const someSelected =
+    !allSelected && visibleIds.some((id) => selectedIds.has(id))
+
+  function toggleAll(checked: boolean) {
+    const next = new Set(selectedIds)
+    if (checked) {
+      for (const id of visibleIds) next.add(id)
+    } else {
+      for (const id of visibleIds) next.delete(id)
+    }
+    onSelectionChange(next)
+  }
+  function toggleRow(id: string, checked: boolean) {
+    const next = new Set(selectedIds)
+    if (checked) next.add(id)
+    else next.delete(id)
+    onSelectionChange(next)
+  }
   if (items.length === 0) {
     return (
       <EmptyState
@@ -72,6 +99,18 @@ export function TasksTable({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-10">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected
+                }}
+                onChange={(e) => toggleAll(e.target.checked)}
+                aria-label="Select all rows"
+                className="size-4 accent-primary"
+              />
+            </TableHead>
             <SortableHead
               field="createdAt"
               current={sortBy}
@@ -117,9 +156,19 @@ export function TasksTable({
                 className={cn(
                   onOpenTask &&
                     'cursor-pointer transition-colors hover:bg-muted/50',
+                  selectedIds.has(task.id) && 'bg-primary/5',
                 )}
                 onClick={onOpenTask ? () => onOpenTask(task.id) : undefined}
               >
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(task.id)}
+                    onChange={(e) => toggleRow(task.id, e.target.checked)}
+                    aria-label={`Select ${task.title}`}
+                    className="size-4 accent-primary"
+                  />
+                </TableCell>
                 <TableCell className="min-w-0">
                   <div className="flex flex-col gap-0.5">
                     <p className="line-clamp-1 font-medium text-foreground">

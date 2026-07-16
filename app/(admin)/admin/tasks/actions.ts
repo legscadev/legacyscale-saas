@@ -884,3 +884,70 @@ export async function deleteSavedViewAction(
     return toMutationErr(err, 'Could not delete view')
   }
 }
+
+// ============================================
+// BULK ACTIONS
+// ============================================
+
+/**
+ * Bulk mutations loop the per-row service methods rather than
+ * batching at the DB layer — each row still fires its activity
+ * log + notifications, and one bad row doesn't tank the batch
+ * (per-row errors accumulate into failedIds).
+ */
+export interface BulkResult {
+  ok: true
+  data: { updated: number; failedIds: string[] }
+}
+
+async function runBulk(
+  ids: string[],
+  fn: (id: string) => Promise<void>,
+): Promise<BulkResult> {
+  const failedIds: string[] = []
+  let updated = 0
+  for (const id of ids) {
+    try {
+      await fn(id)
+      updated += 1
+    } catch (err) {
+      console.error('[tasks/bulk]', id, err)
+      failedIds.push(id)
+    }
+  }
+  return { ok: true, data: { updated, failedIds } }
+}
+
+export async function bulkArchiveTasksAction(
+  ids: string[],
+): Promise<BulkResult> {
+  const user = await requireAdmin()
+  const result = await runBulk(ids, (id) =>
+    taskService.archive(id, user.id).then(() => undefined),
+  )
+  revalidateAll()
+  return result
+}
+
+export async function bulkDeleteTasksAction(
+  ids: string[],
+): Promise<BulkResult> {
+  const user = await requireAdmin()
+  const result = await runBulk(ids, (id) =>
+    taskService.softDelete(id, user.id),
+  )
+  revalidateAll()
+  return result
+}
+
+export async function bulkChangeStatusAction(
+  ids: string[],
+  statusId: string,
+): Promise<BulkResult> {
+  const user = await requireAdmin()
+  const result = await runBulk(ids, (id) =>
+    taskService.changeStatus(id, statusId, user.id).then(() => undefined),
+  )
+  revalidateAll()
+  return result
+}

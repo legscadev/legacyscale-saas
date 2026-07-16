@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 
 import type { TaskWorkspacePayload } from '@/app/(admin)/admin/tasks/actions'
 
+import { BulkActionBar } from './bulk-action-bar'
 import { CreateTaskDialog } from './create-task-dialog'
 import { KanbanBoard } from './kanban-board'
 import { SavedViewsMenu } from './saved-views-menu'
@@ -41,6 +42,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
   const searchParams = useSearchParams()
   const [isNavigating, startNavigation] = useTransition()
   const [createOpen, setCreateOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const {
     tasks,
@@ -168,15 +170,25 @@ export function TasksShell({ initialData }: TasksShellProps) {
             onOpenTask={openTask}
           />
         ) : (
-          <TasksTable
-            items={tasks.items}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortChange={handleSortChange}
-            onRowChanged={refreshWorkspace}
-            onCreate={() => setCreateOpen(true)}
-            onOpenTask={openTask}
-          />
+          <div className="space-y-2">
+            <BulkActionBar
+              selectedIds={Array.from(selectedIds)}
+              statuses={statuses}
+              onClear={() => setSelectedIds(new Set())}
+              onChanged={refreshWorkspace}
+            />
+            <TasksTable
+              items={tasks.items}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSortChange={handleSortChange}
+              onRowChanged={refreshWorkspace}
+              onCreate={() => setCreateOpen(true)}
+              onOpenTask={openTask}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+            />
+          </div>
         )}
       </div>
 
