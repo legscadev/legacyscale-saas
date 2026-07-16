@@ -32,6 +32,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TaskDetail, TaskUserRef } from '@/lib/services/task-service'
 
+import { TaskChecklistsPanel } from './task-checklists-panel'
 import { TaskCommentsPanel } from './task-comments-panel'
 import {
   EditableCategory,
@@ -261,6 +262,16 @@ function EditableBody({
         <SubtasksBlock subtasks={task.subtasks} />
       ) : null}
 
+      <Section
+        label={`Checklists (${doneChecklistItems}/${totalChecklistItems})`}
+      >
+        <TaskChecklistsPanel
+          taskId={task.id}
+          checklists={checklists}
+          onChanged={onCommentsChanged}
+        />
+      </Section>
+
       <Section label={`Comments (${comments.length})`}>
         <TaskCommentsPanel
           taskId={task.id}
@@ -270,11 +281,7 @@ function EditableBody({
         />
       </Section>
 
-      <CountsBlock
-        checklistTotal={totalChecklistItems}
-        checklistDone={doneChecklistItems}
-        activity={activity.length}
-      />
+      <CountsBlock activity={activity.length} />
     </div>
   )
 }
@@ -395,49 +402,14 @@ function SubtasksBlock({
   )
 }
 
-function CountsBlock({
-  checklistTotal,
-  checklistDone,
-  activity,
-}: {
-  checklistTotal: number
-  checklistDone: number
-  activity: number
-}) {
+function CountsBlock({ activity }: { activity: number }) {
   return (
-    <Section label="Activity summary">
-      <div className="grid grid-cols-2 gap-3 text-center">
-        <CountCell
-          label="Checklist"
-          value={
-            checklistTotal > 0
-              ? `${checklistDone}/${checklistTotal}`
-              : '—'
-          }
-        />
-        <CountCell label="Events" value={activity} />
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">
-        Checklist CRUD and the activity timeline land in Phase 4.5 → 4.6.
+    <Section label="Activity">
+      <p className="text-xs text-muted-foreground">
+        {activity} event{activity === 1 ? '' : 's'} logged. Timeline
+        renderer lands in Phase 4.6.
       </p>
     </Section>
-  )
-}
-
-function CountCell({
-  label,
-  value,
-}: {
-  label: string
-  value: number | string
-}) {
-  return (
-    <div className="rounded-md border bg-muted/20 p-2">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
-    </div>
   )
 }
 
