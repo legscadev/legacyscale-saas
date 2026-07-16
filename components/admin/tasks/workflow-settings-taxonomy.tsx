@@ -10,6 +10,16 @@ import { useEffect, useState, useTransition } from 'react'
 import { Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -55,6 +65,25 @@ export function CategoryLabelRows<T extends TaxonomyItem>({
   onDeleted,
   emptyLabel,
 }: CategoryLabelRowsProps<T>) {
+  // Centralized pending-delete state — one AlertDialog shared
+  // across all rows in this section.
+  const [pending, setPending] = useState<T | null>(null)
+  const [isDeleting, startDelete] = useTransition()
+
+  function confirmDelete() {
+    if (!pending) return
+    const target = pending
+    startDelete(async () => {
+      const res = await onDelete(target.id)
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not delete')
+        return
+      }
+      onDeleted(target.id)
+      setPending(null)
+    })
+  }
+
   if (items.length === 0) {
     return (
       <p className="p-4 text-center text-xs text-muted-foreground">
@@ -64,6 +93,7 @@ export function CategoryLabelRows<T extends TaxonomyItem>({
   }
 
   return (
+    <>
     <Table>
       <TableHeader>
         <TableRow>
@@ -79,28 +109,54 @@ export function CategoryLabelRows<T extends TaxonomyItem>({
             key={item.id}
             item={item}
             onSave={onSave}
-            onDelete={onDelete}
             onPatched={onPatched}
-            onDeleted={onDeleted}
+            onRequestDelete={() => setPending(item)}
           />
         ))}
       </TableBody>
     </Table>
+
+    <AlertDialog
+      open={pending !== null}
+      onOpenChange={(open) => {
+        if (!open) setPending(null)
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete &quot;{pending?.name}&quot;?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {pending && pending.taskCount > 0
+              ? `"${pending.name}" is on ${pending.taskCount} task${pending.taskCount === 1 ? '' : 's'}. Deleting removes the association; the tasks themselves keep their history.`
+              : 'This action cannot be undone.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmDelete}
+            disabled={isDeleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isDeleting ? 'Deleting…' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
 
 function ItemRow<T extends TaxonomyItem>({
   item,
   onSave,
-  onDelete,
   onPatched,
-  onDeleted,
+  onRequestDelete,
 }: {
   item: T
   onSave: CategoryLabelRowsProps<T>['onSave']
-  onDelete: CategoryLabelRowsProps<T>['onDelete']
   onPatched: (next: T) => void
-  onDeleted: (id: string) => void
+  onRequestDelete: () => void
 }) {
   const [isBusy, startBusy] = useTransition()
   const [draftName, setDraftName] = useState(item.name)
@@ -136,26 +192,6 @@ function ItemRow<T extends TaxonomyItem>({
         return
       }
       onPatched(res.data)
-    })
-  }
-
-  function remove() {
-    if (
-      !confirm(
-        item.taskCount > 0
-          ? `"${item.name}" is on ${item.taskCount} task${item.taskCount === 1 ? '' : 's'}. Delete anyway? (Tasks keep their history; the association is removed.)`
-          : `Delete "${item.name}"?`,
-      )
-    ) {
-      return
-    }
-    startBusy(async () => {
-      const res = await onDelete(item.id)
-      if (!res.ok) {
-        toast.error(res.error ?? 'Could not delete')
-        return
-      }
-      onDeleted(item.id)
     })
   }
 
@@ -196,7 +232,7 @@ function ItemRow<T extends TaxonomyItem>({
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={remove}
+          onClick={onRequestDelete}
           disabled={isBusy}
           aria-label={`Delete ${item.name}`}
           className="text-muted-foreground hover:text-destructive"

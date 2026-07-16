@@ -13,6 +13,16 @@ import {
   deleteStatusAction,
   upsertStatusAction,
 } from '@/app/(admin)/admin/tasks/settings/actions'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -37,6 +47,25 @@ export function StatusRows({
   onPatched,
   onDeleted,
 }: StatusRowsProps) {
+  // Centralized pending-delete state so all rows share one dialog
+  // instead of every row hoisting its own AlertDialog into the tree.
+  const [pending, setPending] = useState<StatusListItem | null>(null)
+  const [isDeleting, startDelete] = useTransition()
+
+  function confirmDelete() {
+    if (!pending) return
+    const target = pending
+    startDelete(async () => {
+      const res = await deleteStatusAction(target.id)
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not delete status')
+        return
+      }
+      onDeleted(target.id)
+      setPending(null)
+    })
+  }
+
   if (statuses.length === 0) {
     return (
       <p className="p-4 text-center text-xs text-muted-foreground">
@@ -46,6 +75,7 @@ export function StatusRows({
   }
 
   return (
+    <>
     <Table>
       <TableHeader>
         <TableRow>
@@ -65,11 +95,42 @@ export function StatusRows({
             key={status.id}
             status={status}
             onPatched={onPatched}
-            onDeleted={onDeleted}
+            onDelete={() => setPending(status)}
           />
         ))}
       </TableBody>
     </Table>
+
+    <AlertDialog
+      open={pending !== null}
+      onOpenChange={(open) => {
+        if (!open) setPending(null)
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Delete status &quot;{pending?.name}&quot;?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {pending && pending.taskCount > 0
+              ? `${pending.taskCount} task${pending.taskCount === 1 ? '' : 's'} still use${pending.taskCount === 1 ? 's' : ''} this status. Move them to another status first — the delete will refuse otherwise.`
+              : 'This action cannot be undone.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmDelete}
+            disabled={isDeleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isDeleting ? 'Deleting…' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
 
@@ -80,11 +141,11 @@ export function StatusRows({
 function StatusRow({
   status,
   onPatched,
-  onDeleted,
+  onDelete,
 }: {
   status: StatusListItem
   onPatched: (next: StatusListItem) => void
-  onDeleted: (id: string) => void
+  onDelete: () => void
 }) {
   const [isBusy, startBusy] = useTransition()
 
@@ -115,26 +176,6 @@ function StatusRow({
         return
       }
       onPatched(res.data)
-    })
-  }
-
-  function remove() {
-    if (
-      !confirm(
-        status.taskCount > 0
-          ? `${status.taskCount} task${status.taskCount === 1 ? ' still uses' : 's still use'} "${status.name}". Move them to another status first.`
-          : `Delete status "${status.name}"?`,
-      )
-    ) {
-      return
-    }
-    startBusy(async () => {
-      const res = await deleteStatusAction(status.id)
-      if (!res.ok) {
-        toast.error(res.error ?? 'Could not delete status')
-        return
-      }
-      onDeleted(status.id)
     })
   }
 
@@ -208,7 +249,7 @@ function StatusRow({
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={remove}
+          onClick={onDelete}
           disabled={isBusy}
           aria-label={`Delete ${status.name}`}
           className="text-muted-foreground hover:text-destructive"
