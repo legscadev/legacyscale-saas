@@ -19,6 +19,11 @@ import {
 import { taskActivityService } from '@/lib/services/task-activity-service'
 import type { TaskActivityRow } from '@/lib/services/task-activity-service'
 import {
+  taskAttachmentService,
+  TaskAttachmentNotFoundError,
+  type TaskAttachmentRow,
+} from '@/lib/services/task-attachment-service'
+import {
   taskChecklistService,
   ChecklistItemNotFoundError,
   ChecklistNotFoundError,
@@ -97,7 +102,8 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
     err instanceof TaskNotFoundError ||
     err instanceof CommentNotFoundError ||
     err instanceof ChecklistNotFoundError ||
-    err instanceof ChecklistItemNotFoundError
+    err instanceof ChecklistItemNotFoundError ||
+    err instanceof TaskAttachmentNotFoundError
   ) {
     return { ok: false, error: err.message }
   }
@@ -167,6 +173,7 @@ export interface TaskDrawerPayload {
   comments: TaskCommentRow[]
   checklists: ChecklistRow[]
   activity: TaskActivityRow[]
+  attachments: TaskAttachmentRow[]
 }
 
 export async function fetchTaskDrawerAction(
@@ -174,18 +181,90 @@ export async function fetchTaskDrawerAction(
 ): Promise<MutationResult<TaskDrawerPayload>> {
   await requireAdmin()
   try {
-    const [task, comments, checklists, activity] = await Promise.all([
-      taskService.get(id),
-      taskCommentService.list(id),
-      taskChecklistService.listForTask(id),
-      taskActivityService.listForTask(id, { limit: 100 }),
-    ])
+    const [task, comments, checklists, activity, attachments] =
+      await Promise.all([
+        taskService.get(id),
+        taskCommentService.list(id),
+        taskChecklistService.listForTask(id),
+        taskActivityService.listForTask(id, { limit: 100 }),
+        taskAttachmentService.listForTask(id),
+      ])
     return {
       ok: true,
-      data: { task, comments, checklists, activity: activity.items },
+      data: {
+        task,
+        comments,
+        checklists,
+        activity: activity.items,
+        attachments,
+      },
     }
   } catch (err) {
     return toMutationErr(err, 'Could not load task')
+  }
+}
+
+// ============================================
+// ATTACHMENTS
+// ============================================
+
+/**
+ * Multipart upload. Server actions accept FormData with File —
+ * the client packages the picker's selected files here.
+ * Reads MAX_ATTACHMENT_BYTES from the service, so bumping the
+ * limit is a one-file change.
+ */
+export async function uploadTaskAttachmentAction(
+  formData: FormData,
+): Promise<MutationResult<TaskAttachmentRow>> {
+  const user = await requireAdmin()
+  const taskId = String(formData.get('taskId') ?? '')
+  const file = formData.get('file')
+  if (!taskId) {
+    return { ok: false, error: 'Missing taskId' }
+  }
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: 'No file provided' }
+  }
+
+  try {
+    const data = await taskAttachmentService.upload({
+      taskId,
+      file,
+      actorId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not upload attachment')
+  }
+}
+
+export async function deleteTaskAttachmentAction(
+  attachmentId: string,
+): Promise<MutationResult> {
+  const user = await requireAdmin()
+  try {
+    await taskAttachmentService.delete(attachmentId, user.id)
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete attachment')
+  }
+}
+
+/** Mint a short-lived signed URL for downloading an attachment. The
+ *  client uses this to open the file directly (window.open) rather
+ *  than proxying bytes through the server action response. */
+export async function signTaskAttachmentUrlAction(
+  attachmentId: string,
+): Promise<MutationResult<{ url: string }>> {
+  await requireAdmin()
+  try {
+    const url = await taskAttachmentService.signDownloadUrl(attachmentId)
+    return { ok: true, data: { url } }
+  } catch (err) {
+    return toMutationErr(err, 'Could not sign download URL')
   }
 }
 
