@@ -43,6 +43,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -434,11 +435,10 @@ function StatusField({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56 p-1">
         {statuses.map((s) => (
-          <button
+          <DropdownMenuItem
             key={s.id}
-            type="button"
             onClick={() => onChange(s.id)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            className="gap-2"
           >
             <span
               className="size-2 shrink-0 rounded-full"
@@ -447,7 +447,7 @@ function StatusField({
             />
             <span className="min-w-0 flex-1 truncate">{s.name}</span>
             {value === s.id ? <Check className="size-3.5 text-primary" /> : null}
-          </button>
+          </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -482,16 +482,15 @@ function PriorityField({
       <DropdownMenuContent align="start" className="w-44 p-1">
         {(Object.entries(TASK_PRIORITY_LABELS) as Array<[PriorityValue, string]>).map(
           ([val, label]) => (
-            <button
+            <DropdownMenuItem
               key={val}
-              type="button"
               onClick={() => onChange(val)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+              className="gap-2"
             >
               <Flag className="size-3 text-muted-foreground" aria-hidden />
               <span className="min-w-0 flex-1 truncate">{label}</span>
               {value === val ? <Check className="size-3.5 text-primary" /> : null}
-            </button>
+            </DropdownMenuItem>
           ),
         )}
       </DropdownMenuContent>
@@ -542,23 +541,21 @@ function CategoryField({
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56 p-1">
-        <button
-          type="button"
+        <DropdownMenuItem
           onClick={() => onChange(null)}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent"
+          className="gap-2 text-muted-foreground"
         >
           <span className="size-2 rounded-full border" aria-hidden />
-          No category
+          <span className="min-w-0 flex-1">No category</span>
           {value === null ? (
-            <Check className="ml-auto size-3.5 text-primary" />
+            <Check className="size-3.5 text-primary" />
           ) : null}
-        </button>
+        </DropdownMenuItem>
         {categories.map((c) => (
-          <button
+          <DropdownMenuItem
             key={c.id}
-            type="button"
             onClick={() => onChange(c.id)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+            className="gap-2"
           >
             <span
               className="size-2 shrink-0 rounded-full"
@@ -569,7 +566,7 @@ function CategoryField({
             {value === c.id ? (
               <Check className="size-3.5 text-primary" />
             ) : null}
-          </button>
+          </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
