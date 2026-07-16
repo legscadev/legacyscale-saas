@@ -4,6 +4,10 @@
 // so the UI can wire per-user chips without loading the edit form.
 
 import { prisma } from '@/lib/prisma'
+import {
+  logDiffIfChanged,
+  taskActivityService,
+} from '@/lib/services/task-activity-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type {
   AssignTaskInput,
@@ -22,8 +26,15 @@ class TaskAssignmentService {
    * deleteMany + createMany inside a transaction — simpler than
    * hand-computing the delta.
    */
-  async setAssignees(input: AssignTaskInput): Promise<void> {
+  async setAssignees(
+    input: AssignTaskInput,
+    actorId: string | null,
+  ): Promise<void> {
     const companyId = await requireCompanyId()
+    const before = await prisma.taskAssignee.findMany({
+      where: { taskId: input.taskId },
+      select: { userId: true },
+    })
     await prisma.$transaction(async (tx) => {
       await tx.taskAssignee.deleteMany({ where: { taskId: input.taskId } })
       if (input.userIds.length > 0) {
@@ -35,11 +46,26 @@ class TaskAssignmentService {
           })),
         })
       }
+      await logDiffIfChanged({
+        taskId: input.taskId,
+        actorId,
+        action: 'assigned',
+        from: before.map((a) => a.userId).sort(),
+        to: [...input.userIds].sort(),
+        tx,
+      })
     })
   }
 
-  async setWatchers(input: WatchTaskInput): Promise<void> {
+  async setWatchers(
+    input: WatchTaskInput,
+    actorId: string | null,
+  ): Promise<void> {
     const companyId = await requireCompanyId()
+    const before = await prisma.taskWatcher.findMany({
+      where: { taskId: input.taskId },
+      select: { userId: true },
+    })
     await prisma.$transaction(async (tx) => {
       await tx.taskWatcher.deleteMany({ where: { taskId: input.taskId } })
       if (input.userIds.length > 0) {
@@ -51,38 +77,94 @@ class TaskAssignmentService {
           })),
         })
       }
+      await logDiffIfChanged({
+        taskId: input.taskId,
+        actorId,
+        action: 'watcher_added',
+        from: before.map((w) => w.userId).sort(),
+        to: [...input.userIds].sort(),
+        tx,
+      })
     })
   }
 
   /** Add a single user as watcher (self-follow). Idempotent — the
    *  compound PK swallows duplicates when skipDuplicates is on. */
-  async watch(taskId: string, userId: string): Promise<void> {
+  async watch(
+    taskId: string,
+    userId: string,
+    actorId: string | null,
+  ): Promise<void> {
     const companyId = await requireCompanyId()
-    await prisma.taskWatcher.createMany({
+    const result = await prisma.taskWatcher.createMany({
       data: [{ taskId, userId, companyId }],
       skipDuplicates: true,
     })
+    if (result.count > 0) {
+      await taskActivityService.logEvent({
+        taskId,
+        actorId,
+        action: 'watcher_added',
+        toValue: { userId },
+      })
+    }
   }
 
-  async unwatch(taskId: string, userId: string): Promise<void> {
-    await prisma.taskWatcher.deleteMany({
+  async unwatch(
+    taskId: string,
+    userId: string,
+    actorId: string | null,
+  ): Promise<void> {
+    const result = await prisma.taskWatcher.deleteMany({
       where: { taskId, userId },
     })
+    if (result.count > 0) {
+      await taskActivityService.logEvent({
+        taskId,
+        actorId,
+        action: 'watcher_removed',
+        fromValue: { userId },
+      })
+    }
   }
 
   /** Single-user assignee toggle — used by row-action menus. */
-  async assign(taskId: string, userId: string): Promise<void> {
+  async assign(
+    taskId: string,
+    userId: string,
+    actorId: string | null,
+  ): Promise<void> {
     const companyId = await requireCompanyId()
-    await prisma.taskAssignee.createMany({
+    const result = await prisma.taskAssignee.createMany({
       data: [{ taskId, userId, companyId }],
       skipDuplicates: true,
     })
+    if (result.count > 0) {
+      await taskActivityService.logEvent({
+        taskId,
+        actorId,
+        action: 'assigned',
+        toValue: { userId },
+      })
+    }
   }
 
-  async unassign(taskId: string, userId: string): Promise<void> {
-    await prisma.taskAssignee.deleteMany({
+  async unassign(
+    taskId: string,
+    userId: string,
+    actorId: string | null,
+  ): Promise<void> {
+    const result = await prisma.taskAssignee.deleteMany({
       where: { taskId, userId },
     })
+    if (result.count > 0) {
+      await taskActivityService.logEvent({
+        taskId,
+        actorId,
+        action: 'unassigned',
+        fromValue: { userId },
+      })
+    }
   }
 }
 

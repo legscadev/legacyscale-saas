@@ -6,6 +6,7 @@
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { taskActivityService } from '@/lib/services/task-activity-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type {
   AddChecklistItemInput,
@@ -93,7 +94,10 @@ class TaskChecklistService {
     return rows.map(mapRow)
   }
 
-  async createChecklist(input: CreateChecklistInput): Promise<ChecklistRow> {
+  async createChecklist(
+    input: CreateChecklistInput,
+    actorId: string | null,
+  ): Promise<ChecklistRow> {
     // Order at the end of the task's existing checklists.
     const last = await prisma.taskChecklist.findFirst({
       where: { taskId: input.taskId },
@@ -109,6 +113,12 @@ class TaskChecklistService {
         orderIndex,
       },
       include: CHECKLIST_INCLUDE,
+    })
+    await taskActivityService.logEvent({
+      taskId: input.taskId,
+      actorId,
+      action: 'checklist_added',
+      toValue: { checklistId: created.id, title: input.title },
     })
     return mapRow(created)
   }
@@ -128,20 +138,32 @@ class TaskChecklistService {
     return mapRow(updated)
   }
 
-  async deleteChecklist(checklistId: string): Promise<void> {
+  async deleteChecklist(
+    checklistId: string,
+    actorId: string | null,
+  ): Promise<void> {
     const existing = await prisma.taskChecklist.findUnique({
       where: { id: checklistId },
-      select: { id: true },
+      select: { id: true, taskId: true, title: true },
     })
     if (!existing) throw new ChecklistNotFoundError()
     await prisma.taskChecklist.delete({ where: { id: checklistId } })
+    await taskActivityService.logEvent({
+      taskId: existing.taskId,
+      actorId,
+      action: 'checklist_deleted',
+      fromValue: { checklistId, title: existing.title },
+    })
   }
 
-  async addItem(input: AddChecklistItemInput): Promise<ChecklistItemRow> {
+  async addItem(
+    input: AddChecklistItemInput,
+    actorId: string | null,
+  ): Promise<ChecklistItemRow> {
     const companyId = await requireCompanyId()
     const parent = await prisma.taskChecklist.findUnique({
       where: { id: input.checklistId },
-      select: { id: true },
+      select: { id: true, taskId: true },
     })
     if (!parent) throw new ChecklistNotFoundError()
 
@@ -165,6 +187,16 @@ class TaskChecklistService {
       },
       include: { doneBy: { select: { id: true, name: true } } },
     })
+    await taskActivityService.logEvent({
+      taskId: parent.taskId,
+      actorId,
+      action: 'checklist_item_added',
+      toValue: {
+        checklistId: input.checklistId,
+        itemId: created.id,
+        text: input.text,
+      },
+    })
     return {
       id: created.id,
       text: created.text,
@@ -185,7 +217,11 @@ class TaskChecklistService {
   ): Promise<ChecklistItemRow> {
     const existing = await prisma.taskChecklistItem.findUnique({
       where: { id: input.itemId },
-      select: { id: true, isDone: true },
+      select: {
+        id: true,
+        isDone: true,
+        checklist: { select: { taskId: true } },
+      },
     })
     if (!existing) throw new ChecklistItemNotFoundError()
 
@@ -207,6 +243,17 @@ class TaskChecklistService {
       data,
       include: { doneBy: { select: { id: true, name: true } } },
     })
+    // Only log the toggle event — text edits are minor and would
+    // clutter the timeline. Toggling is the meaningful state change.
+    if (input.isDone !== undefined && input.isDone !== existing.isDone) {
+      await taskActivityService.logEvent({
+        taskId: existing.checklist.taskId,
+        actorId,
+        action: 'checklist_item_toggled',
+        fromValue: { isDone: existing.isDone },
+        toValue: { isDone: input.isDone, itemId: input.itemId },
+      })
+    }
     return {
       id: updated.id,
       text: updated.text,
@@ -217,13 +264,26 @@ class TaskChecklistService {
     }
   }
 
-  async deleteItem(itemId: string): Promise<void> {
+  async deleteItem(
+    itemId: string,
+    actorId: string | null,
+  ): Promise<void> {
     const existing = await prisma.taskChecklistItem.findUnique({
       where: { id: itemId },
-      select: { id: true },
+      select: {
+        id: true,
+        text: true,
+        checklist: { select: { taskId: true } },
+      },
     })
     if (!existing) throw new ChecklistItemNotFoundError()
     await prisma.taskChecklistItem.delete({ where: { id: itemId } })
+    await taskActivityService.logEvent({
+      taskId: existing.checklist.taskId,
+      actorId,
+      action: 'checklist_item_deleted',
+      fromValue: { itemId, text: existing.text },
+    })
   }
 
   /**

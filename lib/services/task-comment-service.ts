@@ -9,6 +9,7 @@
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { taskActivityService } from '@/lib/services/task-activity-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type {
   AddCommentInput,
@@ -117,6 +118,14 @@ class TaskCommentService {
         })
       }
 
+      await taskActivityService.logEvent({
+        taskId: input.taskId,
+        actorId: authorId,
+        action: 'comment_added',
+        toValue: { commentId: c.id },
+        tx,
+      })
+
       return c
     })
 
@@ -148,6 +157,12 @@ class TaskCommentService {
       },
       include: COMMENT_INCLUDE,
     })
+    await taskActivityService.logEvent({
+      taskId: existing.taskId,
+      actorId: editorId,
+      action: 'comment_edited',
+      toValue: { commentId: input.commentId },
+    })
     return mapRow(updated)
   }
 
@@ -162,13 +177,19 @@ class TaskCommentService {
   ): Promise<void> {
     const existing = await prisma.taskComment.findUnique({
       where: { id: commentId },
-      select: { id: true, authorId: true },
+      select: { id: true, authorId: true, taskId: true },
     })
     if (!existing) throw new CommentNotFoundError()
     if (!canDeleteAny && existing.authorId !== actorId) {
       throw new CommentForbiddenError()
     }
     await prisma.taskComment.delete({ where: { id: commentId } })
+    await taskActivityService.logEvent({
+      taskId: existing.taskId,
+      actorId,
+      action: 'comment_deleted',
+      fromValue: { commentId },
+    })
   }
 }
 

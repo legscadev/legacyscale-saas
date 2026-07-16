@@ -13,6 +13,10 @@
 import type { Prisma, TaskPriority } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import {
+  logDiffIfChanged,
+  taskActivityService,
+} from '@/lib/services/task-activity-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type {
   CreateTaskInput,
@@ -434,14 +438,39 @@ class TaskService {
       select: { id: true },
     })
 
+    await taskActivityService.logEvent({
+      taskId: created.id,
+      actorId: reporterId,
+      action: 'created',
+      toValue: {
+        title: input.title,
+        statusId,
+        priority,
+        assigneeCount: assigneeIds.length,
+      },
+    })
+
     return this.get(created.id)
   }
 
-  async update(id: string, input: UpdateTaskInput): Promise<TaskDetail> {
+  async update(
+    id: string,
+    input: UpdateTaskInput,
+    actorId: string | null,
+  ): Promise<TaskDetail> {
     const companyId = await requireCompanyId()
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, statusId: true },
+      select: {
+        id: true,
+        statusId: true,
+        priority: true,
+        categoryId: true,
+        dueDate: true,
+        assignees: { select: { userId: true } },
+        watchers: { select: { userId: true } },
+        labels: { select: { labelId: true } },
+      },
     })
     if (!existing) throw new TaskNotFoundError('Task not found')
 
@@ -520,13 +549,87 @@ class TaskService {
           })
         }
       }
+
+      // Activity log — one row per changed facet. Inside the tx so
+      // the log commits atomically with the mutation. Membership
+      // changes log the id sets; scalar changes log from/to values.
+      if (input.statusId !== undefined) {
+        await logDiffIfChanged({
+          taskId: id,
+          actorId,
+          action: 'status_changed',
+          from: existing.statusId,
+          to: input.statusId,
+          tx,
+        })
+      }
+      if (input.priority !== undefined) {
+        await logDiffIfChanged({
+          taskId: id,
+          actorId,
+          action: 'priority_changed',
+          from: existing.priority,
+          to: input.priority,
+          tx,
+        })
+      }
+      if (input.categoryId !== undefined) {
+        await logDiffIfChanged({
+          taskId: id,
+          actorId,
+          action: 'category_changed',
+          from: existing.categoryId,
+          to: input.categoryId,
+          tx,
+        })
+      }
+      if (input.dueDate !== undefined) {
+        await logDiffIfChanged({
+          taskId: id,
+          actorId,
+          action: 'due_date_changed',
+          from: existing.dueDate,
+          to: input.dueDate,
+          tx,
+        })
+      }
+      if (input.assigneeIds !== undefined) {
+        await logDiffIfChanged({
+          taskId: id,
+          actorId,
+          action: 'assigned',
+          from: existing.assignees.map((a) => a.userId).sort(),
+          to: [...input.assigneeIds].sort(),
+          tx,
+        })
+      }
+      if (input.watcherIds !== undefined) {
+        await logDiffIfChanged({
+          taskId: id,
+          actorId,
+          action: 'watcher_added',
+          from: existing.watchers.map((w) => w.userId).sort(),
+          to: [...input.watcherIds].sort(),
+          tx,
+        })
+      }
+      if (input.labelIds !== undefined) {
+        await logDiffIfChanged({
+          taskId: id,
+          actorId,
+          action: 'labels_changed',
+          from: existing.labels.map((l) => l.labelId).sort(),
+          to: [...input.labelIds].sort(),
+          tx,
+        })
+      }
     })
 
     return this.get(id)
   }
 
   /** Soft-archive: hides from default list but stays intact. */
-  async archive(id: string): Promise<TaskDetail> {
+  async archive(id: string, actorId: string | null): Promise<TaskDetail> {
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -536,10 +639,15 @@ class TaskService {
       where: { id },
       data: { archivedAt: new Date() },
     })
+    await taskActivityService.logEvent({
+      taskId: id,
+      actorId,
+      action: 'archived',
+    })
     return this.get(id)
   }
 
-  async restore(id: string): Promise<TaskDetail> {
+  async restore(id: string, actorId: string | null): Promise<TaskDetail> {
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -549,6 +657,11 @@ class TaskService {
       where: { id },
       data: { archivedAt: null },
     })
+    await taskActivityService.logEvent({
+      taskId: id,
+      actorId,
+      action: 'restored',
+    })
     return this.get(id)
   }
 
@@ -556,7 +669,7 @@ class TaskService {
    *  the reachable graph, but the row itself stays behind for
    *  potential recovery. Callers wanting a real delete can call
    *  `hardDelete` (super-admin only). */
-  async softDelete(id: string): Promise<void> {
+  async softDelete(id: string, actorId: string | null): Promise<void> {
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -565,6 +678,11 @@ class TaskService {
     await prisma.task.update({
       where: { id },
       data: { deletedAt: new Date() },
+    })
+    await taskActivityService.logEvent({
+      taskId: id,
+      actorId,
+      action: 'deleted',
     })
   }
 
@@ -617,6 +735,13 @@ class TaskService {
       select: { id: true },
     })
 
+    await taskActivityService.logEvent({
+      taskId: created.id,
+      actorId: reporterId,
+      action: 'created',
+      toValue: { duplicatedFromId: id, title: `${src.title} (copy)` },
+    })
+
     return this.get(created.id)
   }
 
@@ -628,12 +753,13 @@ class TaskService {
   async changeStatus(
     id: string,
     statusId: string,
+    actorId: string | null,
     orderIndex?: number,
   ): Promise<TaskDetail> {
     const companyId = await requireCompanyId()
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, statusId: true },
     })
     if (!existing) throw new TaskNotFoundError('Task not found')
 
@@ -643,6 +769,14 @@ class TaskService {
     await prisma.task.update({
       where: { id },
       data: { statusId, orderIndex: finalOrderIndex },
+    })
+
+    await logDiffIfChanged({
+      taskId: id,
+      actorId,
+      action: 'status_changed',
+      from: existing.statusId,
+      to: statusId,
     })
     return this.get(id)
   }
