@@ -24,6 +24,11 @@ function parseFiltersFromSearchParams(
     labelIds: arr(raw.label),
     assigneeIds: arr(raw.assignee),
     includeArchived: scalar(raw.archived) === '1',
+    // "Only mine" — the shell's own filter, folded into assigneeIds
+    // inside fetchTaskWorkspaceAction (which has the current user).
+    // Passed as a boolean so the action's cleanedFilters branch
+    // fires whether or not the URL uses '1' vs 'true'.
+    mine: scalar(raw.mine) === '1',
     sortBy: scalar(raw.sort),
     sortOrder: scalar(raw.dir),
     page: scalar(raw.page),
