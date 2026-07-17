@@ -2,7 +2,9 @@ import Link from 'next/link'
 import {
   AlertTriangle,
   ArrowRight,
+  CalendarDays,
   CheckCircle2,
+  CheckSquare,
   Clock,
   FilePen,
   GraduationCap,
@@ -15,6 +17,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import { requireAdmin } from '@/lib/auth/get-user'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -31,6 +34,7 @@ import { adminProgressService } from '@/lib/services/admin-progress-service'
 import { memberTenantScope } from '@/lib/tenancy/request-company'
 import { CompletionsChart } from '@/components/admin/dashboard/completions-chart'
 import { TopCoursesChart } from '@/components/admin/dashboard/top-courses-chart'
+import { cn } from '@/lib/utils'
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
@@ -48,6 +52,8 @@ interface AttentionItem {
 }
 
 export default async function AdminDashboardPage() {
+  // Current admin — used to filter the "My tasks" widget below.
+  const currentUser = await requireAdmin()
   const now = Date.now()
   const stuckEnrolledCutoff = new Date(now - FOURTEEN_DAYS_MS)
   const stuckInactivityCutoff = new Date(now - SEVEN_DAYS_MS)
@@ -127,6 +133,42 @@ export default async function AdminDashboardPage() {
     adminProgressService.getTopCourses(5, 'all'),
   ])
 
+  // "My tasks" widget — top 5 open tasks assigned to the current
+  // admin, plus a total count for the section header. Overdue rows
+  // sort first (via a null-aware ORDER BY on dueDate); ties break
+  // by createdAt so newer work surfaces. The task tracker is
+  // multi-assignee, so we filter on the join table.
+  const myOpenTasksWhere = {
+    deletedAt: null,
+    archivedAt: null,
+    status: { isTerminal: false },
+    assignees: { some: { userId: currentUser.id } },
+  } as const
+  const [myOpenTasks, myOpenTaskTotal, myOverdueCount] = await Promise.all([
+    prisma.task.findMany({
+      where: myOpenTasksWhere,
+      orderBy: [
+        { dueDate: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
+      take: 5,
+      select: {
+        id: true,
+        title: true,
+        priority: true,
+        dueDate: true,
+        status: { select: { name: true, color: true, isTerminal: true } },
+      },
+    }),
+    prisma.task.count({ where: myOpenTasksWhere }),
+    prisma.task.count({
+      where: {
+        ...myOpenTasksWhere,
+        dueDate: { lt: new Date() },
+      },
+    }),
+  ])
+
   const cells: StatStripCell[] = [
     {
       label: 'Members',
@@ -188,6 +230,13 @@ export default async function AdminDashboardPage() {
         href: '/admin/courses',
         icon: Video,
         tone: 'neutral',
+      },
+      {
+        count: myOverdueCount,
+        label: `${plural(myOverdueCount, 'task', 'tasks')} overdue on you`,
+        href: '/admin/tasks',
+        icon: CheckSquare,
+        tone: 'danger',
       },
     ] satisfies AttentionItem[]
   ).filter((a) => a.count > 0)
@@ -363,6 +412,81 @@ export default async function AdminDashboardPage() {
                 Invite a member
               </Button>
             </div>
+          </SectionCard>
+
+          <SectionCard
+            title={`My tasks (${myOpenTaskTotal})`}
+            description={
+              myOverdueCount > 0
+                ? `${myOverdueCount} overdue`
+                : 'Assigned to you, open'
+            }
+            action={
+              <Button
+                variant="ghost"
+                size="sm"
+                render={<Link href="/admin/tasks" />}
+              >
+                All
+              </Button>
+            }
+            flush
+          >
+            {myOpenTasks.length === 0 ? (
+              <EmptyState
+                icon={CheckSquare}
+                title="Nothing on your plate"
+                description="Tasks assigned to you show up here."
+              />
+            ) : (
+              <ul className="divide-y">
+                {myOpenTasks.map((t) => {
+                  const overdue =
+                    t.dueDate !== null &&
+                    t.dueDate.getTime() < Date.now() &&
+                    !t.status.isTerminal
+                  return (
+                    <li key={t.id}>
+                      <Link
+                        href={`/admin/tasks?task=${t.id}`}
+                        className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50"
+                      >
+                        <span
+                          className="mt-0.5 size-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: t.status.color }}
+                          aria-hidden
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {t.title}
+                          </p>
+                          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <span>{t.status.name}</span>
+                            {t.dueDate ? (
+                              <>
+                                <span aria-hidden>·</span>
+                                <span
+                                  className={cn(
+                                    'inline-flex items-center gap-0.5',
+                                    overdue && 'font-medium text-rose-600',
+                                  )}
+                                >
+                                  <CalendarDays
+                                    className="size-3"
+                                    aria-hidden
+                                  />
+                                  {relativeTime(t.dueDate)}
+                                </span>
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </SectionCard>
 
           <SectionCard

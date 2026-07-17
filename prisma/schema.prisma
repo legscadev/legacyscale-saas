@@ -259,6 +259,22 @@ model User {
   // AppSetting (which is the legacy flat key/value store).
   settingsUpdated Setting[] @relation("SettingUpdater")
 
+  // Internal Task Tracker — see the TASK TRACKER block near the tail
+  // of this file. Relations are named because a user can be attached
+  // to a task in several distinct roles (reporter, assignee, watcher,
+  // author of a comment, checker of an item, actor on an audit log).
+  tasksReported          Task[]              @relation("TaskReporter")
+  taskAssignments        TaskAssignee[]
+  taskWatches            TaskWatcher[]
+  taskComments           TaskComment[]
+  taskCommentsEdited     TaskComment[]       @relation("TaskCommentEditor")
+  taskChecklistCompletes TaskChecklistItem[] @relation("TaskChecklistDoneBy")
+  taskAttachmentsUploaded TaskAttachment[]   @relation("TaskAttachmentUploader")
+  taskActivityLogs       TaskActivityLog[]   @relation("TaskActivityActor")
+  taskNotifications      TaskNotification[]  @relation("TaskNotificationRecipient")
+  taskNotificationsCaused TaskNotification[] @relation("TaskNotificationActor")
+  taskSavedViews         TaskSavedView[]
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -1470,4 +1486,381 @@ model StatDataPoint {
   @@unique([metricId, recordedAt])
   @@index([metricId, recordedAt])
   @@map("stat_data_points")
+}
+
+// ============================================
+// INTERNAL TASK TRACKER  (Phase 1)
+// ============================================
+//
+// A tenant-scoped Trello/Linear-style task tracker for internal team
+// use. Twelve models here; all live under the same `companyId`
+// column pattern as the rest of the app and are added to the Prisma
+// tenancy extension SCOPED_MODELS set so scoping fires automatically.
+//
+// Priorities are a small closed set — modeled as an enum. Statuses
+// are per-tenant configurable rows on `task_statuses` so admins can
+// rename / reorder / recolor them and add new workflow stages later.
+// Labels + categories are the same pattern: per-tenant admin-editable.
+//
+// Deliberate omissions in Phase 1:
+//   - No `TaskProject` / `TaskSprint` / `TaskMilestone` yet. `Task`
+//     carries `parentTaskId` so subtask + related-task graphs work
+//     right now, and projects can slot in later as an additional
+//     grouping without touching this schema much.
+//   - No time-tracking log (session start/stop). `estimatedHours` +
+//     `actualHours` on Task cover the coarse case for now.
+
+/// Discrete priority levels. Kept as an enum because the set is
+/// small, universal across tenants, and we want compact indexes on
+/// it. Ordering is meaningful — CRITICAL > HIGH > MEDIUM > LOW —
+/// used by list-view default sort.
+enum TaskPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+/// Admin-editable workflow stage. Every task carries `statusId`
+/// pointing at a row here. Defaults are seeded on first task-tracker
+/// render per tenant (see lib/services/task-workflow-service.ts).
+///
+/// `isTerminal` marks "done"-ish stages so counters + filters can
+/// distinguish "in flight" from "closed" without hard-coding names.
+/// `isDefault` is the target for freshly-created tasks — exactly one
+/// row per tenant should have it, enforced app-side.
+model TaskStatus {
+  id         String   @id @default(uuid())
+  name       String
+  /// URL-safe handle — used in filter query strings + saved views so
+  /// links survive a rename. Unique per tenant.
+  slug       String
+  /// Tailwind-safe hex used for the Kanban column bar + status pill.
+  color      String   @default("#94a3b8")
+  orderIndex Int      @default(0) @map("order_index")
+  isDefault  Boolean  @default(false) @map("is_default")
+  isTerminal Boolean  @default(false) @map("is_terminal")
+  /// Optional soft WIP limit for Kanban columns. Null = no limit.
+  wipLimit   Int?     @map("wip_limit")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tasks     Task[]
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([companyId, slug])
+  @@index([companyId, orderIndex])
+  @@map("task_statuses")
+}
+
+/// Admin-editable category (Bug / Feature / Ops / etc.). Optional on
+/// a task — used for filtering + grouping.
+model TaskCategory {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#94a3b8")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tasks     Task[]
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([companyId, name])
+  @@map("task_categories")
+}
+
+/// Free-form label / tag. Many-to-many with tasks via TaskLabelLink.
+/// Distinct from Category because a task typically carries one
+/// category but many labels ("backend" + "api" + "urgent").
+model TaskLabel {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#94a3b8")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  links     TaskLabelLink[]
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([companyId, name])
+  @@map("task_labels")
+}
+
+/// The central row. Everything else (comments, checklists, etc.)
+/// hangs off this via cascade-delete so a task-level delete cleans up
+/// the whole tree. Soft-deleted rows keep `deletedAt` set so an
+/// "Archive" can be un-done from the row action.
+model Task {
+  id            String       @id @default(uuid())
+  title         String
+  /// Rich-text body. Plain text through Phase 4; Tiptap upgrade in
+  /// Phase 5. Nullable because a task can be created title-only.
+  description   String?      @db.Text
+  statusId      String       @map("status_id")
+  priority      TaskPriority @default(MEDIUM)
+  categoryId    String?      @map("category_id")
+
+  /// Who created / owns follow-up on this task. Required — a task
+  /// without a reporter is orphan work. SetNull on user delete so
+  /// we don't lose the task itself; the row just shows "System" as
+  /// the reporter.
+  reporterId    String?      @map("reporter_id")
+
+  /// Self-referential parent for subtasks + related-task graphs.
+  /// SetNull rather than Cascade so deleting a parent doesn't wipe
+  /// out its subtasks — a common accidental foot-gun.
+  parentTaskId  String?      @map("parent_task_id")
+
+  startDate     DateTime?    @map("start_date") @db.Date
+  dueDate       DateTime?    @map("due_date") @db.Date
+  estimatedHours Decimal?    @map("estimated_hours") @db.Decimal(8, 2)
+  actualHours    Decimal?    @map("actual_hours") @db.Decimal(8, 2)
+
+  /// Kanban ordering within a status column. Cards are ordered by
+  /// this ascending; drag-drop rewrites it. Keep gaps (100, 200, 300)
+  /// so single-card moves rarely need to touch neighbours.
+  orderIndex    Int          @default(0) @map("order_index")
+
+  archivedAt    DateTime?    @map("archived_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  deletedAt     DateTime?    @map("deleted_at")
+
+  status        TaskStatus     @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  category      TaskCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  reporter      User?          @relation("TaskReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  parentTask    Task?          @relation("TaskParent", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks      Task[]         @relation("TaskParent")
+
+  assignees     TaskAssignee[]
+  watchers      TaskWatcher[]
+  labels        TaskLabelLink[]
+  comments      TaskComment[]
+  checklists    TaskChecklist[]
+  attachments   TaskAttachment[]
+  activityLogs  TaskActivityLog[]
+  notifications TaskNotification[]
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, statusId, orderIndex])
+  @@index([companyId, priority])
+  @@index([companyId, dueDate])
+  @@index([companyId, categoryId])
+  @@index([companyId, reporterId])
+  @@index([companyId, archivedAt])
+  @@index([companyId, deletedAt])
+  @@map("tasks")
+}
+
+/// Junction table for the many-to-many between Task and TaskLabel.
+/// Both sides cascade — the join disappears if either side is
+/// deleted, no orphan links.
+model TaskLabelLink {
+  taskId    String   @map("task_id")
+  labelId   String   @map("label_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task  Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label TaskLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@id([taskId, labelId])
+  @@index([companyId])
+  @@map("task_label_links")
+}
+
+/// A user assigned to a task. Multi-assignee by design — Linear-
+/// style single-assignee is achievable at the UI layer while keeping
+/// the schema flexible for team-based tasks.
+model TaskAssignee {
+  taskId    String   @map("task_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@id([taskId, userId])
+  @@index([companyId, userId])
+  @@map("task_assignees")
+}
+
+/// A user watching a task — receives notifications on state changes
+/// + comments even when not assigned. Auto-added on comment/mention;
+/// admins can add / remove others.
+model TaskWatcher {
+  taskId    String   @map("task_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@id([taskId, userId])
+  @@index([companyId, userId])
+  @@map("task_watchers")
+}
+
+/// A single comment on a task. Body is plain text through Phase 4;
+/// Tiptap HTML from Phase 5 onwards. Edits set `editedAt` + record
+/// the editor separately (usually the same as author).
+model TaskComment {
+  id         String    @id @default(uuid())
+  taskId     String    @map("task_id")
+  authorId   String?   @map("author_id")
+  body       String    @db.Text
+  editedAt   DateTime? @map("edited_at")
+  editedById String?   @map("edited_by_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  task     Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author   User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  editedBy User? @relation("TaskCommentEditor", fields: [editedById], references: [id], onDelete: SetNull)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, taskId, createdAt])
+  @@map("task_comments")
+}
+
+/// A named checklist on a task. A task can hold multiple checklists
+/// ("Pre-launch", "Handoff", etc.); each has ordered items.
+model TaskChecklist {
+  id         String   @id @default(uuid())
+  taskId     String   @map("task_id")
+  title      String
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  task  Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  items TaskChecklistItem[]
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, taskId, orderIndex])
+  @@map("task_checklists")
+}
+
+model TaskChecklistItem {
+  id          String    @id @default(uuid())
+  checklistId String    @map("checklist_id")
+  text        String
+  isDone      Boolean   @default(false) @map("is_done")
+  doneById    String?   @map("done_by_id")
+  doneAt      DateTime? @map("done_at")
+  orderIndex  Int       @default(0) @map("order_index")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  checklist TaskChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  doneBy    User?         @relation("TaskChecklistDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, checklistId, orderIndex])
+  @@map("task_checklist_items")
+}
+
+/// File attached to a task. Bytes live in a Supabase Storage bucket
+/// (`task-attachments/<companyId>/<taskId>/...`); this row is the
+/// metadata pointer + audit surface.
+model TaskAttachment {
+  id           String   @id @default(uuid())
+  taskId       String   @map("task_id")
+  name         String
+  path         String
+  size         Int
+  mimeType     String   @map("mime_type")
+  uploadedById String?  @map("uploaded_by_id")
+  /// External URL for "link" attachments (Google Drive, Frame.io,
+  /// Figma, etc.). When set, path/size/mimeType are placeholder
+  /// values (empty / 0 / "link/external") and the download flow
+  /// opens sourceUrl in a new tab instead of signing a storage URL.
+  sourceUrl    String?  @map("source_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  task       Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation("TaskAttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  companyId  String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, taskId, createdAt])
+  @@map("task_attachments")
+}
+
+/// Immutable audit log of every state-changing event on a task —
+/// created, status/priority/assignee changed, comment added,
+/// checklist toggled, archived, restored, etc. Powers the detail
+/// drawer's activity timeline and future automation triggers.
+model TaskActivityLog {
+  id        String   @id @default(uuid())
+  taskId    String   @map("task_id")
+  actorId   String?  @map("actor_id")
+  /// Short verb tag: "created", "status_changed", "assigned", etc.
+  /// Consumers switch on this to render the right sentence.
+  action    String
+  /// Prior value snapshot (JSON) for diff-style rendering. Nullable
+  /// because a "created" event has no prior state.
+  fromValue Json?    @map("from_value")
+  /// New value snapshot (JSON). Nullable for pure delete events.
+  toValue   Json?    @map("to_value")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor User? @relation("TaskActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, taskId, createdAt])
+  @@map("task_activity_logs")
+}
+
+/// In-app notification. One row per recipient per event — a
+/// broadcast to N watchers becomes N rows so read state stays per
+/// user. Tenant-scoped like the rest of the tracker; every
+/// notification anchors to the task it fires for so cascade cleans
+/// up when the task is hard-deleted.
+model TaskNotification {
+  id          String   @id @default(uuid())
+  taskId      String   @map("task_id")
+  recipientId String   @map("recipient_id")
+  actorId     String?  @map("actor_id")
+  /// Short verb tag, same catalog as TaskActivityLog.action so the
+  /// notification renderer can reuse the activity sentence
+  /// mappings. Kept as a plain String rather than an enum so
+  /// adding a new event doesn't need a migration.
+  kind        String
+  /// Snapshot JSON (from/to values, comment excerpt, etc.) so the
+  /// bell dropdown can render without a re-query.
+  payload     Json?
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  task      Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipient User  @relation("TaskNotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User? @relation("TaskNotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([recipientId, readAt, createdAt])
+  @@index([companyId, taskId])
+  @@map("task_notifications")
+}
+
+/// A named saved view = a URL query string the operator captured.
+/// Per-user (no sharing yet) so my saved "Overdue on me" doesn't
+/// pollute someone else's dropdown. Tenant-scoped so the same
+/// user across companies keeps distinct view sets.
+model TaskSavedView {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  /// URL query string as stored on save — e.g. "priority=HIGH&assignee=<id>&sort=dueDate&dir=asc".
+  /// The tasks shell splats this into the URL when the operator picks the view.
+  query     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([userId, companyId, name])
+  @@index([companyId, userId])
+  @@map("task_saved_views")
 }

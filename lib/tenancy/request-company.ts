@@ -19,6 +19,11 @@ import { isTenancyEnabled } from './feature-flag'
 /** Cross-tenant escape hatch used by withSuperAdminContext. */
 const bypassStore = new AsyncLocalStorage<{ superAdmin: true }>()
 
+/** Explicit tenant id override — used by background jobs / seed
+ *  scripts / local smoke tests that need to push a tenant into the
+ *  request scope without going through cookies + auth. */
+const explicitTenantStore = new AsyncLocalStorage<{ companyId: string }>()
+
 /**
  * Read the active company for the current request. Returns null on:
  *   - tenancy flag off
@@ -36,6 +41,9 @@ const bypassStore = new AsyncLocalStorage<{ superAdmin: true }>()
 export async function getRequestCompanyId(): Promise<string | null> {
   if (!isTenancyEnabled()) return null
   if (bypassStore.getStore()) return null
+
+  const explicit = explicitTenantStore.getStore()
+  if (explicit) return explicit.companyId
 
   try {
     const company = await getActiveCompany()
@@ -56,6 +64,20 @@ export async function getRequestCompanyId(): Promise<string | null> {
  */
 export function runAsSuperAdmin<T>(fn: () => Promise<T>): Promise<T> {
   return bypassStore.run({ superAdmin: true }, fn)
+}
+
+/**
+ * Run a callback with an explicit tenant id, bypassing the cookies +
+ * auth path getActiveCompany() normally walks. Intended for
+ * background jobs, seed scripts, and local smoke tests that need to
+ * act as a specific tenant without a real HTTP request. Ignored
+ * inside runAsSuperAdmin() (super-admin bypass wins).
+ */
+export function runAsTenant<T>(
+  companyId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return explicitTenantStore.run({ companyId }, fn)
 }
 
 /**

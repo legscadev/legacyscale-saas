@@ -53,6 +53,21 @@ const SCOPED_MODELS = new Set<string>([
   'OnboardingChecklistItem',
   'EmployeeChecklistItemStatus',
   'AppSetting',
+  // Internal Task Tracker (Phase 1)
+  'Task',
+  'TaskStatus',
+  'TaskCategory',
+  'TaskLabel',
+  'TaskLabelLink',
+  'TaskAssignee',
+  'TaskWatcher',
+  'TaskComment',
+  'TaskChecklist',
+  'TaskChecklistItem',
+  'TaskAttachment',
+  'TaskActivityLog',
+  'TaskNotification',
+  'TaskSavedView',
 ])
 
 type AnyArgs = { where?: Record<string, unknown>; data?: unknown } & Record<
