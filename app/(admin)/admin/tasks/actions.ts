@@ -380,7 +380,23 @@ export async function fetchTaskWorkspaceAction(
   const companyId = await getRequestCompanyId()
   if (companyId) await ensureWorkflowReady(companyId)
 
-  const parsedFilters = taskFilterSchema.safeParse(filters)
+  // "Only mine" is a URL-level convenience — the client sends it
+  // instead of trying to encode the operator's own user id in the
+  // query string. Fold it into assigneeIds here (merging with any
+  // explicit picks so both stay in effect) then strip so the
+  // schema doesn't reject an unknown key.
+  const mine = filters.mine === true
+  const cleanedFilters: Record<string, unknown> = { ...filters }
+  delete cleanedFilters.mine
+  if (mine) {
+    const existing = Array.isArray(cleanedFilters.assigneeIds)
+      ? (cleanedFilters.assigneeIds as string[])
+      : []
+    const set = new Set<string>([...existing, currentUser.id])
+    cleanedFilters.assigneeIds = Array.from(set)
+  }
+
+  const parsedFilters = taskFilterSchema.safeParse(cleanedFilters)
   if (!parsedFilters.success) {
     return {
       ok: false,

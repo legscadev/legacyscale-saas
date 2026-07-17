@@ -33,10 +33,13 @@ import {
 import { cn } from '@/lib/utils'
 import type { SavedViewRow } from '@/lib/services/task-saved-view-service'
 
-/** Params we DON'T want to save as part of a view — they're
- *  interaction state (which drawer is open, pagination position),
- *  not filter intent. */
-const EPHEMERAL_KEYS = new Set(['task', 'page', 'view'])
+/** Params we DON'T want to save as part of a view:
+ *   - task / page / view: interaction state (which drawer is open,
+ *     pagination position, list vs board), not filter intent.
+ *   - mine: per-user; if operator A saves a view with mine=1,
+ *     loading it as operator B would incorrectly filter to A's
+ *     tasks. Recomputed live from the checkbox instead. */
+const EPHEMERAL_KEYS = new Set(['task', 'page', 'view', 'mine'])
 
 interface SavedViewsMenuProps {
   savedViews: SavedViewRow[]

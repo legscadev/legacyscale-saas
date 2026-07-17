@@ -83,6 +83,7 @@ export function TasksFilterBar({
   const labelIds = csvToArray(searchParams.get('label'))
   const assigneeIds = csvToArray(searchParams.get('assignee'))
   const includeArchived = searchParams.get('archived') === '1'
+  const onlyMine = searchParams.get('mine') === '1'
 
   const hasActive =
     urlSearch !== '' ||
@@ -91,7 +92,8 @@ export function TasksFilterBar({
     categoryIds.length > 0 ||
     labelIds.length > 0 ||
     assigneeIds.length > 0 ||
-    includeArchived
+    includeArchived ||
+    onlyMine
 
   const paramsCopy = useMemo(
     () => new URLSearchParams(searchParams.toString()),
@@ -203,6 +205,27 @@ export function TasksFilterBar({
         }
         onClear={() => pushParams({ assignee: null, page: null })}
       />
+
+      <label
+        className={cn(
+          'inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-xs',
+          'transition-colors hover:bg-accent hover:text-accent-foreground',
+          onlyMine && 'border-primary/40 bg-primary/5 text-foreground',
+        )}
+      >
+        <input
+          type="checkbox"
+          checked={onlyMine}
+          onChange={(e) =>
+            pushParams({
+              mine: e.target.checked ? '1' : null,
+              page: null,
+            })
+          }
+          className="size-3.5 accent-primary"
+        />
+        Only mine
+      </label>
 
       <label
         className={cn(
