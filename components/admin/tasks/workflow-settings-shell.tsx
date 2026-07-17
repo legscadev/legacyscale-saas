@@ -78,6 +78,7 @@ export function WorkflowSettingsShell({
               return
             }
             setStatuses((prev) => [...prev, res.data])
+            toast.success('Status added')
           })
         }}
         addLabel="Add status"
@@ -106,6 +107,7 @@ export function WorkflowSettingsShell({
                 return
               }
               setCategories((prev) => [...prev, res.data])
+              toast.success('Category added')
             },
           )
         }}
@@ -138,6 +140,7 @@ export function WorkflowSettingsShell({
                 return
               }
               setLabels((prev) => [...prev, res.data])
+              toast.success('Label added')
             },
           )
         }}

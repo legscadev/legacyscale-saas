@@ -79,6 +79,7 @@ export function CategoryLabelRows<T extends TaxonomyItem>({
         toast.error(res.error ?? 'Could not delete')
         return
       }
+      toast.success(`Deleted "${target.name}"`)
       onDeleted(target.id)
       setPending(null)
     })
@@ -180,6 +181,7 @@ function ItemRow<T extends TaxonomyItem>({
         return
       }
       onPatched(res.data)
+      toast.success(`Renamed to "${res.data.name}"`)
     })
   }
 
@@ -192,6 +194,7 @@ function ItemRow<T extends TaxonomyItem>({
         return
       }
       onPatched(res.data)
+      toast.success(`Updated "${res.data.name}"`)
     })
   }
 
