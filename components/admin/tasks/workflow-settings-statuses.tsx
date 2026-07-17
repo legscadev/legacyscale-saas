@@ -61,6 +61,7 @@ export function StatusRows({
         toast.error(res.error ?? 'Could not delete status')
         return
       }
+      toast.success(`Deleted "${target.name}"`)
       onDeleted(target.id)
       setPending(null)
     })
@@ -176,6 +177,7 @@ function StatusRow({
         return
       }
       onPatched(res.data)
+      toast.success(`Updated "${res.data.name}"`)
     })
   }
 
