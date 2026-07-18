@@ -357,6 +357,7 @@ model Company {
 
   memberships CompanyMembership[]
   domains     Domain[]
+  loginEvents LoginEvent[]
 
   @@index([deletedAt])
   @@map("companies")
@@ -531,16 +532,19 @@ model Invite {
 // LOGIN EVENTS
 // ============================================
 
-/// Tracks individual login timestamps per user. Powers the activity
-/// sparkline on the admin members page.
+/// Tracks individual login timestamps per user, scoped to a company.
+/// Powers the activity sparkline on the admin members page.
 model LoginEvent {
-  id      String   @id @default(uuid())
-  userId  String   @map("user_id")
-  loginAt DateTime @default(now()) @map("login_at")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+  loginAt   DateTime @default(now()) @map("login_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([userId, loginAt])
+  @@index([companyId, userId, loginAt])
   @@map("login_events")
 }
 
