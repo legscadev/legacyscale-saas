@@ -1,7 +1,7 @@
-import type { Prisma, Role } from '@prisma/client'
+import { Prisma, type Role } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { memberTenantScope } from '@/lib/tenancy/request-company'
+import { getRequestCompanyId, memberTenantScope } from '@/lib/tenancy/request-company'
 
 export type MemberStatusFilter = 'active' | 'suspended' | 'archived'
 export type MemberSortField = 'name' | 'createdAt' | 'lastLoginAt' | 'lastActiveAt'
@@ -185,6 +185,8 @@ async function getLoginSparklines(
 ): Promise<Record<string, number[]>> {
   if (userIds.length === 0) return {}
 
+  const companyId = await getRequestCompanyId()
+
   const rows = await prisma.$queryRaw<
     { user_id: string; day: Date; logins: bigint }[]
   >`
@@ -192,6 +194,7 @@ async function getLoginSparklines(
     FROM login_events
     WHERE user_id = ANY(${userIds})
       AND login_at >= NOW() - INTERVAL '30 days'
+      ${companyId ? Prisma.sql`AND company_id = ${companyId}` : Prisma.empty}
     GROUP BY user_id, DATE(login_at)
     ORDER BY user_id, day
   `

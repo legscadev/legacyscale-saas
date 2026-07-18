@@ -68,6 +68,7 @@ const SCOPED_MODELS = new Set<string>([
   'TaskActivityLog',
   'TaskNotification',
   'TaskSavedView',
+  'LoginEvent',
 ])
 
 type AnyArgs = { where?: Record<string, unknown>; data?: unknown } & Record<
