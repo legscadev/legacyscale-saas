@@ -78,11 +78,59 @@ export async function provisionMemberWithInvite(
   const effectiveCategoryId =
     input.role === 'MEMBER' ? (input.categoryId ?? null) : null
 
+  const activeCompanyId = await getRequestCompanyId()
+
   const existing = await prisma.user.findUnique({
     where: { email: normalizedEmail },
-    select: { id: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      companyMemberships: activeCompanyId
+        ? { where: { companyId: activeCompanyId }, select: { id: true } }
+        : undefined,
+    },
   })
-  if (existing) throw new MemberEmailConflictError()
+
+  // User exists globally — check if they're already in the current company
+  if (existing) {
+    if (activeCompanyId && existing.companyMemberships?.length) {
+      // Already a member of this company — genuine conflict
+      throw new MemberEmailConflictError()
+    }
+
+    // User exists but not in this company — link them to the current tenant
+    if (activeCompanyId) {
+      const companyRole = mapRoleToCompanyRole(input.role)
+      await prisma.companyMembership.create({
+        data: {
+          userId: existing.id,
+          companyId: activeCompanyId,
+          role: companyRole,
+        },
+      })
+    }
+
+    const token = await issueInvite(existing.id)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const onboardingUrl = `${appUrl}/onboarding?token=${token}`
+    try {
+      await sendWelcomeEmail(existing.email, input.name, {
+        ctaUrl: onboardingUrl,
+        variant: 'invite',
+      })
+    } catch (err) {
+      console.error('Onboarding email send failed:', err)
+    }
+
+    return {
+      id: existing.id,
+      email: existing.email,
+      name: existing.name,
+      role: existing.role,
+    }
+  }
 
   const admin = createAdminClient()
 
@@ -127,7 +175,6 @@ export async function provisionMemberWithInvite(
   // request context also creates the company membership so the new
   // user shows up in that tenant's member list. No-op when the flag
   // is off — memberships are Phase-2-only.
-  const activeCompanyId = await getRequestCompanyId()
   if (activeCompanyId) {
     const companyRole = mapRoleToCompanyRole(input.role)
     await prisma.companyMembership.upsert({
