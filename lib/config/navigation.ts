@@ -61,11 +61,7 @@ export const adminNav: NavSection[] = [
     label: 'Internal',
     items: [
       { label: 'Team', href: '/admin/team', icon: Users },
-      // Tasks tracker hidden from the sidebar for now — the route
-      // at /admin/tasks stays live, so admins with a direct link
-      // can still open it. Re-add this entry when the feature is
-      // ready to surface across all tenants.
-      // { label: 'Tasks', href: '/admin/tasks', icon: CheckSquare },
+      { label: 'Tasks', href: '/admin/tasks', icon: CheckSquare },
       { label: 'Trainings', href: '/admin/trainings', icon: GraduationCap },
       { label: 'Statistics', href: '/admin/stats', icon: BarChart3 },
       { label: 'Organization Board', href: '/admin/org-board', icon: Network },
