@@ -3,6 +3,7 @@ import {
   BarChart3,
   Bell,
   BookOpen,
+  BookText,
   Building2,
   CheckSquare,
   GraduationCap,
@@ -62,6 +63,7 @@ export const adminNav: NavSection[] = [
     items: [
       { label: 'Team', href: '/admin/team', icon: Users },
       { label: 'Tasks', href: '/admin/tasks', icon: CheckSquare },
+      { label: 'Policies', href: '/admin/policies', icon: BookText },
       { label: 'Trainings', href: '/admin/trainings', icon: GraduationCap },
       { label: 'Statistics', href: '/admin/stats', icon: BarChart3 },
       { label: 'Organization Board', href: '/admin/org-board', icon: Network },
