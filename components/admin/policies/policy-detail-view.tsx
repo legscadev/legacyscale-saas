@@ -216,39 +216,43 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
           >
             <ul className="space-y-1.5">
               {revisions.map((rev) => (
-                <li
-                  key={rev.id}
-                  className="flex items-start gap-2 rounded-md border bg-background px-2.5 py-2 text-xs"
-                >
-                  <RevisionBadge revision={rev.revision} className="mt-0.5" />
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-1 font-medium text-foreground">
-                      {rev.title}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {fmtCalendarDate(rev.publishedAt)}
-                      {rev.publishedBy
-                        ? ` · ${rev.publishedBy.name ?? rev.publishedBy.email.split('@')[0]}`
-                        : ''}
-                    </p>
-                  </div>
-                  {rev.revision < policy.revision ? (
-                    <button
-                      type="button"
-                      title={`Revert to Rev ${rev.revision}`}
-                      onClick={() =>
-                        run('Revert', () =>
-                          revertPolicyAction({
-                            policyId: policy.id,
-                            revisionId: rev.id,
-                          }),
-                        )
-                      }
-                      className="text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      <Undo2 className="size-3.5" aria-hidden />
-                    </button>
-                  ) : null}
+                <li key={rev.id}>
+                  <Link
+                    href={`/admin/policies/${policy.id}/revisions/${rev.id}`}
+                    className="flex items-start gap-2 rounded-md border bg-background px-2.5 py-2 text-xs transition-colors hover:bg-accent"
+                  >
+                    <RevisionBadge revision={rev.revision} className="mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-1 font-medium text-foreground">
+                        {rev.title}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {fmtCalendarDate(rev.publishedAt)}
+                        {rev.publishedBy
+                          ? ` · ${rev.publishedBy.name ?? rev.publishedBy.email.split('@')[0]}`
+                          : ''}
+                      </p>
+                    </div>
+                    {rev.revision < policy.revision ? (
+                      <button
+                        type="button"
+                        title={`Revert to Rev ${rev.revision}`}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          run('Revert', () =>
+                            revertPolicyAction({
+                              policyId: policy.id,
+                              revisionId: rev.id,
+                            }),
+                          )
+                        }}
+                        className="text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <Undo2 className="size-3.5" aria-hidden />
+                      </button>
+                    ) : null}
+                  </Link>
                 </li>
               ))}
             </ul>
