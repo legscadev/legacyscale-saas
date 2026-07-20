@@ -20,6 +20,8 @@ import {
   Users,
 } from 'lucide-react'
 
+export type NavRole = 'ADMIN' | 'TEAM' | 'MEMBER'
+
 export interface NavItem {
   label: string
   href: string
@@ -27,6 +29,11 @@ export interface NavItem {
   /** Match the href exactly (used for section roots like /admin). */
   exact?: boolean
   badge?: string
+  /** When set, only these roles see the item. Absent = visible to
+   *  everyone the parent nav is shown to (backwards-compatible with
+   *  every existing entry). Filter runs in AppShellInner using the
+   *  user's role prop. */
+  visibleTo?: NavRole[]
 }
 
 export interface NavSection {
@@ -115,6 +122,20 @@ export const memberNav: NavSection[] = [
     ],
   },
   {
+    label: 'Internal',
+    items: [
+      {
+        label: 'Policies',
+        href: '/policies',
+        icon: BookText,
+        // TEAM-only in the member sidebar. ADMIN gets redirected to
+        // /admin/policies at /policies anyway; MEMBER (students) has
+        // no legitimate reason to see internal ops docs.
+        visibleTo: ['TEAM'],
+      },
+    ],
+  },
+  {
     label: 'Account',
     items: [
       { label: 'Certificates', href: '/certificates', icon: Award },
@@ -122,3 +143,20 @@ export const memberNav: NavSection[] = [
     ],
   },
 ]
+
+/** Filter a nav config down to items visible to the given role.
+ *  Sections that become empty after filtering are dropped so the
+ *  sidebar doesn't render bare section labels. */
+export function filterNavForRole(
+  sections: NavSection[],
+  role: NavRole,
+): NavSection[] {
+  return sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => !item.visibleTo || item.visibleTo.includes(role),
+      ),
+    }))
+    .filter((section) => section.items.length > 0)
+}

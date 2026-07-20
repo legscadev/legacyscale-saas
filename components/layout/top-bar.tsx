@@ -291,6 +291,7 @@ export function TopBar({
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         role={role}
+        userRole={user.role}
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </>
