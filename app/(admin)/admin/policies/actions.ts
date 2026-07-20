@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { prisma } from '@/lib/prisma'
 import {
   policyActivityService,
   type PolicyActivityRow,
@@ -175,6 +176,58 @@ export async function fetchPolicyRevisionAction(
     return { ok: true, data }
   } catch (err) {
     return toMutationErr(err, 'Could not load revision')
+  }
+}
+
+// ============================================
+// WORKSPACE FETCHER
+// ============================================
+
+export interface PolicyCategoryRef {
+  id: string
+  name: string
+  color: string
+}
+
+/**
+ * Everything the list shell needs on first render — categories +
+ * the filtered policy list + the current viewer's id — in one
+ * server-side round trip so pickers hydrate without a flash.
+ * Filter parsing lives here so URL-driven refetches (client-side)
+ * share the same code path.
+ */
+export interface PolicyWorkspacePayload {
+  categories: PolicyCategoryRef[]
+  policies: PolicyListResult
+  currentUserId: string
+}
+
+export async function fetchPolicyWorkspaceAction(
+  filters: Record<string, unknown> = {},
+): Promise<MutationResult<PolicyWorkspacePayload>> {
+  const currentUser = await requireAdmin()
+  const companyId = await getRequestCompanyId()
+  if (companyId) await ensurePolicyWorkspaceReady(companyId)
+
+  const parsed = policyFilterSchema.safeParse(filters)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+
+  try {
+    const [categories, policies] = await Promise.all([
+      prisma.policyCategory.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, color: true },
+      }),
+      policyService.list(parsed.data),
+    ])
+    return {
+      ok: true,
+      data: { categories, policies, currentUserId: currentUser.id },
+    }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load policy workspace')
   }
 }
 
