@@ -68,6 +68,12 @@ const SCOPED_MODELS = new Set<string>([
   'TaskActivityLog',
   'TaskNotification',
   'TaskSavedView',
+  // Policies (Phase 1)
+  'Policy',
+  'PolicyCategory',
+  'PolicyRevision',
+  'PolicyAttachment',
+  'PolicyActivityLog',
   'LoginEvent',
 ])
 

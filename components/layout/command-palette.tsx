@@ -8,24 +8,33 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import {
   adminNav,
+  filterNavForRole,
   memberNav,
   superNav,
   type NavItem,
+  type NavRole,
 } from '@/lib/config/navigation'
 
 interface CommandPaletteProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   role: 'admin' | 'member' | 'super'
+  /** User role for visibleTo filtering — a TEAM viewer in the
+   *  member shell needs the same nav filtering the sidebar applies. */
+  userRole: NavRole
 }
 
 interface FlatItem extends NavItem {
   section?: string
 }
 
-function flatten(role: 'admin' | 'member' | 'super'): FlatItem[] {
-  const sections =
+function flatten(
+  role: 'admin' | 'member' | 'super',
+  userRole: NavRole,
+): FlatItem[] {
+  const rawSections =
     role === 'super' ? superNav : role === 'admin' ? adminNav : memberNav
+  const sections = filterNavForRole(rawSections, userRole)
   return sections.flatMap((s) =>
     s.items.map((item) => ({ ...item, section: s.label })),
   )
@@ -35,13 +44,14 @@ export function CommandPalette({
   open,
   onOpenChange,
   role,
+  userRole,
 }: CommandPaletteProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
 
-  const items = useMemo(() => flatten(role), [role])
+  const items = useMemo(() => flatten(role, userRole), [role, userRole])
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return items

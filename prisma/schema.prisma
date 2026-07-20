@@ -275,6 +275,16 @@ model User {
   taskNotificationsCaused TaskNotification[] @relation("TaskNotificationActor")
   taskSavedViews         TaskSavedView[]
 
+  // Policies — mini-CMS for internal ops docs (Kondense's Makh-style
+  // "hat write-ups"). Named relations because a user can be author,
+  // editor, publisher of a revision, uploader of an attachment, or
+  // actor on an audit log.
+  policiesAuthored           Policy[]            @relation("PolicyAuthor")
+  policiesEdited             Policy[]            @relation("PolicyEditor")
+  policyRevisionsPublished   PolicyRevision[]    @relation("PolicyRevisionPublisher")
+  policyAttachmentsUploaded  PolicyAttachment[]  @relation("PolicyAttachmentUploader")
+  policyActivityLogs         PolicyActivityLog[] @relation("PolicyActivityActor")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -1867,4 +1877,151 @@ model TaskSavedView {
   @@unique([userId, companyId, name])
   @@index([companyId, userId])
   @@map("task_saved_views")
+}
+
+// ============================================
+// POLICIES
+// ============================================
+// Internal ops docs (Kondense's Makh-style "hat write-ups"). One
+// Policy per role/process. Free-form rich-text body — each publish
+// snapshots to PolicyRevision so admins can compare + roll back.
+// Reuses TaskAttachment / TaskActivityLog conventions.
+
+enum PolicyStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Admin-editable category (Role Hats / Processes / Systems /
+/// Onboarding). Optional on a policy — used for filtering + grouping.
+model PolicyCategory {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#94a3b8")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  policies  Policy[]
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([companyId, name])
+  @@map("policy_categories")
+}
+
+/// A durable reference doc — starts DRAFT, moves to PUBLISHED (which
+/// also snapshots a PolicyRevision + bumps `revision`), can be
+/// ARCHIVED to hide from active lists without losing history.
+/// Soft-deleted rows keep `deletedAt` so an accidental delete can be
+/// undone from row actions.
+model Policy {
+  id          String       @id @default(uuid())
+  title       String
+  /// Rich-text HTML from Tiptap. Nullable — a policy can be created
+  /// title-only and filled in later.
+  body        String?      @db.Text
+  status      PolicyStatus @default(DRAFT)
+  /// Incremented on each successful publish. Drafts sit at 0 until
+  /// the first publish makes them Rev I. Current body always lives
+  /// on this row; PolicyRevision holds frozen prior snapshots.
+  revision    Int          @default(0)
+  categoryId  String?      @map("category_id")
+
+  /// Author. SetNull so deleting an admin doesn't cascade away every
+  /// policy they wrote.
+  createdBy   String?      @map("created_by")
+  /// Most-recent editor. SetNull for the same reason.
+  updatedBy   String?      @map("updated_by")
+
+  /// First-published timestamp. Once set, stays set — re-publishes
+  /// update `revision` and snapshot to PolicyRevision but leave this
+  /// pointing at the original go-live moment.
+  publishedAt DateTime?    @map("published_at")
+  archivedAt  DateTime?    @map("archived_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  deletedAt   DateTime?    @map("deleted_at")
+
+  category      PolicyCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdByUser User?               @relation("PolicyAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  updatedByUser User?               @relation("PolicyEditor", fields: [updatedBy], references: [id], onDelete: SetNull)
+  revisions     PolicyRevision[]
+  attachments   PolicyAttachment[]
+  activityLogs  PolicyActivityLog[]
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, status])
+  @@index([companyId, categoryId])
+  @@index([companyId, publishedAt])
+  @@index([companyId, archivedAt])
+  @@index([companyId, deletedAt])
+  @@map("policies")
+}
+
+/// Frozen snapshot at publish time. One row per publish; Rev I is
+/// the first. `title` + `body` are copied so restoring a revision is
+/// a straight copy back into the parent Policy.
+model PolicyRevision {
+  id            String   @id @default(uuid())
+  policyId      String   @map("policy_id")
+  revision      Int
+  title         String
+  body          String?  @db.Text
+  publishedAt   DateTime @default(now()) @map("published_at")
+  publishedById String?  @map("published_by_id")
+
+  policy      Policy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  publishedBy User?  @relation("PolicyRevisionPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([policyId, revision])
+  @@index([companyId, policyId, publishedAt])
+  @@map("policy_revisions")
+}
+
+/// File + link attachments. Mirrors TaskAttachment — a row is either
+/// a Supabase-Storage file (path/size/mimeType filled) or an external
+/// link (sourceUrl set; other columns are placeholders).
+model PolicyAttachment {
+  id           String   @id @default(uuid())
+  policyId     String   @map("policy_id")
+  name         String
+  path         String
+  size         Int
+  mimeType     String   @map("mime_type")
+  uploadedById String?  @map("uploaded_by_id")
+  sourceUrl    String?  @map("source_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  policy     Policy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  uploadedBy User?  @relation("PolicyAttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, policyId, createdAt])
+  @@map("policy_attachments")
+}
+
+/// Immutable audit log of every state-changing event on a policy —
+/// created, published, archived, restored, revision reverted, etc.
+/// Same shape + verbs catalog as TaskActivityLog.
+model PolicyActivityLog {
+  id        String   @id @default(uuid())
+  policyId  String   @map("policy_id")
+  actorId   String?  @map("actor_id")
+  /// Short verb tag: "created", "published", "archived",
+  /// "restored", "reverted_to_revision", "edited", etc.
+  action    String
+  fromValue Json?    @map("from_value")
+  toValue   Json?    @map("to_value")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  policy Policy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("PolicyActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, policyId, createdAt])
+  @@map("policy_activity_logs")
 }

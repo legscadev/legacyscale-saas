@@ -5,7 +5,13 @@ import Link from 'next/link'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { adminNav, memberNav, superNav } from '@/lib/config/navigation'
+import {
+  adminNav,
+  filterNavForRole,
+  memberNav,
+  superNav,
+  type NavRole,
+} from '@/lib/config/navigation'
 import { BrandMark } from './brand-mark'
 import { CompanySwitcher } from './company-switcher'
 import { PageTransition } from './page-transition'
@@ -103,8 +109,11 @@ function AppShellInner({
   const { collapsed } = useSidebar()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const sections =
+  const rawSections =
     role === 'super' ? superNav : role === 'admin' ? adminNav : memberNav
+  // Filter role-scoped items down to the current viewer. Nav items
+  // without visibleTo are unaffected (backwards-compatible).
+  const sections = filterNavForRole(rawSections, user.role as NavRole)
   const context =
     role === 'super'
       ? 'Super Admin'
