@@ -13,6 +13,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
+import type { UpsertPolicyCategoryInput } from '@/lib/validations/policy'
 
 /** Cross-role starter categories. Matches how Makh groups hat
  *  write-ups + process docs — role hats dominate but process /
@@ -65,3 +66,82 @@ export async function ensurePolicyWorkspaceReady(
   if (existing > 0) return
   await seedDefaultPolicyWorkspace(companyId)
 }
+
+// ============================================
+// CRUD for admin surfaces (Phase 6)
+// ============================================
+
+export interface PolicyCategoryListItem {
+  id: string
+  name: string
+  color: string
+  /** How many non-deleted policies currently sit in this category.
+   *  Drives the "in use" warning on the delete confirmation. */
+  policyCount: number
+}
+
+class PolicyCategoryAdminService {
+  async list(): Promise<PolicyCategoryListItem[]> {
+    const rows = await prisma.policyCategory.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: {
+            policies: { where: { deletedAt: null } },
+          },
+        },
+      },
+    })
+    return rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      policyCount: c._count.policies,
+    }))
+  }
+
+  async upsert(
+    input: UpsertPolicyCategoryInput,
+  ): Promise<PolicyCategoryListItem> {
+    if (input.id) {
+      const row = await prisma.policyCategory.update({
+        where: { id: input.id },
+        data: { name: input.name, color: input.color },
+        include: {
+          _count: {
+            select: { policies: { where: { deletedAt: null } } },
+          },
+        },
+      })
+      return {
+        id: row.id,
+        name: row.name,
+        color: row.color,
+        policyCount: row._count.policies,
+      }
+    }
+    const row = await prisma.policyCategory.create({
+      data: { name: input.name, color: input.color },
+      include: {
+        _count: {
+          select: { policies: { where: { deletedAt: null } } },
+        },
+      },
+    })
+    return {
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      policyCount: row._count.policies,
+    }
+  }
+
+  /** Categories are optional on policies (FK is SetNull), so a
+   *  delete simply detaches the association from any policies
+   *  holding it. */
+  async delete(id: string): Promise<void> {
+    await prisma.policyCategory.delete({ where: { id } })
+  }
+}
+
+export const policyCategoryAdminService = new PolicyCategoryAdminService()
