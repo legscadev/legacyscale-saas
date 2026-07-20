@@ -44,9 +44,19 @@ import { PolicyBodyHtml } from './policy-body-html'
 
 interface PolicyDetailViewProps {
   data: PolicyDetailPayload
+  /** When false, editor entry points and danger-zone actions are
+   *  hidden — used by the TEAM read view at /policies/[id]. */
+  canWrite?: boolean
+  /** URL prefix for internal navigation — /admin/policies for the
+   *  admin surface, /policies for the TEAM read view. */
+  basePath?: string
 }
 
-export function PolicyDetailView({ data }: PolicyDetailViewProps) {
+export function PolicyDetailView({
+  data,
+  canWrite = true,
+  basePath = '/admin/policies',
+}: PolicyDetailViewProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const { policy, revisions, attachments, activity } = data
@@ -88,7 +98,7 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
     run(
       'Delete',
       () => deletePolicyAction(policy.id),
-      () => router.push('/admin/policies'),
+      () => router.push(basePath),
     )
   }
 
@@ -98,7 +108,7 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
         title={policy.title}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {policy.status !== 'ARCHIVED' ? (
+            {canWrite && policy.status !== 'ARCHIVED' ? (
               <Button
                 variant="outline"
                 onClick={() =>
@@ -116,20 +126,22 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
             <Button
               variant="outline"
               render={
-                <Link href={`/admin/policies/${policy.id}/print`}>
+                <Link href={`${basePath}/${policy.id}/print`}>
                   <Printer className="size-4" />
                   Print
                 </Link>
               }
             />
-            <Button
-              render={
-                <Link href={`/admin/policies/${policy.id}/edit`}>
-                  <Pencil className="size-4" />
-                  Edit
-                </Link>
-              }
-            />
+            {canWrite ? (
+              <Button
+                render={
+                  <Link href={`/admin/policies/${policy.id}/edit`}>
+                    <Pencil className="size-4" />
+                    Edit
+                  </Link>
+                }
+              />
+            ) : null}
           </div>
         }
       />
@@ -217,7 +229,7 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
             headerAction={
               revisions.length >= 1 ? (
                 <Link
-                  href={`/admin/policies/${policy.id}/compare`}
+                  href={`${basePath}/${policy.id}/compare`}
                   className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
                 >
                   <ArrowLeftRight className="size-3" aria-hidden />
@@ -230,7 +242,7 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
               {revisions.map((rev) => (
                 <li key={rev.id}>
                   <Link
-                    href={`/admin/policies/${policy.id}/revisions/${rev.id}`}
+                    href={`${basePath}/${policy.id}/revisions/${rev.id}`}
                     className="flex items-start gap-2 rounded-md border bg-background px-2.5 py-2 text-xs transition-colors hover:bg-accent"
                   >
                     <RevisionBadge revision={rev.revision} className="mt-0.5" />
@@ -245,7 +257,7 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
                           : ''}
                       </p>
                     </div>
-                    {rev.revision < policy.revision ? (
+                    {canWrite && rev.revision < policy.revision ? (
                       <button
                         type="button"
                         title={`Revert to Rev ${rev.revision}`}
@@ -290,45 +302,47 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
             </ul>
           </SidebarSection>
 
-          <SidebarSection title="Danger zone">
-            <div className="flex flex-col gap-2">
-              {isArchived ? (
+          {canWrite ? (
+            <SidebarSection title="Danger zone">
+              <div className="flex flex-col gap-2">
+                {isArchived ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      run('Restore', () => restorePolicyAction(policy.id))
+                    }
+                    disabled={isPending}
+                  >
+                    <ArchiveRestore className="size-3.5" />
+                    Restore
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      run('Archive', () => archivePolicyAction(policy.id))
+                    }
+                    disabled={isPending}
+                  >
+                    <Archive className="size-3.5" />
+                    Archive
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    run('Restore', () => restorePolicyAction(policy.id))
-                  }
+                  onClick={handleDelete}
                   disabled={isPending}
+                  className="text-destructive hover:text-destructive"
                 >
-                  <ArchiveRestore className="size-3.5" />
-                  Restore
+                  <Trash2 className="size-3.5" />
+                  Delete policy
                 </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    run('Archive', () => archivePolicyAction(policy.id))
-                  }
-                  disabled={isPending}
-                >
-                  <Archive className="size-3.5" />
-                  Archive
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDelete}
-                disabled={isPending}
-                className="text-destructive hover:text-destructive"
-              >
-                <Trash2 className="size-3.5" />
-                Delete policy
-              </Button>
-            </div>
-          </SidebarSection>
+              </div>
+            </SidebarSection>
+          ) : null}
         </aside>
       </div>
     </div>

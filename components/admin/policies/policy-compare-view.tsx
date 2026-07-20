@@ -61,6 +61,8 @@ interface PolicyCompareViewProps {
    *  component is a pure renderer. */
   leftSnapshot: SnapshotSlot
   rightSnapshot: SnapshotSlot
+  canWrite?: boolean
+  basePath?: string
 }
 
 export function PolicyCompareView({
@@ -68,6 +70,8 @@ export function PolicyCompareView({
   revisions,
   leftSnapshot,
   rightSnapshot,
+  canWrite = true,
+  basePath = '/admin/policies',
 }: PolicyCompareViewProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -81,7 +85,7 @@ export function PolicyCompareView({
   function pushSide(side: 'from' | 'to', value: string) {
     const next = new URLSearchParams(paramsCopy)
     next.set(side, value)
-    router.push(`/admin/policies/${policy.id}/compare?${next.toString()}`)
+    router.push(`${basePath}/${policy.id}/compare?${next.toString()}`)
   }
 
   function swap() {
@@ -90,7 +94,7 @@ export function PolicyCompareView({
     const next = new URLSearchParams(paramsCopy)
     next.set('from', to)
     next.set('to', from)
-    router.push(`/admin/policies/${policy.id}/compare?${next.toString()}`)
+    router.push(`${basePath}/${policy.id}/compare?${next.toString()}`)
   }
 
   function previousRevisionId(): string {
@@ -109,7 +113,7 @@ export function PolicyCompareView({
         return
       }
       toast.success(`Reverted — Rev ${res.data.revision} cut`)
-      router.push(`/admin/policies/${policy.id}`)
+      router.push(`${basePath}/${policy.id}`)
     })
   }
 
@@ -117,8 +121,8 @@ export function PolicyCompareView({
     <div className="space-y-6">
       <PageHeader
         breadcrumbs={[
-          { label: 'Policies', href: '/admin/policies' },
-          { label: policy.title, href: `/admin/policies/${policy.id}` },
+          { label: 'Policies', href: basePath },
+          { label: policy.title, href: `${basePath}/${policy.id}` },
           { label: 'Compare' },
         ]}
         title="Compare revisions"
@@ -137,7 +141,7 @@ export function PolicyCompareView({
               variant="ghost"
               size="sm"
               render={
-                <Link href={`/admin/policies/${policy.id}`}>
+                <Link href={`${basePath}/${policy.id}`}>
                   <ArrowLeft className="size-4" />
                   Back to policy
                 </Link>
@@ -158,7 +162,9 @@ export function PolicyCompareView({
           policy={policy}
           revisions={revisions}
           onPick={(value) => pushSide('from', value)}
-          onRevert={leftSnapshot.revisionId ? handleRevert : undefined}
+          onRevert={
+            canWrite && leftSnapshot.revisionId ? handleRevert : undefined
+          }
           reverting={isReverting}
         />
         <CompareColumn
@@ -171,7 +177,9 @@ export function PolicyCompareView({
           policy={policy}
           revisions={revisions}
           onPick={(value) => pushSide('to', value)}
-          onRevert={rightSnapshot.revisionId ? handleRevert : undefined}
+          onRevert={
+            canWrite && rightSnapshot.revisionId ? handleRevert : undefined
+          }
           reverting={isReverting}
         />
       </div>

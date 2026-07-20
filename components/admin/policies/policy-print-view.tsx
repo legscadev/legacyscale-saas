@@ -21,6 +21,7 @@ import { CategoryChip, RevisionBadge } from './policy-pills'
 interface PolicyPrintViewProps {
   data: PolicyDetailPayload
   companyName: string | null
+  basePath?: string
 }
 
 // Injected once at the top of the tree. `visibility: hidden` on the
@@ -62,6 +63,7 @@ const PRINT_CSS = `
 export function PolicyPrintView({
   data,
   companyName,
+  basePath = '/admin/policies',
 }: PolicyPrintViewProps) {
   const { policy } = data
 
@@ -77,7 +79,7 @@ export function PolicyPrintView({
           variant="outline"
           size="sm"
           render={
-            <Link href={`/admin/policies/${policy.id}`}>
+            <Link href={`${basePath}/${policy.id}`}>
               <ArrowLeft className="size-4" />
               Back to policy
             </Link>

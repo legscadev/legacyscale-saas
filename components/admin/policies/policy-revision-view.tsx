@@ -26,11 +26,15 @@ import { RevisionBadge } from './policy-pills'
 interface PolicyRevisionViewProps {
   policy: PolicyDetail
   revision: PolicyRevisionDetail
+  canWrite?: boolean
+  basePath?: string
 }
 
 export function PolicyRevisionView({
   policy,
   revision,
+  canWrite = true,
+  basePath = '/admin/policies',
 }: PolicyRevisionViewProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -49,7 +53,7 @@ export function PolicyRevisionView({
         return
       }
       toast.success(`Reverted — Rev ${res.data.revision} cut`)
-      router.push(`/admin/policies/${policy.id}`)
+      router.push(`${basePath}/${policy.id}`)
     })
   }
 
@@ -62,13 +66,13 @@ export function PolicyRevisionView({
             <Button
               variant="outline"
               render={
-                <Link href={`/admin/policies/${policy.id}`}>
+                <Link href={`${basePath}/${policy.id}`}>
                   <ArrowLeft className="size-4" />
                   Back to policy
                 </Link>
               }
             />
-            {isSuperseded ? (
+            {canWrite && isSuperseded ? (
               <Button onClick={handleRevert} disabled={isPending}>
                 <Undo2 className="size-4" />
                 {isPending
