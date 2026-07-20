@@ -29,6 +29,7 @@ import {
   PolicyStatusPill,
   RevisionBadge,
 } from './policy-pills'
+import { PolicyRowActions } from './policy-row-actions'
 
 type SortField = 'title' | 'createdAt' | 'updatedAt' | 'publishedAt'
 type SortDir = 'asc' | 'desc'
@@ -40,6 +41,9 @@ interface PoliciesTableProps {
   onSortChange: (field: SortField) => void
   onOpenPolicy?: (id: string) => void
   onCreate?: () => void
+  /** Called after any row-action mutation completes so the shell
+   *  can refresh the workspace. */
+  onRowChanged: () => void | Promise<void>
 }
 
 export function PoliciesTable({
@@ -49,6 +53,7 @@ export function PoliciesTable({
   onSortChange,
   onOpenPolicy,
   onCreate,
+  onRowChanged,
 }: PoliciesTableProps) {
   if (items.length === 0) {
     return (
@@ -88,6 +93,7 @@ export function PoliciesTable({
               Updated
             </SortableHead>
             <TableHead className="w-20 text-right">Meta</TableHead>
+            <TableHead className="w-10" aria-label="Actions" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -144,6 +150,9 @@ export function PoliciesTable({
               </TableCell>
               <TableCell className="text-right">
                 <MetaSummary policy={policy} />
+              </TableCell>
+              <TableCell className="text-right">
+                <PolicyRowActions policy={policy} onChanged={onRowChanged} />
               </TableCell>
             </TableRow>
           ))}

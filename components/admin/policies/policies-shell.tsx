@@ -9,7 +9,7 @@
 // shell just wires row-click to router.push.
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useMemo, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { Plus, Settings } from 'lucide-react'
 import Link from 'next/link'
 
@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 
 import type { PolicyWorkspacePayload } from '@/app/(admin)/admin/policies/actions'
 
+import { CreatePolicyDialog } from './create-policy-dialog'
 import { PoliciesFilterBar } from './policies-filter-bar'
 import { PoliciesTable } from './policies-table'
 
@@ -32,8 +33,15 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isNavigating, startNavigation] = useTransition()
+  const [createOpen, setCreateOpen] = useState(false)
 
   const { policies, categories } = initialData
+
+  function refreshWorkspace() {
+    startNavigation(() => {
+      router.refresh()
+    })
+  }
 
   // Sort state comes from the URL — the page re-fetches with the
   // new params on router.push. Defaults mirror policyFilterSchema.
@@ -68,12 +76,6 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
     })
   }
 
-  function handleCreate() {
-    // Create dialog lands in Phase 2.4. For 2.3, the button is a
-    // visible affordance; wiring is added when the dialog exists.
-    console.warn('[policies] Create dialog lands in Phase 2.4')
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -93,7 +95,7 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
             >
               <Settings className="size-4" />
             </Button>
-            <Button onClick={handleCreate}>
+            <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
               New policy
             </Button>
@@ -112,10 +114,21 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSortChange={handleSortChange}
-          onCreate={handleCreate}
+          onCreate={() => setCreateOpen(true)}
           onOpenPolicy={openPolicy}
+          onRowChanged={refreshWorkspace}
         />
       </div>
+
+      <CreatePolicyDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={async () => {
+          setCreateOpen(false)
+          refreshWorkspace()
+        }}
+        categories={categories}
+      />
     </div>
   )
 }
