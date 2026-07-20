@@ -309,8 +309,13 @@ function formatRelativeShort(date: Date): string {
   if (days < 7) return `${days}d ago`
   const weeks = Math.round(days / 7)
   if (weeks < 5) return `${weeks}w ago`
+  // Data points come from @db.Date columns stored at UTC midnight.
+  // Render in UTC so a July 17 pick doesn't show as "Jul 16" to
+  // viewers in negative UTC offsets (or positive, depending which
+  // way the rounding falls at that instant).
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
+    timeZone: 'UTC',
   }).format(new Date(date))
 }

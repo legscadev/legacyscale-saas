@@ -71,6 +71,17 @@ export function fmtCalendarDate(date: Date | string | null | undefined): string 
   return `${SHORT_MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`
 }
 
+/** "Jul 11" — TZ-independent short form for chart labels + card
+ *  pills where the year is obvious from context. */
+export function fmtCalendarDateShort(
+  date: Date | string | null | undefined,
+): string {
+  if (!date) return '—'
+  const d = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(d.getTime())) return '—'
+  return `${SHORT_MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`
+}
+
 /** "2026-07-11" — TZ-independent. Use when pre-filling an
  *  <input type=date>, where a local-TZ format shifts the picker to
  *  the previous day for negative-offset viewers. */

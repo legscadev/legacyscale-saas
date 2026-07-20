@@ -21,6 +21,7 @@ import {
   upsertDataPointAction,
 } from '@/app/(admin)/admin/stats/actions'
 import { formatMetricValue, unitLabel, type MetricUnit } from '@/lib/format/stat'
+import { fmtCalendarDate } from '@/lib/format'
 
 interface ManageValuesDialogProps {
   open: boolean
@@ -194,7 +195,7 @@ export function ManageValuesDialog({
                             {formatMetricValue(p.value, unit)}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            {formatShortDate(p.recordedAt)}
+                            {fmtCalendarDate(p.recordedAt)}
                           </span>
                         </div>
                         {p.note ? (
@@ -249,10 +250,3 @@ function todayISO(): string {
   return `${y}-${m}-${day}`
 }
 
-function formatShortDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(date))
-}

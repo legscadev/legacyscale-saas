@@ -200,6 +200,7 @@ function buildAxisConfig(fromTs: number, toTs: number): AxisConfig {
         new Intl.DateTimeFormat('en-US', {
           month: 'short',
           day: 'numeric',
+          timeZone: 'UTC',
         }).format(new Date(ts)),
     }
   }
@@ -210,6 +211,7 @@ function buildAxisConfig(fromTs: number, toTs: number): AxisConfig {
         new Intl.DateTimeFormat('en-US', {
           month: 'short',
           day: 'numeric',
+          timeZone: 'UTC',
         }).format(new Date(ts)),
     }
   }
@@ -219,12 +221,13 @@ function buildAxisConfig(fromTs: number, toTs: number): AxisConfig {
       formatTick: (ts) =>
         new Intl.DateTimeFormat('en-US', {
           month: 'short',
+          timeZone: 'UTC',
         }).format(new Date(ts)),
     }
   }
   return {
     ticks: alignedTicks(fromTs, toTs, 'year', 1),
-    formatTick: (ts) => String(new Date(ts).getFullYear()),
+    formatTick: (ts) => String(new Date(ts).getUTCFullYear()),
   }
 }
 
@@ -236,31 +239,34 @@ function alignedTicks(
 ): number[] {
   const ticks: number[] = []
   const cursor = new Date(fromTs)
-  // Snap the cursor forward to the next natural boundary so the
-  // labeled tick sits on a clean unit (start-of-hour / midnight /
-  // 1st-of-month / Jan 1).
+  // Snap the cursor forward to the next natural UTC boundary so
+  // the labeled tick sits on a clean unit (start-of-hour /
+  // midnight-UTC / 1st-of-month / Jan 1). Working in UTC keeps
+  // the tick positions aligned with the tick labels, which are
+  // also rendered in UTC — data points on this chart come from
+  // @db.Date columns that store calendar days as UTC midnight.
   if (unit === 'hour') {
-    cursor.setMinutes(0, 0, 0)
-    if (cursor.getTime() < fromTs) cursor.setHours(cursor.getHours() + 1)
+    cursor.setUTCMinutes(0, 0, 0)
+    if (cursor.getTime() < fromTs) cursor.setUTCHours(cursor.getUTCHours() + 1)
   } else if (unit === 'day') {
-    cursor.setHours(0, 0, 0, 0)
-    if (cursor.getTime() < fromTs) cursor.setDate(cursor.getDate() + 1)
+    cursor.setUTCHours(0, 0, 0, 0)
+    if (cursor.getTime() < fromTs) cursor.setUTCDate(cursor.getUTCDate() + 1)
   } else if (unit === 'month') {
-    cursor.setDate(1)
-    cursor.setHours(0, 0, 0, 0)
-    if (cursor.getTime() < fromTs) cursor.setMonth(cursor.getMonth() + 1)
+    cursor.setUTCDate(1)
+    cursor.setUTCHours(0, 0, 0, 0)
+    if (cursor.getTime() < fromTs) cursor.setUTCMonth(cursor.getUTCMonth() + 1)
   } else {
-    cursor.setMonth(0, 1)
-    cursor.setHours(0, 0, 0, 0)
-    if (cursor.getTime() < fromTs) cursor.setFullYear(cursor.getFullYear() + 1)
+    cursor.setUTCMonth(0, 1)
+    cursor.setUTCHours(0, 0, 0, 0)
+    if (cursor.getTime() < fromTs) cursor.setUTCFullYear(cursor.getUTCFullYear() + 1)
   }
 
   while (cursor.getTime() <= toTs) {
     ticks.push(cursor.getTime())
-    if (unit === 'hour') cursor.setHours(cursor.getHours() + step)
-    else if (unit === 'day') cursor.setDate(cursor.getDate() + step)
-    else if (unit === 'month') cursor.setMonth(cursor.getMonth() + step)
-    else cursor.setFullYear(cursor.getFullYear() + step)
+    if (unit === 'hour') cursor.setUTCHours(cursor.getUTCHours() + step)
+    else if (unit === 'day') cursor.setUTCDate(cursor.getUTCDate() + step)
+    else if (unit === 'month') cursor.setUTCMonth(cursor.getUTCMonth() + step)
+    else cursor.setUTCFullYear(cursor.getUTCFullYear() + step)
     // Safety cap so a mis-typed range can't produce a runaway list.
     if (ticks.length > 60) break
   }
@@ -302,5 +308,9 @@ function formatLongDate(date: Date): string {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
+    // Data points come from @db.Date columns stored at UTC midnight.
+    // Render in UTC so viewers in negative offsets don't see the
+    // previous day.
+    timeZone: 'UTC',
   }).format(new Date(date))
 }
