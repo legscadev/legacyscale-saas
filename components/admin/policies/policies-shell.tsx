@@ -126,10 +126,6 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
         <CreatePolicyDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
-          onCreated={async () => {
-            setCreateOpen(false)
-            refreshWorkspace()
-          }}
           categories={categories}
         />
       ) : null}

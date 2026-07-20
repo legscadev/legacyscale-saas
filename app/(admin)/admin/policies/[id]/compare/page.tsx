@@ -4,11 +4,11 @@ import {
   fetchPolicyDetailAction,
   fetchPolicyRevisionAction,
 } from '@/app/(admin)/admin/policies/actions'
+import { PolicyCompareView } from '@/components/admin/policies/policy-compare-view'
 import {
   CURRENT_SENTINEL,
-  PolicyCompareView,
   buildSnapshot,
-} from '@/components/admin/policies/policy-compare-view'
+} from '@/components/admin/policies/policy-compare-shared'
 import { requireAdmin } from '@/lib/auth/get-user'
 import type { PolicyRevisionDetail } from '@/lib/services/policy-service'
 

@@ -37,22 +37,8 @@ import type {
 } from '@/lib/services/policy-service'
 
 import { PolicyBodyHtml } from './policy-body-html'
+import { CURRENT_SENTINEL, type SnapshotSlot } from './policy-compare-shared'
 import { RevisionBadge } from './policy-pills'
-
-const CURRENT_SENTINEL = 'current'
-
-interface SnapshotSlot {
-  /** Human label for the picker + column header. */
-  label: string
-  /** Rev N label (or 'Draft' / 'Current') for the badge. */
-  revision: number
-  title: string
-  body: string | null
-  publishedAt: Date | null
-  publishedByName: string | null
-  /** Set for frozen-revision slots so we can offer Revert. */
-  revisionId: string | null
-}
 
 interface PolicyCompareViewProps {
   policy: PolicyDetail
@@ -300,42 +286,3 @@ function CompareColumn({
   )
 }
 
-// Exported so page.tsx can build server-side snapshots without a
-// second copy of the mapping logic.
-export function buildSnapshot({
-  policy,
-  revision,
-}: {
-  policy: PolicyDetail
-  revision: PolicyRevisionRow & { body: string | null } | null
-}): SnapshotSlot {
-  if (revision === null) {
-    return {
-      label:
-        policy.revision === 0 ? 'Current draft' : `Current (Rev ${policy.revision})`,
-      revision: policy.revision,
-      title: policy.title,
-      body: policy.body,
-      publishedAt: policy.publishedAt,
-      publishedByName:
-        policy.updatedByUser?.name ??
-        policy.updatedByUser?.email.split('@')[0] ??
-        null,
-      revisionId: null,
-    }
-  }
-  return {
-    label: `Rev ${revision.revision}`,
-    revision: revision.revision,
-    title: revision.title,
-    body: revision.body,
-    publishedAt: revision.publishedAt,
-    publishedByName:
-      revision.publishedBy?.name ??
-      revision.publishedBy?.email.split('@')[0] ??
-      null,
-    revisionId: revision.id,
-  }
-}
-
-export { CURRENT_SENTINEL }

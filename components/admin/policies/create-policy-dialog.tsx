@@ -39,14 +39,12 @@ import { CategoryChip } from './policy-pills'
 interface CreatePolicyDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated: () => void | Promise<void>
   categories: PolicyCategoryRef[]
 }
 
 export function CreatePolicyDialog({
   open,
   onOpenChange,
-  onCreated,
   categories,
 }: CreatePolicyDialogProps) {
   const router = useRouter()
@@ -83,11 +81,17 @@ export function CreatePolicyDialog({
       }
       toast.success('Policy created')
       resetForm()
-      await onCreated()
-      // Send them straight to the editor so the flow is
-      // "new" → type body → publish, not "new" → close modal →
-      // hunt for the row → click Edit.
-      router.push(`/admin/policies/${res.data.id}/edit`)
+      // Capture the id BEFORE closing — resetForm/onOpenChange
+      // may unmount this component and lose `res` from scope.
+      const targetId = res.data.id
+      // Close dialog directly + navigate. We deliberately skip
+      // onCreated()'s router.refresh — the push to /edit fetches
+      // fresh data anyway, and refresh + push racing meant the
+      // push got cancelled by the pending refresh in earlier
+      // testing (dialog closed, row appeared, but /edit didn't
+      // load).
+      onOpenChange(false)
+      router.push(`/admin/policies/${targetId}/edit`)
     })
   }
 
