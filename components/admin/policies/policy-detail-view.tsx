@@ -11,6 +11,7 @@ import { useTransition } from 'react'
 import {
   Archive,
   ArchiveRestore,
+  ArrowLeftRight,
   ExternalLink,
   Paperclip,
   Pencil,
@@ -213,6 +214,17 @@ export function PolicyDetailView({ data }: PolicyDetailViewProps) {
             title="Revisions"
             count={revisions.length}
             empty="No revisions yet — publish to cut Rev I"
+            headerAction={
+              revisions.length >= 1 ? (
+                <Link
+                  href={`/admin/policies/${policy.id}/compare`}
+                  className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  <ArrowLeftRight className="size-3" aria-hidden />
+                  Compare
+                </Link>
+              ) : null
+            }
           >
             <ul className="space-y-1.5">
               {revisions.map((rev) => (
@@ -328,11 +340,13 @@ function SidebarSection({
   count,
   empty,
   children,
+  headerAction,
 }: {
   title: string
   count?: number
   empty?: string
   children: React.ReactNode
+  headerAction?: React.ReactNode
 }) {
   const isEmpty =
     empty !== undefined &&
@@ -340,15 +354,18 @@ function SidebarSection({
     count === 0
   return (
     <section className="rounded-lg border bg-card p-4">
-      <header className="mb-2 flex items-center justify-between">
+      <header className="mb-2 flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {title}
         </h2>
-        {count !== undefined && count > 0 ? (
-          <span className="text-[10px] text-muted-foreground tabular-nums">
-            {count}
-          </span>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {headerAction}
+          {count !== undefined && count > 0 ? (
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              {count}
+            </span>
+          ) : null}
+        </div>
       </header>
       {isEmpty ? (
         <p className="text-xs italic text-muted-foreground">{empty}</p>
