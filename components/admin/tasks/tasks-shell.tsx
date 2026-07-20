@@ -114,7 +114,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Tasks"
+        title="Task Tracker"
         description="Track internal work across your team. Filter, prioritize, and hand off."
         actions={
           <div className="flex items-center gap-2">

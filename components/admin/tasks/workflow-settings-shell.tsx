@@ -41,7 +41,7 @@ export function WorkflowSettingsShell({
     <div className="space-y-6">
       <PageHeader
         breadcrumbs={[
-          { label: 'Tasks', href: '/admin/tasks' },
+          { label: 'Task Tracker', href: '/admin/tasks' },
           { label: 'Workflow settings' },
         ]}
         title="Workflow settings"
