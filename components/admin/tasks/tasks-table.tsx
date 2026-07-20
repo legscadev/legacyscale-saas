@@ -7,8 +7,7 @@
 // header replays the fetch with the new sort. The parent shell owns
 // that plumbing; this component just emits `onSortChange`.
 
-import { format } from 'date-fns'
-import { ArrowUpDown, MessageSquare, Paperclip } from 'lucide-react'
+import { ArrowUpDown, CheckSquare, MessageSquare, Paperclip } from 'lucide-react'
 
 import { AvatarGroup } from '@/components/shared/avatar-group'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -21,8 +20,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { fmtCalendarDateShort } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { CheckSquare } from 'lucide-react'
 
 import type { TaskListItem } from '@/lib/services/task-service'
 
@@ -214,7 +213,7 @@ export function TasksTable({
                           : 'text-muted-foreground',
                       )}
                     >
-                      {format(task.dueDate, 'MMM d')}
+                      {fmtCalendarDateShort(task.dueDate)}
                     </span>
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>

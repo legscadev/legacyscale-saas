@@ -5,11 +5,12 @@
 // the sortable wrapper only has to spread ref + listeners onto
 // the outer div.
 
-import { format, isPast } from 'date-fns'
+import { isPast } from 'date-fns'
 import { forwardRef } from 'react'
 import { CalendarDays, MessageSquare, Paperclip } from 'lucide-react'
 
 import { AvatarGroup } from '@/components/shared/avatar-group'
+import { fmtCalendarDateShort } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import type { TaskListItem } from '@/lib/services/task-service'
@@ -86,7 +87,7 @@ export const KanbanCard = forwardRef<HTMLDivElement, KanbanCardProps>(
                 )}
               >
                 <CalendarDays className="size-3" aria-hidden />
-                {format(task.dueDate, 'MMM d')}
+                {fmtCalendarDateShort(task.dueDate)}
               </span>
             ) : null}
             {task.commentCount > 0 ? (

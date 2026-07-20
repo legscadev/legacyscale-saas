@@ -14,7 +14,6 @@
 //  - The bare read view mimics the read-only design in 4.1 so
 //    swapping between the two feels continuous.
 
-import { format } from 'date-fns'
 import { CalendarDays, Check, Pencil, X } from 'lucide-react'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { toast } from 'sonner'
@@ -34,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { fmtCalendarDate, toCalendarDateInput } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { TaskDetail } from '@/lib/services/task-service'
 import {
@@ -436,18 +436,16 @@ export function EditableDate({
 }: EditableDateProps) {
   const current = task[field]
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(
-    current ? format(current, 'yyyy-MM-dd') : '',
-  )
+  const [draft, setDraft] = useState(toCalendarDateInput(current))
   const [isSaving, startSave] = useTransition()
 
   useEffect(() => {
-    setDraft(current ? format(current, 'yyyy-MM-dd') : '')
+    setDraft(toCalendarDateInput(current))
   }, [current])
 
   function commit() {
     const nextIso = draft.trim()
-    const currentIso = current ? format(current, 'yyyy-MM-dd') : ''
+    const currentIso = toCalendarDateInput(current)
     if (nextIso === currentIso) {
       setEditing(false)
       return
@@ -478,7 +476,7 @@ export function EditableDate({
           className="size-3.5 text-muted-foreground"
           aria-hidden
         />
-        {current ? format(current, 'MMM d, yyyy') : (
+        {current ? fmtCalendarDate(current) : (
           <span className="italic text-muted-foreground">Set date</span>
         )}
       </button>
@@ -496,7 +494,7 @@ export function EditableDate({
           e.preventDefault()
           commit()
         } else if (e.key === 'Escape') {
-          setDraft(current ? format(current, 'yyyy-MM-dd') : '')
+          setDraft(toCalendarDateInput(current))
           setEditing(false)
         }
       }}
