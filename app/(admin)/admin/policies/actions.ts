@@ -10,7 +10,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireAdmin, requireTeamOrAdmin } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
 import {
   policyActivityService,
@@ -101,7 +101,7 @@ export type PolicyListPayload = PolicyListResult
 export async function fetchPoliciesAction(
   filters: Record<string, unknown> = {},
 ): Promise<MutationResult<PolicyListPayload>> {
-  await requireAdmin()
+  await requireTeamOrAdmin()
   const companyId = await getRequestCompanyId()
   if (companyId) await ensurePolicyWorkspaceReady(companyId)
 
@@ -121,7 +121,7 @@ export async function fetchPoliciesAction(
 export async function fetchPolicyAction(
   id: string,
 ): Promise<MutationResult<PolicyDetail>> {
-  await requireAdmin()
+  await requireTeamOrAdmin()
   try {
     const data = await policyService.get(id)
     return { ok: true, data }
@@ -145,7 +145,7 @@ export interface PolicyDetailPayload {
 export async function fetchPolicyDetailAction(
   id: string,
 ): Promise<MutationResult<PolicyDetailPayload>> {
-  await requireAdmin()
+  await requireTeamOrAdmin()
   try {
     const [policy, revisions, attachments, activity] = await Promise.all([
       policyService.get(id),
@@ -170,7 +170,7 @@ export async function fetchPolicyDetailAction(
 export async function fetchPolicyRevisionAction(
   revisionId: string,
 ): Promise<MutationResult<PolicyRevisionDetail>> {
-  await requireAdmin()
+  await requireTeamOrAdmin()
   try {
     const data = await policyService.getRevision(revisionId)
     return { ok: true, data }
@@ -200,12 +200,15 @@ export interface PolicyWorkspacePayload {
   categories: PolicyCategoryRef[]
   policies: PolicyListResult
   currentUserId: string
+  /** Drives which write affordances the shell renders. TEAM sees
+   *  a read-only variant; ADMIN sees the full editor entry points. */
+  currentUserRole: 'ADMIN' | 'TEAM' | 'MEMBER'
 }
 
 export async function fetchPolicyWorkspaceAction(
   filters: Record<string, unknown> = {},
 ): Promise<MutationResult<PolicyWorkspacePayload>> {
-  const currentUser = await requireAdmin()
+  const currentUser = await requireTeamOrAdmin()
   const companyId = await getRequestCompanyId()
   if (companyId) await ensurePolicyWorkspaceReady(companyId)
 
@@ -224,7 +227,12 @@ export async function fetchPolicyWorkspaceAction(
     ])
     return {
       ok: true,
-      data: { categories, policies, currentUserId: currentUser.id },
+      data: {
+        categories,
+        policies,
+        currentUserId: currentUser.id,
+        currentUserRole: currentUser.role as 'ADMIN' | 'TEAM' | 'MEMBER',
+      },
     }
   } catch (err) {
     return toMutationErr(err, 'Could not load policy workspace')
@@ -422,7 +430,7 @@ export async function deletePolicyAttachmentAction(
 export async function signPolicyAttachmentUrlAction(
   attachmentId: string,
 ): Promise<MutationResult<{ url: string }>> {
-  await requireAdmin()
+  await requireTeamOrAdmin()
   try {
     const url = await policyAttachmentService.signDownloadUrl(attachmentId)
     return { ok: true, data: { url } }

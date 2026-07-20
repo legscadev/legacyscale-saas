@@ -35,7 +35,9 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
   const [isNavigating, startNavigation] = useTransition()
   const [createOpen, setCreateOpen] = useState(false)
 
-  const { policies, categories } = initialData
+  const { policies, categories, currentUserRole } = initialData
+  const canWrite = currentUserRole === 'ADMIN'
+  const basePath = canWrite ? '/admin/policies' : '/policies'
 
   function refreshWorkspace() {
     startNavigation(() => {
@@ -63,16 +65,13 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
       next.set('dir', field === 'title' ? 'asc' : 'desc')
     }
     startNavigation(() => {
-      router.push(`/admin/policies?${next.toString()}`)
+      router.push(`${basePath}?${next.toString()}`)
     })
   }
 
   function openPolicy(id: string) {
-    // Detail page lands in Phase 3 — until then, the row click is a
-    // no-op so operators don't hit a 404. Wired now so the table
-    // component doesn't need a rewire when the page arrives.
     startNavigation(() => {
-      router.push(`/admin/policies/${id}`)
+      router.push(`${basePath}/${id}`)
     })
   }
 
@@ -82,24 +81,26 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
         title="Policies"
         description="Internal ops documentation — role hats, processes, systems, onboarding."
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              render={
-                <Link
-                  href="/admin/policies/settings"
-                  aria-label="Category settings"
-                />
-              }
-            >
-              <Settings className="size-4" />
-            </Button>
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="size-4" />
-              New policy
-            </Button>
-          </div>
+          canWrite ? (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                render={
+                  <Link
+                    href="/admin/policies/settings"
+                    aria-label="Category settings"
+                  />
+                }
+              >
+                <Settings className="size-4" />
+              </Button>
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="size-4" />
+                New policy
+              </Button>
+            </div>
+          ) : null
         }
       />
 
@@ -114,21 +115,24 @@ export function PoliciesShell({ initialData }: PoliciesShellProps) {
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSortChange={handleSortChange}
-          onCreate={() => setCreateOpen(true)}
+          onCreate={canWrite ? () => setCreateOpen(true) : undefined}
           onOpenPolicy={openPolicy}
           onRowChanged={refreshWorkspace}
+          canWrite={canWrite}
         />
       </div>
 
-      <CreatePolicyDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={async () => {
-          setCreateOpen(false)
-          refreshWorkspace()
-        }}
-        categories={categories}
-      />
+      {canWrite ? (
+        <CreatePolicyDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onCreated={async () => {
+            setCreateOpen(false)
+            refreshWorkspace()
+          }}
+          categories={categories}
+        />
+      ) : null}
     </div>
   )
 }

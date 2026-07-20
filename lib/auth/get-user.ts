@@ -121,6 +121,22 @@ export async function requireAdmin(): Promise<User> {
 }
 
 /**
+ * Gate for internal-ops surfaces that TEAM staff should read but
+ * only ADMIN can write. Callers check `user.role === 'ADMIN'` on
+ * the returned user to decide whether to render write affordances.
+ * MEMBER (LMS students) get bounced to /dashboard.
+ */
+export async function requireTeamOrAdmin(): Promise<User> {
+  const user = await requireActiveUser()
+
+  if (user.role !== 'ADMIN' && user.role !== 'TEAM') {
+    redirect('/dashboard')
+  }
+
+  return user
+}
+
+/**
  * API-route variant of requireAdmin. Instead of redirecting (which
  * breaks JSON consumers), throws an Error with a string token that
  * `withErrorHandling` maps to the right HTTP response:

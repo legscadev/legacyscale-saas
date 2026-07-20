@@ -44,6 +44,9 @@ interface PoliciesTableProps {
   /** Called after any row-action mutation completes so the shell
    *  can refresh the workspace. */
   onRowChanged: () => void | Promise<void>
+  /** When false, the row-actions column is hidden and the empty
+   *  state omits the Create button. Set by the TEAM read view. */
+  canWrite?: boolean
 }
 
 export function PoliciesTable({
@@ -54,6 +57,7 @@ export function PoliciesTable({
   onOpenPolicy,
   onCreate,
   onRowChanged,
+  canWrite = true,
 }: PoliciesTableProps) {
   if (items.length === 0) {
     return (
@@ -62,7 +66,9 @@ export function PoliciesTable({
         title="No policies match these filters"
         description="Try broadening the filter set or draft a new policy."
       >
-        {onCreate ? <Button onClick={onCreate}>New policy</Button> : null}
+        {canWrite && onCreate ? (
+          <Button onClick={onCreate}>New policy</Button>
+        ) : null}
       </EmptyState>
     )
   }
@@ -93,7 +99,9 @@ export function PoliciesTable({
               Updated
             </SortableHead>
             <TableHead className="w-20 text-right">Meta</TableHead>
-            <TableHead className="w-10" aria-label="Actions" />
+            {canWrite ? (
+              <TableHead className="w-10" aria-label="Actions" />
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -151,9 +159,14 @@ export function PoliciesTable({
               <TableCell className="text-right">
                 <MetaSummary policy={policy} />
               </TableCell>
-              <TableCell className="text-right">
-                <PolicyRowActions policy={policy} onChanged={onRowChanged} />
-              </TableCell>
+              {canWrite ? (
+                <TableCell className="text-right">
+                  <PolicyRowActions
+                    policy={policy}
+                    onChanged={onRowChanged}
+                  />
+                </TableCell>
+              ) : null}
             </TableRow>
           ))}
         </TableBody>
