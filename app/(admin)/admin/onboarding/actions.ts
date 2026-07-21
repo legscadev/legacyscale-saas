@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import {
   employeeService,
   MemberEmailConflictError,
@@ -26,12 +26,12 @@ import {
 } from '@/lib/validations/employee'
 
 export async function searchLinkableUsersAction(query: string) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   return employeeService.searchLinkableUsers(query)
 }
 
 export async function createEmployeeAction(input: CreateEmployeeInput) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const parsed = createEmployeeSchema.parse(input)
   try {
     const employee = await employeeService.create(parsed)
@@ -52,7 +52,7 @@ export async function updateEmployeeAction(
   id: string,
   input: UpdateEmployeeInput,
 ) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const parsed = updateEmployeeSchema.parse(input)
   const employee = await employeeService.update(id, parsed)
   revalidatePath('/admin/onboarding')
@@ -64,7 +64,7 @@ export async function offboardEmployeeAction(
   id: string,
   input: OffboardEmployeeInput,
 ) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const parsed = offboardEmployeeSchema.parse(input)
   // The refine on `offboardingDate` guarantees non-null after parse.
   const employee = await employeeService.offboard(id, {
@@ -77,7 +77,7 @@ export async function offboardEmployeeAction(
 }
 
 export async function reactivateEmployeeAction(id: string) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const employee = await employeeService.reactivate(id)
   revalidatePath('/admin/onboarding')
   revalidatePath(`/admin/onboarding/${id}`)
@@ -85,7 +85,7 @@ export async function reactivateEmployeeAction(id: string) {
 }
 
 export async function deleteEmployeeAction(id: string) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   await employeeService.delete(id)
   revalidatePath('/admin/onboarding')
 }
@@ -95,7 +95,7 @@ export async function updateChecklistItemStatusAction(
   itemId: string,
   input: UpdateChecklistItemInput,
 ) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const parsed = updateChecklistItemSchema.parse(input)
   const employee = await employeeService.updateChecklistItem(employeeId, itemId, {
     status: parsed.status,
@@ -111,12 +111,12 @@ export async function updateChecklistItemStatusAction(
 // ---------------------------------------------------------------------
 
 export async function listChecklistItemsAction() {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   return checklistService.listItems()
 }
 
 export async function addChecklistItemAction(input: AddChecklistItemInput) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const parsed = addChecklistItemSchema.parse(input)
   const items = await checklistService.addItem(parsed)
   revalidatePath('/admin/onboarding')
@@ -128,7 +128,7 @@ export async function updateChecklistItemFieldsAction(
   itemId: string,
   input: UpdateChecklistItemFieldsInput,
 ) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const parsed = updateChecklistItemFieldsSchema.parse(input)
   const items = await checklistService.updateItem(itemId, parsed)
   revalidatePath('/admin/onboarding')
@@ -140,7 +140,7 @@ export async function moveChecklistItemAction(
   itemId: string,
   input: MoveChecklistItemInput,
 ) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const parsed = moveChecklistItemSchema.parse(input)
   const items = await checklistService.moveItem(itemId, parsed.targetIndex)
   revalidatePath('/admin/onboarding')
@@ -149,12 +149,12 @@ export async function moveChecklistItemAction(
 }
 
 export async function getDeleteChecklistItemImpactAction(itemId: string) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   return checklistService.deleteItemImpact(itemId)
 }
 
 export async function deleteChecklistItemAction(itemId: string) {
-  await requireAdmin()
+  await requireTeamModuleAccess('onboarding')
   const items = await checklistService.deleteItem(itemId)
   revalidatePath('/admin/onboarding')
   revalidatePath('/admin/onboarding/checklist')
