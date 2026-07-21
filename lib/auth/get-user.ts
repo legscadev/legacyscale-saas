@@ -137,6 +137,41 @@ export async function requireTeamOrAdmin(): Promise<User> {
 }
 
 /**
+ * Per-module access gate. ADMIN passes unconditionally (they see
+ * everything by design). TEAM must have an unrevoked grant for
+ * the given moduleKey in the current tenant, otherwise they land
+ * on /dashboard. MEMBER always fails the outer requireTeamOrAdmin
+ * before we get here.
+ *
+ * Redirect target on failure is /dashboard rather than showing an
+ * explicit "forbidden" page: TEAM users without a grant probably
+ * followed a stale bookmark or a link from someone else; bouncing
+ * silently to their home base is the least confusing UX.
+ *
+ * Import lazily to avoid a `lib/auth ↔ lib/services` cycle — the
+ * service imports prisma which lives further down the graph than
+ * this helper.
+ */
+export async function requireTeamModuleAccess(
+  moduleKey: string,
+): Promise<User> {
+  const user = await requireTeamOrAdmin()
+  if (user.role === 'ADMIN') return user
+
+  const { teamAccessService } = await import(
+    '@/lib/services/team-access-service'
+  )
+  const allowed = await teamAccessService.hasModuleAccess(
+    user,
+    moduleKey as never,
+  )
+  if (!allowed) {
+    redirect('/dashboard')
+  }
+  return user
+}
+
+/**
  * API-route variant of requireAdmin. Instead of redirecting (which
  * breaks JSON consumers), throws an Error with a string token that
  * `withErrorHandling` maps to the right HTTP response:

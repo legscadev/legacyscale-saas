@@ -14,4 +14,5 @@ export {
   requireAdminApi,
   requireActiveUser,
   requireTeamOrAdmin,
+  requireTeamModuleAccess,
 } from './get-user'
