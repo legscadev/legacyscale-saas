@@ -42,6 +42,10 @@ interface TopBarProps {
   /** Disable the light/dark toggle because a tenant palette owns
    *  the theme. */
   themeLocked?: boolean
+  /** TeamModuleGrant keys the viewer holds — piped into the
+   *  command palette so its search results respect the same
+   *  per-user gates as the sidebar. */
+  grantedModules?: string[]
 }
 
 export function TopBar({
@@ -52,6 +56,7 @@ export function TopBar({
   isSuperAdmin = false,
   unreadAnnouncements = 0,
   themeLocked = false,
+  grantedModules,
 }: TopBarProps) {
   const { collapsed, toggle } = useSidebar()
   const Icon = collapsed ? PanelLeftOpen : PanelLeftClose
@@ -292,6 +297,7 @@ export function TopBar({
         onOpenChange={setPaletteOpen}
         role={role}
         userRole={user.role}
+        grantedModules={grantedModules}
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </>

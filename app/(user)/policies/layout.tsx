@@ -1,17 +1,21 @@
-import { requireTeamOrAdmin } from '@/lib/auth'
+import { requireTeamModuleAccess } from '@/lib/auth'
 
 /**
- * Layout-level gate for the TEAM read view of policies. The parent
- * (user) layout only requires an active user (any role), so this
- * secondary check keeps LMS members out even though they share the
- * shell. ADMIN users can read here too but should reach the write
- * surface at /admin/policies instead.
+ * Layout-level gate for the TEAM read view of policies. Requires
+ * the 'policies' module grant for TEAM users (ADMIN passes
+ * unconditionally). MEMBER never reaches here because the outer
+ * requireTeamOrAdmin composed inside requireTeamModuleAccess
+ * bounces them first.
+ *
+ * ADMIN visiting /policies is also handled — they'll get through
+ * the gate but the /policies page itself redirects them to
+ * /admin/policies (their proper editor surface).
  */
 export default async function PoliciesLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  await requireTeamOrAdmin()
+  await requireTeamModuleAccess('policies')
   return <>{children}</>
 }

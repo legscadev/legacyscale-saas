@@ -65,6 +65,11 @@ interface AppShellProps {
    *  is a no-op (inline styles beat the `.dark` class) so we render
    *  it disabled with a tooltip explaining why. */
   themeLocked?: boolean
+  /** TeamModuleGrant keys the current user holds. Used by the
+   *  sidebar + command palette to filter out ungranted Internal
+   *  modules for TEAM users. ADMIN passes every filter regardless
+   *  so this array is meaningless for them; still safe to pass. */
+  grantedModules?: string[]
   children: React.ReactNode
 }
 
@@ -77,6 +82,7 @@ export function AppShell({
   isSuperAdmin = false,
   branding,
   themeLocked = false,
+  grantedModules,
   children,
 }: AppShellProps) {
   return (
@@ -89,6 +95,7 @@ export function AppShell({
         isSuperAdmin={isSuperAdmin}
         branding={branding}
         themeLocked={themeLocked}
+        grantedModules={grantedModules}
       >
         {children}
       </AppShellInner>
@@ -104,6 +111,7 @@ function AppShellInner({
   isSuperAdmin = false,
   branding,
   themeLocked = false,
+  grantedModules,
   children,
 }: Omit<AppShellProps, 'defaultCollapsed'>) {
   const { collapsed } = useSidebar()
@@ -112,8 +120,14 @@ function AppShellInner({
   const rawSections =
     role === 'super' ? superNav : role === 'admin' ? adminNav : memberNav
   // Filter role-scoped items down to the current viewer. Nav items
-  // without visibleTo are unaffected (backwards-compatible).
-  const sections = filterNavForRole(rawSections, user.role as NavRole)
+  // without visibleTo/moduleKey are unaffected (backwards-compatible).
+  const grantSet =
+    grantedModules === undefined ? null : new Set(grantedModules)
+  const sections = filterNavForRole(
+    rawSections,
+    user.role as NavRole,
+    grantSet,
+  )
   const context =
     role === 'super'
       ? 'Super Admin'
@@ -269,6 +283,7 @@ function AppShellInner({
           unreadAnnouncements={unreadAnnouncements}
           isSuperAdmin={isSuperAdmin}
           themeLocked={themeLocked}
+          grantedModules={grantedModules}
         />
         <main className="flex-1">
           <div className="p-4 sm:p-6 lg:p-8">

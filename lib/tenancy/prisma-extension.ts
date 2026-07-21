@@ -74,6 +74,8 @@ const SCOPED_MODELS = new Set<string>([
   'PolicyRevision',
   'PolicyAttachment',
   'PolicyActivityLog',
+  // Team access grants
+  'TeamModuleGrant',
   'LoginEvent',
 ])
 

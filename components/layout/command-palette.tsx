@@ -22,6 +22,9 @@ interface CommandPaletteProps {
   /** User role for visibleTo filtering — a TEAM viewer in the
    *  member shell needs the same nav filtering the sidebar applies. */
   userRole: NavRole
+  /** TeamModuleGrant keys — piped through to the same filter the
+   *  sidebar uses so search hides ungranted items too. */
+  grantedModules?: string[]
 }
 
 interface FlatItem extends NavItem {
@@ -31,10 +34,13 @@ interface FlatItem extends NavItem {
 function flatten(
   role: 'admin' | 'member' | 'super',
   userRole: NavRole,
+  grantedModules: string[] | undefined,
 ): FlatItem[] {
   const rawSections =
     role === 'super' ? superNav : role === 'admin' ? adminNav : memberNav
-  const sections = filterNavForRole(rawSections, userRole)
+  const grantSet =
+    grantedModules === undefined ? null : new Set(grantedModules)
+  const sections = filterNavForRole(rawSections, userRole, grantSet)
   return sections.flatMap((s) =>
     s.items.map((item) => ({ ...item, section: s.label })),
   )
@@ -45,13 +51,17 @@ export function CommandPalette({
   onOpenChange,
   role,
   userRole,
+  grantedModules,
 }: CommandPaletteProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
 
-  const items = useMemo(() => flatten(role, userRole), [role, userRole])
+  const items = useMemo(
+    () => flatten(role, userRole, grantedModules),
+    [role, userRole, grantedModules],
+  )
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return items

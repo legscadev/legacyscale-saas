@@ -285,6 +285,13 @@ model User {
   policyAttachmentsUploaded  PolicyAttachment[]  @relation("PolicyAttachmentUploader")
   policyActivityLogs         PolicyActivityLog[] @relation("PolicyActivityActor")
 
+  // Per-user Internal-module access grants for TEAM staff. Named
+  // relations because one user is both a target of grants and can
+  // grant/revoke on behalf of others.
+  teamModuleGrantsHeld    TeamModuleGrant[] @relation("TeamModuleGrantTarget")
+  teamModuleGrantsIssued  TeamModuleGrant[] @relation("TeamModuleGrantGrantedBy")
+  teamModuleGrantsRevoked TeamModuleGrant[] @relation("TeamModuleGrantRevokedBy")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -2024,4 +2031,45 @@ model PolicyActivityLog {
 
   @@index([companyId, policyId, createdAt])
   @@map("policy_activity_logs")
+}
+
+// ============================================
+// TEAM MODULE ACCESS GRANTS
+// ============================================
+// Per-user access grants for Internal admin modules (Task Tracker,
+// Policies, Statistics, etc.) when the target user is a TEAM member.
+// ADMIN role always sees everything; MEMBER role never sees any of
+// this. The gate check reads unrevoked, unexpired rows for (userId,
+// moduleKey) in the current tenant.
+//
+// Append-only shape (mirrors SuperAdminGrant): a grant → revoke →
+// re-grant cycle creates three rows so the timeline stays auditable.
+// Only one row per (userId, moduleKey) with revokedAt IS NULL is
+// legal at any given moment; enforced app-side by the service.
+
+model TeamModuleGrant {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  /// Short slug identifying the gate-able module (see
+  /// lib/config/team-modules.ts for the canonical catalog).
+  /// Deliberately a String, not an enum, so adding a new module
+  /// doesn't need a migration.
+  moduleKey   String    @map("module_key")
+
+  /// Who granted access. Null when the row was seeded via SQL
+  /// during the backfill migration (see the backfill in 2.2).
+  grantedById String?   @map("granted_by_id")
+  grantedAt   DateTime  @default(now()) @map("granted_at")
+  revokedAt   DateTime? @map("revoked_at")
+  revokedById String?   @map("revoked_by_id")
+
+  user      User  @relation("TeamModuleGrantTarget", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("TeamModuleGrantGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  revokedBy User? @relation("TeamModuleGrantRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, userId, revokedAt])
+  @@index([companyId, moduleKey])
+  @@map("team_module_grants")
 }

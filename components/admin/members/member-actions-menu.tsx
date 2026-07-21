@@ -6,6 +6,7 @@ import {
   ArchiveRestore,
   Bell,
   Edit3,
+  KeySquare,
   Mail,
   MoreHorizontal,
   ShieldCheck,
@@ -30,6 +31,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { AccessGridDialog } from '@/components/admin/team/access-grid-dialog'
+
 import { MemberEditDialog } from './member-edit-dialog'
 import { NudgeDialog } from './nudge-dialog'
 import type { MemberCategoryOption } from './members-shell'
@@ -67,6 +70,7 @@ export function MemberActionsMenu({
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [editing, setEditing] = useState(false)
   const [nudging, setNudging] = useState(false)
+  const [managingAccess, setManagingAccess] = useState(false)
   const [pending, setPending] = useState(false)
   const [resending, setResending] = useState(false)
   const [archiving, setArchiving] = useState(false)
@@ -213,6 +217,15 @@ export function MemberActionsMenu({
                   Send nudge
                 </DropdownMenuItem>
               )}
+              {/* Per-user Internal-module grants only apply to
+                  TEAM. ADMIN always has full access and MEMBER
+                  holds no grants. */}
+              {memberRole === 'TEAM' && !isArchived && (
+                <DropdownMenuItem onClick={() => setManagingAccess(true)}>
+                  <KeySquare />
+                  Manage access
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               {isSelf ? (
                 <DropdownMenuItem disabled>You</DropdownMenuItem>
@@ -327,6 +340,16 @@ export function MemberActionsMenu({
         onOpenChange={setNudging}
         memberId={memberId}
         memberName={memberName}
+      />
+
+      <AccessGridDialog
+        open={managingAccess}
+        onOpenChange={setManagingAccess}
+        target={
+          managingAccess
+            ? { id: memberId, name: memberName, email: memberEmail }
+            : null
+        }
       />
     </>
   )
