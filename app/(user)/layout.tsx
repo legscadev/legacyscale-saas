@@ -7,6 +7,7 @@ import { requireActiveUser } from '@/lib/auth'
 import { getBranding, toClientBranding } from '@/lib/branding/get-branding'
 import { announcementService } from '@/lib/services/announcement-service'
 import { listActiveNudgesForUser } from '@/lib/services/nudge-service'
+import { teamAccessService } from '@/lib/services/team-access-service'
 import {
   getActiveCompany,
   listCompaniesForUser,
@@ -72,6 +73,20 @@ export default async function UserLayout({
   const activeForTheme = await getActiveCompany()
   const themeLocked = Boolean(activeForTheme?.brand)
 
+  // Per-user Internal-module grants. Only meaningful for TEAM
+  // users — ADMIN sees everything, MEMBER holds no grants. Passed
+  // to AppShell so the sidebar + command palette hide ungranted
+  // Internal items.
+  let grantedModules: string[] = []
+  if (user.role === 'TEAM') {
+    try {
+      const grants = await teamAccessService.listActiveGrants(user.id)
+      grantedModules = grants.map((g) => g.moduleKey)
+    } catch (err) {
+      console.error('listActiveGrants (user layout) failed:', err)
+    }
+  }
+
   return (
     <AppShell
       role="member"
@@ -86,6 +101,7 @@ export default async function UserLayout({
       tenancy={tenancy}
       branding={branding}
       themeLocked={themeLocked}
+      grantedModules={grantedModules}
     >
       <div className="mx-auto w-full max-w-7xl space-y-4">
         {nudges.length > 0 ? <NudgeBanner nudges={nudges} /> : null}

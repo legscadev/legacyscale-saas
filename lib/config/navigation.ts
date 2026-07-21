@@ -34,6 +34,12 @@ export interface NavItem {
    *  every existing entry). Filter runs in AppShellInner using the
    *  user's role prop. */
   visibleTo?: NavRole[]
+  /** When set, TEAM users only see this item if they hold the
+   *  matching TeamModuleGrant. ADMIN always sees it regardless.
+   *  Absent = no per-user gate (item is either always visible or
+   *  gated solely by visibleTo). See lib/config/team-modules.ts
+   *  for the catalog of module keys. */
+  moduleKey?: string
 }
 
 export interface NavSection {
@@ -132,6 +138,9 @@ export const memberNav: NavSection[] = [
         // /admin/policies at /policies anyway; MEMBER (students) has
         // no legitimate reason to see internal ops docs.
         visibleTo: ['TEAM'],
+        // Per-user gate — TEAM users only see this link if ADMIN
+        // has granted them the 'policies' module.
+        moduleKey: 'policies',
       },
     ],
   },
@@ -144,19 +153,38 @@ export const memberNav: NavSection[] = [
   },
 ]
 
-/** Filter a nav config down to items visible to the given role.
- *  Sections that become empty after filtering are dropped so the
- *  sidebar doesn't render bare section labels. */
+/**
+ * Filter a nav config down to items visible to the given role +
+ * (for TEAM users) the per-user module grants. Sections that
+ * become empty after filtering are dropped so the sidebar doesn't
+ * render bare section labels.
+ *
+ * grantedModules is only consulted when role === 'TEAM'. ADMIN
+ * sees every moduleKey-gated item regardless (they always have
+ * full access by design). Pass an empty Set for TEAM with no
+ * grants; the caller can pass `null` to opt out of the check
+ * entirely (used pre-hydration / SSR where grants aren't loaded
+ * yet).
+ */
 export function filterNavForRole(
   sections: NavSection[],
   role: NavRole,
+  grantedModules: Set<string> | null = null,
 ): NavSection[] {
   return sections
     .map((section) => ({
       ...section,
-      items: section.items.filter(
-        (item) => !item.visibleTo || item.visibleTo.includes(role),
-      ),
+      items: section.items.filter((item) => {
+        if (item.visibleTo && !item.visibleTo.includes(role)) return false
+        // Per-user gate only applies to TEAM. ADMIN + MEMBER paths
+        // (MEMBER never sees moduleKey items anyway via visibleTo)
+        // skip the grant check.
+        if (item.moduleKey && role === 'TEAM') {
+          if (grantedModules === null) return false
+          if (!grantedModules.has(item.moduleKey)) return false
+        }
+        return true
+      }),
     }))
     .filter((section) => section.items.length > 0)
 }
