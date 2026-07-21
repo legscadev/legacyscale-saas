@@ -19,9 +19,12 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCorners,
+  pointerWithin,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -67,6 +70,33 @@ interface Column {
 /** Synthetic column id for orphaned tasks — cards in this bucket
  *  can be dragged out, but can't be dropped in (no real statusId). */
 const ORPHAN_COLUMN_ID = '__orphans__'
+
+/**
+ * Custom collision detection for the Kanban board.
+ *
+ * The default `closestCorners` picks the droppable whose corners are
+ * closest to the dragged item. That works well when every column
+ * has cards, but breaks empty columns: the column's rect is small
+ * (just the header + a placeholder) so the closest "corner" ends up
+ * being a neighbouring card in a different column, and the drop
+ * silently lands there instead of the empty target.
+ *
+ * The canonical dnd-kit fix is a fallback chain:
+ *   1. `pointerWithin` — if the pointer is directly inside a
+ *      droppable (including the whole column rect), that wins.
+ *      Handles the empty-column case cleanly.
+ *   2. `rectIntersection` — if the dragged rect overlaps a droppable
+ *      but the pointer isn't strictly inside. Covers edge cases
+ *      like dragging with a large overlay.
+ *   3. `closestCorners` — original behaviour as a last resort.
+ */
+const detectKanbanCollisions: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args)
+  if (pointerHits.length > 0) return pointerHits
+  const rectHits = rectIntersection(args)
+  if (rectHits.length > 0) return rectHits
+  return closestCorners(args)
+}
 
 function groupTasksByStatus(
   statuses: WorkflowStatus[],
@@ -338,7 +368,7 @@ export function KanbanBoard({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={detectKanbanCollisions}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
