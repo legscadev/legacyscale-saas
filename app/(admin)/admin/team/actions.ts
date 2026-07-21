@@ -4,8 +4,13 @@
 // Only ADMIN can grant/revoke. Reads (fetchTeamAccessAction) let the
 // grid dialog pre-check the right boxes; writes are optimistic on
 // the client + rolled back on error.
-
-import { revalidatePath } from 'next/cache'
+//
+// Deliberately NO revalidatePath here. The /admin/team list doesn't
+// display grants — refetching would re-render the whole page and
+// close the dialog by resetting the MemberActionsMenu component's
+// client state. Fresh grants are picked up naturally the next time
+// the dialog opens (fetchTeamAccessAction) or the target user
+// navigates (their layout re-reads grants on next request).
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import {
@@ -37,11 +42,6 @@ function toErr(err: unknown, fallback: string): Err {
   return { ok: false, error: message }
 }
 
-function revalidateAll(): void {
-  revalidatePath('/admin/team')
-  revalidatePath('/admin/members')
-}
-
 export async function fetchTeamAccessAction(
   userId: string,
 ): Promise<Result<ActiveGrant[]>> {
@@ -65,7 +65,6 @@ export async function grantModuleAccessAction(input: {
       moduleKey: input.moduleKey,
       grantedById: admin.id,
     })
-    revalidateAll()
     return { ok: true, data }
   } catch (err) {
     return toErr(err, 'Could not grant access')
@@ -83,7 +82,6 @@ export async function revokeModuleAccessAction(input: {
       moduleKey: input.moduleKey,
       revokedById: admin.id,
     })
-    revalidateAll()
     return { ok: true, data: undefined }
   } catch (err) {
     return toErr(err, 'Could not revoke access')
