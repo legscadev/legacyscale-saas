@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/tabs'
 import { BrandingCard } from '@/components/admin/settings/branding-card'
 import { DiscordWebhookCard } from '@/components/admin/settings/discord-webhook-card'
+import { requireAdmin } from '@/lib/auth/get-user'
 import { getActiveCompany } from '@/lib/tenancy/active-company'
 import {
   getAchievementsWebhookSettingAction,
@@ -30,6 +31,10 @@ import {
 // live for future work.
 
 export default async function AdminSettingsPage() {
+  // Settings is ADMIN-only — parent layout accepts TEAM for the
+  // Internal modules, so we self-gate here.
+  await requireAdmin()
+
   // Domains tab is hidden for now — the surface + Vercel-side plumbing
   // stays wired up, but the fetch calls (listDomainsAction /
   // getPlatformApexAction) are skipped so we don't pay for them on

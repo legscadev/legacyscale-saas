@@ -19,6 +19,7 @@ import {
 } from '@/components/shared'
 import { MemberEnrollmentsTable } from '@/components/admin/progress/member-enrollments-table'
 import { NudgeRowAction } from '@/components/admin/progress/nudge-row-action'
+import { requireAdmin } from '@/lib/auth/get-user'
 import { fmtDate, getInitials } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 
@@ -29,6 +30,7 @@ interface PageProps {
 export default async function AdminProgressMemberDetailPage({
   params,
 }: PageProps) {
+  await requireAdmin()
   const { id } = await params
   const detail = await adminProgressService.getMemberProgress(id)
   if (!detail) notFound()

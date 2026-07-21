@@ -29,6 +29,7 @@ import {
   progressTone,
   relativeTime,
 } from '@/lib/format'
+import { requireAdmin } from '@/lib/auth/get-user'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 import type { CohortSort } from '@/lib/services/admin-progress-service'
 import { ChapterFunnel } from '@/components/admin/progress/chapter-funnel'
@@ -60,6 +61,7 @@ export default async function AdminProgressCohortPage({
   params,
   searchParams,
 }: PageProps) {
+  await requireAdmin()
   const { id } = await params
   const sp = await searchParams
 
