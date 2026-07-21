@@ -36,7 +36,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CheckSquare } from 'lucide-react'
+import { CheckSquare, Repeat2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { changeTaskStatusAction } from '@/app/(admin)/admin/tasks/actions'
@@ -63,6 +63,10 @@ interface Column {
   name: string
   color: string
   isTerminal: boolean
+  /** Recurring columns hold "template" tasks — a drag out clones
+   *  the template instead of moving it. Kanban shows a subtle
+   *  ↻ icon on the header so operators know why the card sticks. */
+  isRecurring: boolean
   wipLimit: number | null
   tasks: TaskListItem[]
 }
@@ -113,6 +117,7 @@ function groupTasksByStatus(
     name: s.name,
     color: s.color,
     isTerminal: s.isTerminal,
+    isRecurring: s.isRecurring,
     wipLimit: s.wipLimit,
     tasks: (byStatus.get(s.id) ?? [])
       .slice()
@@ -127,6 +132,7 @@ function groupTasksByStatus(
       name: 'Uncategorized',
       color: '#64748b',
       isTerminal: false,
+      isRecurring: false,
       wipLimit: null,
       tasks: orphans.slice().sort((a, b) => a.orderIndex - b.orderIndex),
     })
@@ -448,6 +454,12 @@ function KanbanColumn({ column, onOpenTask, onCreate }: KanbanColumnProps) {
             aria-hidden
           />
           <p className="text-sm font-medium">{column.name}</p>
+          {column.isRecurring ? (
+            <Repeat2
+              className="size-3.5 text-muted-foreground"
+              aria-label="Recurring — drags out clone the task"
+            />
+          ) : null}
           <span
             className={cn(
               'rounded-full bg-background px-1.5 text-[10px] font-semibold text-muted-foreground tabular-nums',

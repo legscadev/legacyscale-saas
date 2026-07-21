@@ -774,6 +774,15 @@ class TaskService {
    * Dedicated status transition. Cheap path for drag-drop — updates
    * statusId + orderIndex without touching the rest of the task.
    * Falls back to `nextOrderIndex` when position isn't specified.
+   *
+   * Recurring-column special cases:
+   *   - Move OUT of a recurring column → the "template" stays put;
+   *     we clone it into the target column instead. The clone
+   *     carries sourceRecurringTaskId back to the template so
+   *     completion-time archiving can find it.
+   *   - Move a clone (sourceRecurringTaskId set) TO a terminal
+   *     status → auto-set archivedAt so Done stays clean. Completed
+   *     rows are still visible with the Archived filter toggled.
    */
   async changeStatus(
     id: string,
@@ -784,16 +793,98 @@ class TaskService {
     const companyId = await requireCompanyId()
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, statusId: true },
+      include: {
+        status: { select: { id: true, isRecurring: true } },
+        assignees: { select: { userId: true } },
+        watchers: { select: { userId: true } },
+        labels: { select: { labelId: true } },
+      },
     })
     if (!existing) throw new TaskNotFoundError('Task not found')
 
+    const targetStatus = await prisma.taskStatus.findFirst({
+      where: { id: statusId },
+      select: { id: true, isRecurring: true, isTerminal: true },
+    })
+    if (!targetStatus) throw new Error('Target status not found')
+
+    // Clone-on-move-out-of-Recurring: the template card sits
+    // permanently in the Recurring column. A drag to any other
+    // column spawns a clone into that column and leaves the
+    // original untouched.
+    if (
+      existing.status.isRecurring &&
+      !targetStatus.isRecurring &&
+      existing.statusId !== statusId
+    ) {
+      const finalOrderIndex =
+        orderIndex ?? (await nextOrderIndex(companyId, statusId))
+
+      const clone = await prisma.task.create({
+        data: {
+          title: existing.title,
+          description: existing.description,
+          statusId,
+          priority: existing.priority,
+          categoryId: existing.categoryId,
+          parentTaskId: existing.parentTaskId,
+          reporterId: existing.reporterId,
+          startDate: existing.startDate,
+          dueDate: existing.dueDate,
+          estimatedHours: existing.estimatedHours,
+          orderIndex: finalOrderIndex,
+          sourceRecurringTaskId: existing.id,
+          assignees: {
+            create: existing.assignees.map((a) => ({
+              userId: a.userId,
+              companyId,
+            })),
+          },
+          watchers: {
+            create: existing.watchers.map((w) => ({
+              userId: w.userId,
+              companyId,
+            })),
+          },
+          labels: {
+            create: existing.labels.map((l) => ({
+              labelId: l.labelId,
+              companyId,
+            })),
+          },
+        },
+        select: { id: true },
+      })
+
+      await taskActivityService.logEvent({
+        taskId: clone.id,
+        actorId,
+        action: 'created',
+        toValue: {
+          spawnedFromRecurringId: existing.id,
+          title: existing.title,
+        },
+      })
+      return this.get(clone.id)
+    }
+
+    // Regular transition — the target task is the same row.
     const finalOrderIndex =
       orderIndex ?? (await nextOrderIndex(companyId, statusId))
 
+    // Auto-archive completed clones so Done stays clean.
+    const shouldAutoArchive =
+      targetStatus.isTerminal &&
+      existing.sourceRecurringTaskId !== null &&
+      existing.archivedAt === null
+
     await prisma.task.update({
       where: { id },
-      data: { statusId, orderIndex: finalOrderIndex },
+      data: {
+        statusId,
+        orderIndex: finalOrderIndex,
+        ...(shouldAutoArchive ? { archivedAt: new Date() } : {}),
+      },
     })
 
     if (statusId !== existing.statusId) {

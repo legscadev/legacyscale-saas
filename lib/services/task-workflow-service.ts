@@ -44,12 +44,13 @@ export class LastStatusError extends Error {
  *  Testing, Custom) can be added by admins later without touching
  *  code. */
 const DEFAULT_STATUSES = [
-  { name: 'Backlog',     slug: 'backlog',      color: '#64748b', orderIndex: 0, isDefault: false, isTerminal: false },
-  { name: 'To Do',       slug: 'todo',         color: '#3b82f6', orderIndex: 1, isDefault: true,  isTerminal: false },
-  { name: 'In Progress', slug: 'in-progress',  color: '#f59e0b', orderIndex: 2, isDefault: false, isTerminal: false },
-  { name: 'In Review',   slug: 'in-review',    color: '#a855f7', orderIndex: 3, isDefault: false, isTerminal: false },
-  { name: 'Blocked',     slug: 'blocked',      color: '#ef4444', orderIndex: 4, isDefault: false, isTerminal: false },
-  { name: 'Done',        slug: 'done',         color: '#22c55e', orderIndex: 5, isDefault: false, isTerminal: true  },
+  { name: 'Recurring',   slug: 'recurring',    color: '#0ea5e9', orderIndex: 0, isDefault: false, isTerminal: false, isRecurring: true  },
+  { name: 'Backlog',     slug: 'backlog',      color: '#64748b', orderIndex: 1, isDefault: false, isTerminal: false, isRecurring: false },
+  { name: 'To Do',       slug: 'todo',         color: '#3b82f6', orderIndex: 2, isDefault: true,  isTerminal: false, isRecurring: false },
+  { name: 'In Progress', slug: 'in-progress',  color: '#f59e0b', orderIndex: 3, isDefault: false, isTerminal: false, isRecurring: false },
+  { name: 'In Review',   slug: 'in-review',    color: '#a855f7', orderIndex: 4, isDefault: false, isTerminal: false, isRecurring: false },
+  { name: 'Blocked',     slug: 'blocked',      color: '#ef4444', orderIndex: 5, isDefault: false, isTerminal: false, isRecurring: false },
+  { name: 'Done',        slug: 'done',         color: '#22c55e', orderIndex: 6, isDefault: false, isTerminal: true,  isRecurring: false },
 ] as const
 
 /** Cross-role default categories. The tracker isn't dev-only —
@@ -136,7 +137,22 @@ export async function ensureWorkflowReady(companyId: string): Promise<void> {
   const existing = await runAsSuperAdmin(() =>
     prisma.taskStatus.count({ where: { companyId } }),
   )
-  if (existing > 0) return
+  if (existing > 0) {
+    // Backfill: existing tenants that ran the seed before Recurring
+    // was introduced don't have that column yet. Add it once, at
+    // the top, if it's missing.
+    await runAsSuperAdmin(async () => {
+      const hasRecurring = await prisma.taskStatus.count({
+        where: { companyId, isRecurring: true },
+      })
+      if (hasRecurring > 0) return
+      const recurring = DEFAULT_STATUSES.find((s) => s.isRecurring)!
+      await prisma.taskStatus.create({
+        data: { ...recurring, companyId },
+      })
+    })
+    return
+  }
   await seedDefaultWorkflow(companyId)
 }
 
