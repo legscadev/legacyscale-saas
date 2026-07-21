@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { BarChart3, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -44,6 +44,8 @@ import type {
 } from '@/lib/services/stat-tracker-service'
 
 const ALL_GROUPS = '__all__'
+const ALL_ASSIGNEES = '__all_assignees__'
+const UNASSIGNED = '__unassigned__'
 
 interface StatsShellProps {
   currentUserId: string
@@ -52,6 +54,9 @@ interface StatsShellProps {
   /** Group from ?division=… — used as the initial selection but
    *  otherwise driven by client state. Null / missing = "all". */
   initialDivisionId: string | null
+  /** Assignee filter from ?assignee=… — user id, or the special
+   *  UNASSIGNED sentinel for "no one assigned", or null for "all". */
+  initialAssigneeId: string | null
   metrics: StatMetricRow[]
   assignees: AssigneePickerOption[]
 }
@@ -61,17 +66,32 @@ export function StatsShell({
   currentUserIsAdmin,
   divisions,
   initialDivisionId,
+  initialAssigneeId,
   metrics,
   assignees,
 }: StatsShellProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  // Preserve the current route (/admin/stats vs /team/stats) when
+  // syncing filter state to the URL — hard-coding /admin/stats
+  // would bounce TEAM viewers back through the admin gate.
+  const pathname = usePathname() ?? '/admin/stats'
 
   const [selectedGroupId, setSelectedGroupId] = useState<string>(
     initialDivisionId && divisions.some((d) => d.id === initialDivisionId)
       ? initialDivisionId
       : ALL_GROUPS,
   )
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>(() => {
+    if (initialAssigneeId === UNASSIGNED) return UNASSIGNED
+    if (
+      initialAssigneeId &&
+      assignees.some((a) => a.id === initialAssigneeId)
+    ) {
+      return initialAssigneeId
+    }
+    return ALL_ASSIGNEES
+  })
   const [search, setSearch] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
   // Default the date range to today on both sides so the board opens
@@ -124,7 +144,16 @@ export function StatsShell({
     if (id === ALL_GROUPS) params.delete('division')
     else params.set('division', id)
     const qs = params.toString()
-    router.replace(qs ? `/admin/stats?${qs}` : '/admin/stats')
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
+
+  function selectAssignee(id: string) {
+    setSelectedAssigneeId(id)
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    if (id === ALL_ASSIGNEES) params.delete('assignee')
+    else params.set('assignee', id)
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
   // ─── DERIVED ────────────────────────────────────────────────
@@ -158,6 +187,14 @@ export function StatsShell({
       ) {
         return false
       }
+      // Assignee filter: 'all' passes everyone; a real user id only
+      // passes metrics assigned to that user; UNASSIGNED sentinel
+      // passes metrics with no assignee.
+      if (selectedAssigneeId === UNASSIGNED) {
+        if (m.assignedTo) return false
+      } else if (selectedAssigneeId !== ALL_ASSIGNEES) {
+        if (m.assignedTo?.id !== selectedAssigneeId) return false
+      }
       if (onlyMine && m.assignedTo?.id !== currentUserId) return false
       if (q) {
         const hay = `${m.name} ${m.description ?? ''} ${m.division.name}`.toLowerCase()
@@ -165,7 +202,7 @@ export function StatsShell({
       }
       return true
     })
-  }, [metrics, selectedGroupId, onlyMine, search, currentUserId])
+  }, [metrics, selectedGroupId, selectedAssigneeId, onlyMine, search, currentUserId])
 
   // ─── DELETE HANDLER ─────────────────────────────────────────
   function handleDeleteDivision() {
@@ -196,6 +233,16 @@ export function StatsShell({
               value={selectedGroupId}
               onChange={selectGroup}
               totalMetrics={metrics.length}
+            />
+          ) : null}
+          {assignees.length > 0 ? (
+            <AssigneePicker
+              assignees={assignees}
+              value={selectedAssigneeId}
+              onChange={selectAssignee}
+              currentUserId={currentUserId}
+              metrics={metrics}
+              scopedGroupId={selectedGroupId}
             />
           ) : null}
           {currentUserIsAdmin ? (
@@ -547,6 +594,139 @@ function GroupPicker({
             </span>
           </SelectItem>
         ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+interface AssigneePickerProps {
+  assignees: AssigneePickerOption[]
+  value: string
+  onChange: (id: string) => void
+  currentUserId: string
+  /** Full metric list — used to compute per-assignee counts so the
+   *  picker doubles as an at-a-glance "how many metrics does each
+   *  person own?" view. */
+  metrics: StatMetricRow[]
+  /** When set to a specific group id, counts are scoped to that
+   *  group. Passing ALL_GROUPS counts across everything. */
+  scopedGroupId: string
+}
+
+/** Header-inline picker: "All assignees" at the top, then each
+ *  ADMIN/TEAM user with the count of metrics they own in the
+ *  current group scope. UNASSIGNED sits at the bottom so orphaned
+ *  metrics are one click away. */
+function AssigneePicker({
+  assignees,
+  value,
+  onChange,
+  currentUserId,
+  metrics,
+  scopedGroupId,
+}: AssigneePickerProps) {
+  // Precompute counts once — one pass through metrics.
+  const { totalCount, unassignedCount, byAssignee } = useMemo(() => {
+    const scoped =
+      scopedGroupId === ALL_GROUPS
+        ? metrics
+        : metrics.filter((m) => m.division.id === scopedGroupId)
+    const map = new Map<string, number>()
+    let unassigned = 0
+    for (const m of scoped) {
+      if (!m.assignedTo) {
+        unassigned += 1
+        continue
+      }
+      map.set(m.assignedTo.id, (map.get(m.assignedTo.id) ?? 0) + 1)
+    }
+    return {
+      totalCount: scoped.length,
+      unassignedCount: unassigned,
+      byAssignee: map,
+    }
+  }, [metrics, scopedGroupId])
+
+  const displayName = (a: AssigneePickerOption): string =>
+    a.name?.trim() || a.email.split('@')[0]!
+
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        if (v) onChange(v)
+      }}
+    >
+      <SelectTrigger aria-label="Assignee" className="w-full sm:w-60">
+        <SelectValue placeholder="Choose an assignee">
+          {(v: string) => {
+            if (v === ALL_ASSIGNEES) {
+              return (
+                <span className="flex w-full items-center justify-between gap-3">
+                  <span className="truncate">All assignees</span>
+                  <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+                    {totalCount}
+                  </span>
+                </span>
+              )
+            }
+            if (v === UNASSIGNED) {
+              return (
+                <span className="flex w-full items-center justify-between gap-3">
+                  <span className="truncate italic">Unassigned</span>
+                  <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+                    {unassignedCount}
+                  </span>
+                </span>
+              )
+            }
+            const a = assignees.find((x) => x.id === v)
+            if (!a) return 'Choose an assignee'
+            const suffix = a.id === currentUserId ? ' (You)' : ''
+            return (
+              <span className="flex w-full items-center justify-between gap-3">
+                <span className="truncate">
+                  {displayName(a)}
+                  {suffix}
+                </span>
+                <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+                  {byAssignee.get(a.id) ?? 0}
+                </span>
+              </span>
+            )
+          }}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL_ASSIGNEES}>
+          <span className="flex w-full items-center justify-between gap-3">
+            <span>All assignees</span>
+            <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+              {totalCount}
+            </span>
+          </span>
+        </SelectItem>
+        {assignees.map((a) => (
+          <SelectItem key={a.id} value={a.id}>
+            <span className="flex w-full items-center justify-between gap-3">
+              <span className="truncate">
+                {displayName(a)}
+                {a.id === currentUserId ? ' (You)' : ''}
+              </span>
+              <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+                {byAssignee.get(a.id) ?? 0}
+              </span>
+            </span>
+          </SelectItem>
+        ))}
+        <SelectItem value={UNASSIGNED}>
+          <span className="flex w-full items-center justify-between gap-3">
+            <span className="italic text-muted-foreground">Unassigned</span>
+            <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+              {unassignedCount}
+            </span>
+          </span>
+        </SelectItem>
       </SelectContent>
     </Select>
   )

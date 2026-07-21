@@ -14,7 +14,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 interface TeamStatsPageProps {
-  searchParams: Promise<{ division?: string }>
+  searchParams: Promise<{ division?: string; assignee?: string }>
 }
 
 export default async function TeamStatsPage({
@@ -36,6 +36,7 @@ export default async function TeamStatsPage({
       currentUserIsAdmin={false}
       divisions={divisions}
       initialDivisionId={params.division ?? null}
+      initialAssigneeId={params.assignee ?? null}
       metrics={metrics}
       assignees={assignees}
     />
