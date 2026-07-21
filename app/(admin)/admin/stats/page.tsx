@@ -9,7 +9,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 interface StatsPageProps {
-  searchParams: Promise<{ division?: string }>
+  searchParams: Promise<{ division?: string; assignee?: string }>
 }
 
 export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
@@ -32,6 +32,7 @@ export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
       currentUserIsAdmin={true}
       divisions={divisions}
       initialDivisionId={params.division ?? null}
+      initialAssigneeId={params.assignee ?? null}
       metrics={metrics}
       assignees={assignees}
     />
