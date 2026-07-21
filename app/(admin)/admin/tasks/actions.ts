@@ -11,7 +11,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
 import {
   taskAssignmentService,
@@ -142,7 +142,7 @@ export interface TaskListPayload extends TaskListResult {}
 export async function fetchTasksAction(
   filters: Record<string, unknown> = {},
 ): Promise<MutationResult<TaskListPayload>> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   const companyId = await getRequestCompanyId()
   if (companyId) await ensureWorkflowReady(companyId)
 
@@ -162,7 +162,7 @@ export async function fetchTasksAction(
 export async function fetchTaskAction(
   id: string,
 ): Promise<MutationResult<TaskDetail>> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   try {
     const data = await taskService.get(id)
     return { ok: true, data }
@@ -187,7 +187,7 @@ export interface TaskDrawerPayload {
 export async function fetchTaskDrawerAction(
   id: string,
 ): Promise<MutationResult<TaskDrawerPayload>> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   try {
     const [task, comments, checklists, activity, attachments] =
       await Promise.all([
@@ -225,7 +225,7 @@ export async function fetchTaskDrawerAction(
 export async function uploadTaskAttachmentAction(
   formData: FormData,
 ): Promise<MutationResult<TaskAttachmentRow>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const taskId = String(formData.get('taskId') ?? '')
   const file = formData.get('file')
   if (!taskId) {
@@ -259,7 +259,7 @@ export async function registerTaskLinkAttachmentAction(input: {
   name: string
   url: string
 }): Promise<MutationResult<TaskAttachmentRow>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const url = input.url.trim()
   if (!url) return { ok: false, error: 'URL is required' }
   let parsed: URL
@@ -288,7 +288,7 @@ export async function registerTaskLinkAttachmentAction(input: {
 export async function deleteTaskAttachmentAction(
   attachmentId: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     await taskAttachmentService.delete(attachmentId, user.id)
     revalidateAll()
@@ -304,7 +304,7 @@ export async function deleteTaskAttachmentAction(
 export async function signTaskAttachmentUrlAction(
   attachmentId: string,
 ): Promise<MutationResult<{ url: string }>> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   try {
     const url = await taskAttachmentService.signDownloadUrl(attachmentId)
     return { ok: true, data: { url } }
@@ -376,7 +376,7 @@ export interface TaskWorkspacePayload {
 export async function fetchTaskWorkspaceAction(
   filters: Record<string, unknown> = {},
 ): Promise<MutationResult<TaskWorkspacePayload>> {
-  const currentUser = await requireAdmin()
+  const currentUser = await requireTeamModuleAccess('tasks')
   const companyId = await getRequestCompanyId()
   if (companyId) await ensureWorkflowReady(companyId)
 
@@ -472,7 +472,7 @@ export async function fetchTaskWorkspaceAction(
 export async function createTaskAction(
   input: CreateTaskInput,
 ): Promise<MutationResult<TaskDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = createTaskSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -493,7 +493,7 @@ export async function updateTaskAction(
   id: string,
   input: UpdateTaskInput,
 ): Promise<MutationResult<TaskDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = updateTaskSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -511,7 +511,7 @@ export async function updateTaskAction(
 export async function changeTaskStatusAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult<TaskDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = changeStatusSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -534,7 +534,7 @@ export async function changeTaskStatusAction(
 export async function archiveTaskAction(
   id: string,
 ): Promise<MutationResult<TaskDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     const data = await taskService.archive(id, user.id)
     revalidateAll()
@@ -547,7 +547,7 @@ export async function archiveTaskAction(
 export async function restoreTaskAction(
   id: string,
 ): Promise<MutationResult<TaskDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     const data = await taskService.restore(id, user.id)
     revalidateAll()
@@ -560,7 +560,7 @@ export async function restoreTaskAction(
 export async function deleteTaskAction(
   id: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     await taskService.softDelete(id, user.id)
     revalidateAll()
@@ -573,7 +573,7 @@ export async function deleteTaskAction(
 export async function duplicateTaskAction(
   id: string,
 ): Promise<MutationResult<TaskDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     const data = await taskService.duplicate(id, user.id)
     revalidateAll()
@@ -590,7 +590,7 @@ export async function duplicateTaskAction(
 export async function addCommentAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult<{ id: string }>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = addCommentSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -608,7 +608,7 @@ export async function addCommentAction(
 export async function editCommentAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult<{ id: string }>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = editCommentSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -626,7 +626,7 @@ export async function editCommentAction(
 export async function deleteCommentAction(
   commentId: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     // Admin path — canDeleteAny=true. When a member-level tracker
     // surface ships later, gate this per-role.
@@ -645,7 +645,7 @@ export async function deleteCommentAction(
 export async function createChecklistAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult<{ id: string }>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = createChecklistSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -663,7 +663,7 @@ export async function createChecklistAction(
 export async function renameChecklistAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   const parsed = renameChecklistSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -681,7 +681,7 @@ export async function renameChecklistAction(
 export async function deleteChecklistAction(
   checklistId: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     await taskChecklistService.deleteChecklist(checklistId, user.id)
     revalidateAll()
@@ -694,7 +694,7 @@ export async function deleteChecklistAction(
 export async function addChecklistItemAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult<{ id: string }>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = addChecklistItemSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -712,7 +712,7 @@ export async function addChecklistItemAction(
 export async function updateChecklistItemAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = updateChecklistItemSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -730,7 +730,7 @@ export async function updateChecklistItemAction(
 export async function deleteChecklistItemAction(
   itemId: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     await taskChecklistService.deleteItem(itemId, user.id)
     revalidateAll()
@@ -743,7 +743,7 @@ export async function deleteChecklistItemAction(
 export async function reorderChecklistItemsAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   const parsed = reorderChecklistItemsSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -765,7 +765,7 @@ export async function reorderChecklistItemsAction(
 export async function setAssigneesAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = assignTaskSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -783,7 +783,7 @@ export async function setAssigneesAction(
 export async function setWatchersAction(
   input: Record<string, unknown>,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const parsed = watchTaskSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -801,7 +801,7 @@ export async function setWatchersAction(
 export async function watchTaskAction(
   taskId: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     await taskAssignmentService.watch(taskId, user.id, user.id)
     revalidateAll()
@@ -814,7 +814,7 @@ export async function watchTaskAction(
 export async function unwatchTaskAction(
   taskId: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     await taskAssignmentService.unwatch(taskId, user.id, user.id)
     revalidateAll()
@@ -832,7 +832,7 @@ export async function createSavedViewAction(input: {
   name: string
   query: string
 }): Promise<MutationResult<SavedViewRow>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const name = input.name.trim()
   if (!name) return { ok: false, error: 'Name is required' }
   if (name.length > 60) return { ok: false, error: 'Name is too long (max 60)' }
@@ -852,7 +852,7 @@ export async function createSavedViewAction(input: {
 export async function deleteSavedViewAction(
   id: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     await taskSavedViewService.delete({ id, userId: user.id })
     revalidateAll()
@@ -898,7 +898,7 @@ async function runBulk(
 export async function bulkArchiveTasksAction(
   ids: string[],
 ): Promise<BulkResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const result = await runBulk(ids, (id) =>
     taskService.archive(id, user.id).then(() => undefined),
   )
@@ -909,7 +909,7 @@ export async function bulkArchiveTasksAction(
 export async function bulkDeleteTasksAction(
   ids: string[],
 ): Promise<BulkResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const result = await runBulk(ids, (id) =>
     taskService.softDelete(id, user.id),
   )
@@ -921,7 +921,7 @@ export async function bulkChangeStatusAction(
   ids: string[],
   statusId: string,
 ): Promise<BulkResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   const result = await runBulk(ids, (id) =>
     taskService.changeStatus(id, statusId, user.id).then(() => undefined),
   )

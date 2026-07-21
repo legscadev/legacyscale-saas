@@ -65,7 +65,7 @@ export default async function MemberPolicyComparePage({
       leftSnapshot={leftSnapshot}
       rightSnapshot={rightSnapshot}
       canWrite={false}
-      basePath="/policies"
+      basePath="/team/policies"
     />
   )
 }

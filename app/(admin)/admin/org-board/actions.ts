@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { orgBoardService } from '@/lib/services/org-board-service'
 import { prisma } from '@/lib/prisma'
 import {
@@ -26,7 +26,7 @@ function revalidate(nodeId?: string) {
  * scratch. Refuses if any revision already exists — the empty state
  * is the only surface that should call this. */
 export async function createBlankOrgBoardRevisionAction() {
-  await requireAdmin()
+  await requireTeamModuleAccess('org-board')
   const existing = await prisma.orgBoardRevision.findFirst()
   if (existing) {
     throw new Error('An org board revision already exists')
@@ -58,7 +58,7 @@ export interface AssignablePickerResult {
 export async function searchAssignableEmployeesAction(
   query: string,
 ): Promise<AssignablePickerResult[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess('org-board')
   const q = query.trim()
   if (!q) return []
   const employees = await prisma.employee.findMany({
@@ -89,7 +89,7 @@ export async function addOrgNodeAction(
   revisionId: string,
   input: CreateOrgNodeInput,
 ) {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('org-board')
   const parsed = createOrgNodeSchema.parse(input)
   const node = await orgBoardService.addNode(
     {
@@ -116,7 +116,7 @@ export async function updateOrgNodeAction(
   id: string,
   input: UpdateOrgNodeInput,
 ) {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('org-board')
   const parsed = updateOrgNodeSchema.parse(input)
   const node = await orgBoardService.updateNode(id, parsed, { actorUserId: admin.id })
   revalidate(id)
@@ -124,12 +124,12 @@ export async function updateOrgNodeAction(
 }
 
 export async function getOrgNodeDeleteImpactAction(id: string) {
-  await requireAdmin()
+  await requireTeamModuleAccess('org-board')
   return orgBoardService.deleteImpact(id)
 }
 
 export async function deleteOrgNodeAction(id: string) {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('org-board')
   await orgBoardService.deleteNode(id, { actorUserId: admin.id })
   revalidate()
 }
@@ -138,7 +138,7 @@ export async function moveOrgNodeAction(
   id: string,
   input: MoveOrgNodeInput,
 ) {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('org-board')
   const parsed = moveOrgNodeSchema.parse(input)
   await orgBoardService.moveNode(id, parsed.direction, { actorUserId: admin.id })
   revalidate(id)
@@ -152,7 +152,7 @@ export async function listPositionAssignmentsAction(
   nodeId: string,
   options: { includeEnded?: boolean } = {},
 ) {
-  await requireAdmin()
+  await requireTeamModuleAccess('org-board')
   return orgBoardService.listAssignments(nodeId, options)
 }
 
@@ -160,7 +160,7 @@ export async function addPositionAssignmentAction(
   nodeId: string,
   input: AddPositionAssignmentInput,
 ) {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('org-board')
   const parsed = addPositionAssignmentSchema.parse(input)
   const row = await orgBoardService.addAssignment(
     {
@@ -179,7 +179,7 @@ export async function endPositionAssignmentAction(
   assignmentId: string,
   nodeId: string,
 ) {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('org-board')
   await orgBoardService.endAssignment(assignmentId, new Date(), {
     actorUserId: admin.id,
   })
@@ -187,6 +187,6 @@ export async function endPositionAssignmentAction(
 }
 
 export async function listOrgAuditLogsAction(revisionId: string, limit = 100) {
-  await requireAdmin()
+  await requireTeamModuleAccess('org-board')
   return orgBoardService.listAuditLogs(revisionId, limit)
 }

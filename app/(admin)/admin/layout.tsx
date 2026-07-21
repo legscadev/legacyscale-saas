@@ -16,7 +16,10 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Enforces auth + ADMIN role; redirects otherwise.
+  // Enforces auth + ADMIN role. TEAM staff live under /team/*
+  // (their granted Internal modules mirror the admin shells);
+  // anyone hitting /admin/* who isn't ADMIN gets bounced to
+  // /dashboard.
   const user = await requireAdmin()
   const cookieStore = await cookies()
   const defaultCollapsed =

@@ -187,13 +187,14 @@ export function TopBar({
             </Tooltip>
           ) : null}
 
-          {/* Role swap. Admins can jump from the admin shell into
-              their own member experience (and back) so they can see
-              courses/announcements the way a member does without
-              signing out or spinning up a second account. Only
-              rendered when the swap is meaningful — TEAM users get
-              it on admin pages too, since they see admin routes. */}
-          {(user.role === 'ADMIN' || user.role === 'TEAM') ? (
+          {/* Role swap. ADMIN-only affordance: jump from the admin
+              shell into the member experience (and back) so they can
+              see courses/announcements the way a member does without
+              signing out. TEAM never sees this — /admin/dashboard
+              would just bounce them back via requireAdmin and the
+              "Back to admin" label is meaningless from their
+              perspective (they're not an admin). */}
+          {user.role === 'ADMIN' ? (
             <Tooltip>
               <TooltipTrigger
                 render={

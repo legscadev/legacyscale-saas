@@ -22,6 +22,23 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'image.mux.com' },
     ],
   },
+  async redirects() {
+    return [
+      // Legacy TEAM policies URL — moved to /team/policies as part
+      // of the Internal-modules namespace consolidation. Catch-all
+      // covers the detail / revisions / compare / print sub-routes.
+      {
+        source: '/policies',
+        destination: '/team/policies',
+        permanent: false,
+      },
+      {
+        source: '/policies/:path*',
+        destination: '/team/policies/:path*',
+        permanent: false,
+      },
+    ]
+  },
 };
 
 export default nextConfig;

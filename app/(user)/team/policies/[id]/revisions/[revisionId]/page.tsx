@@ -31,7 +31,7 @@ export default async function MemberPolicyRevisionPage({
       policy={policyResult.data}
       revision={revisionResult.data}
       canWrite={false}
-      basePath="/policies"
+      basePath="/team/policies"
     />
   )
 }

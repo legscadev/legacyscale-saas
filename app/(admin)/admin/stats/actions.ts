@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { requireActiveUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { memberTenantScope } from '@/lib/tenancy/request-company'
@@ -58,7 +58,7 @@ export async function fetchAllMetrics(): Promise<StatMetricRow[]> {
 export async function createDivisionAction(
   input: CreateDivisionInput,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   const result = await createDivision(input)
   if (result.ok) revalidatePath('/admin/stats')
   return result
@@ -68,7 +68,7 @@ export async function updateDivisionAction(
   id: string,
   input: UpdateDivisionInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   const result = await updateDivision(id, input)
   if (result.ok) revalidatePath('/admin/stats')
   return result
@@ -77,7 +77,7 @@ export async function updateDivisionAction(
 export async function archiveDivisionAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   const result = await archiveDivision(id)
   if (result.ok) revalidatePath('/admin/stats')
   return result
@@ -86,7 +86,7 @@ export async function archiveDivisionAction(
 export async function deleteDivisionAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   const result = await deleteDivision(id)
   if (result.ok) revalidatePath('/admin/stats')
   return result
@@ -95,7 +95,7 @@ export async function deleteDivisionAction(
 export async function createMetricAction(
   input: CreateMetricInput,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   const result = await createMetric(input)
   if (result.ok) revalidatePath('/admin/stats')
   return result
@@ -105,7 +105,7 @@ export async function updateMetricAction(
   id: string,
   input: UpdateMetricInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   const result = await updateMetric(id, input)
   if (result.ok) revalidatePath('/admin/stats')
   return result
@@ -114,7 +114,7 @@ export async function updateMetricAction(
 export async function archiveMetricAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   const result = await archiveMetric(id)
   if (result.ok) revalidatePath('/admin/stats')
   return result
@@ -123,7 +123,7 @@ export async function archiveMetricAction(
 export async function deleteMetricAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   const result = await deleteMetric(id)
   if (result.ok) revalidatePath('/admin/stats')
   return result
@@ -161,7 +161,7 @@ export interface AssigneePickerOption {
 }
 
 export async function listAssigneesForStats(): Promise<AssigneePickerOption[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess('stats')
   return prisma.user.findMany({
     where: {
       isActive: true,
