@@ -23,7 +23,7 @@ export default async function MemberPolicyDetailPage({
     <PolicyDetailView
       data={result.data}
       canWrite={false}
-      basePath="/policies"
+      basePath="/team/policies"
     />
   )
 }

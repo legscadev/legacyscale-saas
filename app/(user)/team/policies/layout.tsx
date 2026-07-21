@@ -7,9 +7,9 @@ import { requireTeamModuleAccess } from '@/lib/auth'
  * requireTeamOrAdmin composed inside requireTeamModuleAccess
  * bounces them first.
  *
- * ADMIN visiting /policies is also handled — they'll get through
- * the gate but the /policies page itself redirects them to
- * /admin/policies (their proper editor surface).
+ * ADMIN visiting /team/policies is also handled — they'll get
+ * through the gate but the /team/policies page itself redirects
+ * them to /admin/policies (their proper editor surface).
  */
 export default async function PoliciesLayout({
   children,

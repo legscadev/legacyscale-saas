@@ -27,7 +27,7 @@ export default async function MemberPolicyPrintPage({
     <PolicyPrintView
       data={detail.data}
       companyName={company?.name ?? null}
-      basePath="/policies"
+      basePath="/team/policies"
     />
   )
 }
