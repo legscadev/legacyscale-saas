@@ -135,20 +135,17 @@ export const memberNav: NavSection[] = [
     label: 'Internal',
     // TEAM-only entries — MEMBER (LMS students) never see any of
     // this. Each is per-user gated via moduleKey so a TEAM user
-    // sees exactly the modules their grants unlock.
-    //
-    // Policies keeps its dedicated /policies read view; the other
-    // six point at /admin/... URLs (the admin layout accepts TEAM
-    // and the per-page requireTeamModuleAccess gate enforces the
-    // grant server-side).
+    // sees exactly the modules their grants unlock. Every route
+    // lives under /team/* — the admin surface at /admin/* is
+    // reserved for ADMIN only.
     items: [
-      { label: 'Team', href: '/admin/team', icon: Users, visibleTo: ['TEAM'], moduleKey: 'team' },
-      { label: 'Task Tracker', href: '/admin/tasks', icon: CheckSquare, visibleTo: ['TEAM'], moduleKey: 'tasks' },
-      { label: 'Policies', href: '/policies', icon: BookText, visibleTo: ['TEAM'], moduleKey: 'policies' },
-      { label: 'Trainings', href: '/admin/trainings', icon: GraduationCap, visibleTo: ['TEAM'], moduleKey: 'trainings' },
-      { label: 'Statistics', href: '/admin/stats', icon: BarChart3, visibleTo: ['TEAM'], moduleKey: 'stats' },
-      { label: 'Organization Board', href: '/admin/org-board', icon: Network, visibleTo: ['TEAM'], moduleKey: 'org-board' },
-      { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus, visibleTo: ['TEAM'], moduleKey: 'onboarding' },
+      { label: 'Team', href: '/team', icon: Users, visibleTo: ['TEAM'], moduleKey: 'team' },
+      { label: 'Task Tracker', href: '/team/tasks', icon: CheckSquare, visibleTo: ['TEAM'], moduleKey: 'tasks' },
+      { label: 'Policies', href: '/team/policies', icon: BookText, visibleTo: ['TEAM'], moduleKey: 'policies' },
+      { label: 'Trainings', href: '/team/trainings', icon: GraduationCap, visibleTo: ['TEAM'], moduleKey: 'trainings' },
+      { label: 'Statistics', href: '/team/stats', icon: BarChart3, visibleTo: ['TEAM'], moduleKey: 'stats' },
+      { label: 'Organization Board', href: '/team/org-board', icon: Network, visibleTo: ['TEAM'], moduleKey: 'org-board' },
+      { label: 'Onboarding', href: '/team/onboarding', icon: UserPlus, visibleTo: ['TEAM'], moduleKey: 'onboarding' },
     ],
   },
   {

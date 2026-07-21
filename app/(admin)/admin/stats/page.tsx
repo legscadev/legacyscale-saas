@@ -1,4 +1,4 @@
-import { requireTeamModuleAccess } from '@/lib/auth/get-user'
+import { requireAdmin } from '@/lib/auth/get-user'
 import { StatsShell } from '@/components/admin/stats/stats-shell'
 import {
   fetchAllMetrics,
@@ -13,7 +13,7 @@ interface StatsPageProps {
 }
 
 export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
-  const viewer = await requireTeamModuleAccess('stats')
+  const admin = await requireAdmin()
   const params = await searchParams
 
   // Fetch every division + every metric in one round-trip. The
@@ -28,8 +28,8 @@ export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
 
   return (
     <StatsShell
-      currentUserId={viewer.id}
-      currentUserIsAdmin={viewer.role === 'ADMIN'}
+      currentUserId={admin.id}
+      currentUserIsAdmin={true}
       divisions={divisions}
       initialDivisionId={params.division ?? null}
       metrics={metrics}

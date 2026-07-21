@@ -1,4 +1,4 @@
-import { requireTeamModuleAccess } from '@/lib/auth/get-user'
+import { requireAdmin } from '@/lib/auth/get-user'
 import { orgBoardService } from '@/lib/services/org-board-service'
 import { OrgBoardShell } from '@/components/admin/org-board/org-board-shell'
 
@@ -11,7 +11,7 @@ interface PageProps {
 }
 
 export default async function OrgBoardAdminPage({ searchParams }: PageProps) {
-  await requireTeamModuleAccess('org-board')
+  await requireAdmin()
   const { revision: revisionParam } = await searchParams
 
   const [revisions, requestedTree] = await Promise.all([

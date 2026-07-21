@@ -1,9 +1,9 @@
-import { requireTeamModuleAccess } from '@/lib/auth/get-user'
+import { requireAdmin } from '@/lib/auth/get-user'
 import { CoursesShell } from '@/components/admin/courses/courses-shell'
 import { fetchCourses } from '../courses/actions'
 
 export default async function AdminTrainingsPage() {
-  await requireTeamModuleAccess('trainings')
+  await requireAdmin()
   // Trainings lens: internal-audience courses only (INTERNAL + BOTH).
   // Same data model as Courses, purpose-locked so admin + team can
   // learn without sharing the surface with student content.

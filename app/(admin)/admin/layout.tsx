@@ -2,10 +2,9 @@ import { cookies } from 'next/headers'
 
 import { AppShell } from '@/components/layout'
 import { SIDEBAR_COOKIE } from '@/components/layout/sidebar-cookie'
-import { requireTeamOrAdmin } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth'
 import { getBranding, toClientBranding } from '@/lib/branding/get-branding'
 import { announcementService } from '@/lib/services/announcement-service'
-import { teamAccessService } from '@/lib/services/team-access-service'
 import {
   getActiveCompany,
   listCompaniesForUser,
@@ -17,12 +16,11 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Enforces auth + (ADMIN | TEAM). Per-page requireAdmin +
-  // requireTeamModuleAccess("key") narrow further where needed.
-  // TEAM staff can reach the Internal admin routes their grants
-  // cover (Task Tracker, Statistics, etc.); everything else on
-  // /admin/* still requires ADMIN via the per-page gate.
-  const user = await requireTeamOrAdmin()
+  // Enforces auth + ADMIN role. TEAM staff live under /team/*
+  // (their granted Internal modules mirror the admin shells);
+  // anyone hitting /admin/* who isn't ADMIN gets bounced to
+  // /dashboard.
+  const user = await requireAdmin()
   const cookieStore = await cookies()
   const defaultCollapsed =
     cookieStore.get(SIDEBAR_COOKIE)?.value === '1'
@@ -70,19 +68,6 @@ export default async function AdminLayout({
   const activeForTheme = await getActiveCompany()
   const themeLocked = Boolean(activeForTheme?.brand)
 
-  // Per-user Internal-module grants — only meaningful for TEAM.
-  // AppShell uses these to filter the sidebar (and command palette).
-  // ADMIN sees everything regardless of what's in this array.
-  let grantedModules: string[] = []
-  if (user.role === 'TEAM') {
-    try {
-      const grants = await teamAccessService.listActiveGrants(user.id)
-      grantedModules = grants.map((g) => g.moduleKey)
-    } catch (err) {
-      console.error('listActiveGrants (admin layout) failed:', err)
-    }
-  }
-
   return (
     <AppShell
       role="admin"
@@ -98,7 +83,6 @@ export default async function AdminLayout({
       isSuperAdmin={user.isSuperAdmin}
       branding={branding}
       themeLocked={themeLocked}
-      grantedModules={grantedModules}
     >
       {children}
     </AppShell>
