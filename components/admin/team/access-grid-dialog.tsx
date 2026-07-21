@@ -124,7 +124,7 @@ export function AccessGridDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-3xl sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Manage access — {displayName}</DialogTitle>
           <DialogDescription>
@@ -144,16 +144,19 @@ export function AccessGridDialog({
             <span>{loadError}</span>
           </div>
         ) : (
-          <ul className="space-y-1.5">
+          <div className="grid gap-2 sm:grid-cols-2">
             {TEAM_MODULES.map((m) => {
               const row = state[m.key]
               const Icon = m.icon
               return (
-                <li
+                <label
                   key={m.key}
+                  htmlFor={`access-${m.key}`}
                   className={cn(
-                    'flex items-start gap-3 rounded-md border p-3 transition-colors',
-                    row.granted && 'border-primary/40 bg-primary/5',
+                    'group/access-row relative flex cursor-pointer items-start gap-2.5 rounded-md border p-2.5 transition-colors',
+                    row.granted
+                      ? 'border-primary/40 bg-primary/5'
+                      : 'hover:bg-muted/30',
                     row.saving && 'opacity-70',
                   )}
                 >
@@ -165,41 +168,36 @@ export function AccessGridDialog({
                     onChange={(e) => toggle(m.key, e.target.checked)}
                     className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary"
                   />
-                  <label
-                    htmlFor={`access-${m.key}`}
-                    className="min-w-0 flex-1 cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
                       <Icon
                         className="size-3.5 text-muted-foreground"
                         aria-hidden
                       />
-                      {m.label}
-                    </span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      <span className="truncate">{m.label}</span>
+                    </div>
+                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
                       {m.description}
-                    </span>
-                  </label>
+                    </p>
+                  </div>
                   {row.saving ? (
                     <Loader2
-                      className="mt-1 size-3.5 shrink-0 animate-spin text-muted-foreground"
+                      className="absolute right-2 top-2 size-3.5 animate-spin text-muted-foreground"
                       aria-hidden
                     />
                   ) : null}
-                </li>
+                </label>
               )
             })}
-          </ul>
+          </div>
         )}
 
-        <div className="rounded-md border bg-muted/30 p-2 text-[11px] text-muted-foreground">
-          <div className="flex items-start gap-1.5">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>
-              ADMIN staff always have full access. Only TEAM members can
-              be scoped through this grid.
-            </span>
-          </div>
+        <div className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+          <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
+          <span>
+            ADMIN staff always have full access. Only TEAM members can be
+            scoped through this grid.
+          </span>
         </div>
 
         <DialogFooter>
