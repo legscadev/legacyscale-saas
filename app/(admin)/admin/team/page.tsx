@@ -1,10 +1,10 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { categoryService } from '@/lib/services/category-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
 import { fetchMembers } from '../members/actions'
 
 export default async function AdminTeamPage() {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('team')
   // Team lens: ADMIN + TEAM only. Categories still load so the shared
   // MembersShell renders correctly, even though category assignment
   // is a student concept (staff rows have no category badge).

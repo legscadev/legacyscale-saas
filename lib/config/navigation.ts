@@ -73,14 +73,18 @@ export const adminNav: NavSection[] = [
   },
   {
     label: 'Internal',
+    // Every item here is tagged with a moduleKey so TEAM viewers
+    // (who now can enter /admin/* via the loosened layout gate)
+    // only see the modules their grants unlock. ADMIN sees all of
+    // them regardless.
     items: [
-      { label: 'Team', href: '/admin/team', icon: Users },
-      { label: 'Task Tracker', href: '/admin/tasks', icon: CheckSquare },
-      { label: 'Policies', href: '/admin/policies', icon: BookText },
-      { label: 'Trainings', href: '/admin/trainings', icon: GraduationCap },
-      { label: 'Statistics', href: '/admin/stats', icon: BarChart3 },
-      { label: 'Organization Board', href: '/admin/org-board', icon: Network },
-      { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus },
+      { label: 'Team', href: '/admin/team', icon: Users, moduleKey: 'team' },
+      { label: 'Task Tracker', href: '/admin/tasks', icon: CheckSquare, moduleKey: 'tasks' },
+      { label: 'Policies', href: '/admin/policies', icon: BookText, moduleKey: 'policies' },
+      { label: 'Trainings', href: '/admin/trainings', icon: GraduationCap, moduleKey: 'trainings' },
+      { label: 'Statistics', href: '/admin/stats', icon: BarChart3, moduleKey: 'stats' },
+      { label: 'Organization Board', href: '/admin/org-board', icon: Network, moduleKey: 'org-board' },
+      { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus, moduleKey: 'onboarding' },
     ],
   },
   {
@@ -129,19 +133,22 @@ export const memberNav: NavSection[] = [
   },
   {
     label: 'Internal',
+    // TEAM-only entries — MEMBER (LMS students) never see any of
+    // this. Each is per-user gated via moduleKey so a TEAM user
+    // sees exactly the modules their grants unlock.
+    //
+    // Policies keeps its dedicated /policies read view; the other
+    // six point at /admin/... URLs (the admin layout accepts TEAM
+    // and the per-page requireTeamModuleAccess gate enforces the
+    // grant server-side).
     items: [
-      {
-        label: 'Policies',
-        href: '/policies',
-        icon: BookText,
-        // TEAM-only in the member sidebar. ADMIN gets redirected to
-        // /admin/policies at /policies anyway; MEMBER (students) has
-        // no legitimate reason to see internal ops docs.
-        visibleTo: ['TEAM'],
-        // Per-user gate — TEAM users only see this link if ADMIN
-        // has granted them the 'policies' module.
-        moduleKey: 'policies',
-      },
+      { label: 'Team', href: '/admin/team', icon: Users, visibleTo: ['TEAM'], moduleKey: 'team' },
+      { label: 'Task Tracker', href: '/admin/tasks', icon: CheckSquare, visibleTo: ['TEAM'], moduleKey: 'tasks' },
+      { label: 'Policies', href: '/policies', icon: BookText, visibleTo: ['TEAM'], moduleKey: 'policies' },
+      { label: 'Trainings', href: '/admin/trainings', icon: GraduationCap, visibleTo: ['TEAM'], moduleKey: 'trainings' },
+      { label: 'Statistics', href: '/admin/stats', icon: BarChart3, visibleTo: ['TEAM'], moduleKey: 'stats' },
+      { label: 'Organization Board', href: '/admin/org-board', icon: Network, visibleTo: ['TEAM'], moduleKey: 'org-board' },
+      { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus, visibleTo: ['TEAM'], moduleKey: 'onboarding' },
     ],
   },
   {

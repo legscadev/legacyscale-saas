@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { TasksShell } from '@/components/admin/tasks/tasks-shell'
 
 import { fetchTaskWorkspaceAction } from './actions'
@@ -45,7 +45,7 @@ interface AdminTasksPageProps {
 export default async function AdminTasksPage({
   searchParams,
 }: AdminTasksPageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   const raw = await searchParams
   const filters = parseFiltersFromSearchParams(raw)
 
