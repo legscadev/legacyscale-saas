@@ -82,12 +82,11 @@ export function MetricCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [pending, startTransition] = useTransition()
 
-  // Only the assignee records values. When a metric is unassigned,
-  // admins can fill in so the card doesn't sit blank forever.
-  // Admins still get the kebab menu (Delete metric) regardless.
+  // The assignee records values on their own metrics; admins can
+  // record on any metric (needed for historical imports + covering
+  // ex-employees whose linked User is gone).
   const isAssignee = metric.assignedTo?.userId === currentUserId
-  const isUnassignedAdmin = !metric.assignedTo && currentUserIsAdmin
-  const canRecord = isAssignee || isUnassignedAdmin
+  const canRecord = isAssignee || currentUserIsAdmin
 
   // Apply the page-level date range to this card's data. Points are
   // already ordered oldest → newest.
