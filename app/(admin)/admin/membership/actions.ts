@@ -4,25 +4,25 @@ import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import {
-  categoryService,
-  type CategoryListItem,
-} from '@/lib/services/category-service'
+  membershipService,
+  type MembershipListItem,
+} from '@/lib/services/membership-service'
 import {
-  createCategorySchema,
-  updateCategorySchema,
-} from '@/lib/validations/category'
+  createMembershipSchema,
+  updateMembershipSchema,
+} from '@/lib/validations/membership'
 
-export interface CategoriesData {
-  items: CategoryListItem[]
+export interface MembershipsData {
+  items: MembershipListItem[]
 }
 
-export async function fetchCategories(): Promise<CategoriesData> {
+export async function fetchMemberships(): Promise<MembershipsData> {
   await requireAdmin()
-  const items = await categoryService.list()
+  const items = await membershipService.list()
   return { items }
 }
 
-export interface CategoryMutationResult {
+export interface MembershipMutationResult {
   ok: boolean
   id?: string
   error?: string
@@ -39,12 +39,12 @@ function fieldErrorsFromZod(issues: ReadonlyArray<{ path: PropertyKey[]; message
   return out
 }
 
-export async function createCategoryAction(
+export async function createMembershipAction(
   formData: FormData,
-): Promise<CategoryMutationResult> {
+): Promise<MembershipMutationResult> {
   await requireAdmin()
 
-  const parsed = createCategorySchema.safeParse({
+  const parsed = createMembershipSchema.safeParse({
     name: (formData.get('name') as string) ?? '',
     slug: (formData.get('slug') as string) || undefined,
     description: (formData.get('description') as string) || undefined,
@@ -55,19 +55,19 @@ export async function createCategoryAction(
   }
 
   try {
-    const row = await categoryService.create(parsed.data)
-    revalidatePath('/admin/categories')
+    const row = await membershipService.create(parsed.data)
+    revalidatePath('/admin/membership')
     return { ok: true, id: row.id }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Could not create category'
+    const message = err instanceof Error ? err.message : 'Could not create membership'
     return { ok: false, error: message }
   }
 }
 
-export async function updateCategoryAction(
+export async function updateMembershipAction(
   id: string,
   formData: FormData,
-): Promise<CategoryMutationResult> {
+): Promise<MembershipMutationResult> {
   await requireAdmin()
 
   const input: Record<string, unknown> = {}
@@ -78,33 +78,33 @@ export async function updateCategoryAction(
     input.description = raw.length > 0 ? raw : null
   }
 
-  const parsed = updateCategorySchema.safeParse(input)
+  const parsed = updateMembershipSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
   }
 
   try {
-    await categoryService.update(id, parsed.data)
-    revalidatePath('/admin/categories')
+    await membershipService.update(id, parsed.data)
+    revalidatePath('/admin/membership')
     revalidatePath('/admin/courses')
     return { ok: true, id }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Could not update category'
+    const message = err instanceof Error ? err.message : 'Could not update membership'
     return { ok: false, error: message }
   }
 }
 
-export async function deleteCategoryAction(
+export async function deleteMembershipAction(
   id: string,
-): Promise<CategoryMutationResult> {
+): Promise<MembershipMutationResult> {
   await requireAdmin()
   try {
-    await categoryService.delete(id)
-    revalidatePath('/admin/categories')
+    await membershipService.delete(id)
+    revalidatePath('/admin/membership')
     revalidatePath('/admin/courses')
     return { ok: true }
   } catch (err) {
-    console.error('Category delete failed:', err)
-    return { ok: false, error: 'Could not delete category' }
+    console.error('Membership delete failed:', err)
+    return { ok: false, error: 'Could not delete membership' }
   }
 }

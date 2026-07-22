@@ -23,8 +23,8 @@ import { getRequestCompanyId } from './request-company'
 const SCOPED_MODELS = new Set<string>([
   'Invite',
   'Course',
-  'Category',
-  'CourseCategory',
+  'Membership',
+  'CourseMembership',
   'Module',
   'Chapter',
   'Lesson',

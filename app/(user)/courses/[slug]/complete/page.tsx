@@ -123,7 +123,7 @@ export default async function CourseCompletePage({
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  {suggestion.reason === 'sameCategory'
+                  {suggestion.reason === 'sameMembership'
                     ? 'Picked because it lives in the same category as this course.'
                     : 'From your enrolled courses — keep your streak going.'}
                 </p>

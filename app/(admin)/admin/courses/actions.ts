@@ -59,11 +59,11 @@ function parseCourseImagePath(
   return m ? (m[1] as CourseImageKind) : null
 }
 
-// The course form sends categoryIds as repeated form fields.
-// Empty array (no key, or single empty value) means "no categories".
-function parseCategoryIds(formData: FormData): string[] {
+// The course form sends membershipIds as repeated form fields.
+// Empty array (no key, or single empty value) means "no memberships".
+function parseMembershipIds(formData: FormData): string[] {
   return formData
-    .getAll('categoryIds')
+    .getAll('membershipIds')
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
 }
 
@@ -246,7 +246,7 @@ export async function createCourseAction(
     thumbnailUrl: imageResolve.thumbnailUrl,
     coverImageUrl: imageResolve.coverImageUrl,
     certificateEnabled: formData.get('certificateEnabled') === '1',
-    categoryIds: parseCategoryIds(formData),
+    membershipIds: parseMembershipIds(formData),
   })
 
   if (!parsed.success) {
@@ -398,8 +398,8 @@ export async function updateCourseAction(
   if (formData.has('certificateEnabled')) {
     input.certificateEnabled = formData.get('certificateEnabled') === '1'
   }
-  if (formData.has('categoryIds')) {
-    input.categoryIds = parseCategoryIds(formData)
+  if (formData.has('membershipIds')) {
+    input.membershipIds = parseMembershipIds(formData)
   }
 
   const parsed = updateCourseSchema.safeParse(input)

@@ -3,20 +3,20 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ensureUniqueSlug, slugify } from '@/lib/utils/slug'
 import type {
-  CreateCategoryInput,
-  UpdateCategoryInput,
-} from '@/lib/validations/category'
+  CreateMembershipInput,
+  UpdateMembershipInput,
+} from '@/lib/validations/membership'
 
-export type CategorySortField = 'name' | 'createdAt'
+export type MembershipSortField = 'name' | 'createdAt'
 export type SortDirection = 'asc' | 'desc'
 
-interface ListCategoriesOptions {
+interface ListMembershipsOptions {
   search?: string
-  sort?: CategorySortField
+  sort?: MembershipSortField
   direction?: SortDirection
 }
 
-const categorySelect = {
+const membershipSelect = {
   id: true,
   name: true,
   slug: true,
@@ -24,19 +24,19 @@ const categorySelect = {
   createdAt: true,
   updatedAt: true,
   _count: { select: { courses: true } },
-} satisfies Prisma.CategorySelect
+} satisfies Prisma.MembershipSelect
 
-type CategoryRow = Prisma.CategoryGetPayload<{ select: typeof categorySelect }>
+type MembershipRow = Prisma.MembershipGetPayload<{ select: typeof membershipSelect }>
 
-function shape(row: CategoryRow) {
+function shape(row: MembershipRow) {
   const { _count, ...rest } = row
   return { ...rest, courseCount: _count.courses }
 }
 
-async function listCategories(options: ListCategoriesOptions = {}) {
+async function listMemberships(options: ListMembershipsOptions = {}) {
   const { search, sort = 'name', direction = 'asc' } = options
 
-  const where: Prisma.CategoryWhereInput | undefined = search?.trim()
+  const where: Prisma.MembershipWhereInput | undefined = search?.trim()
     ? {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -45,34 +45,34 @@ async function listCategories(options: ListCategoriesOptions = {}) {
       }
     : undefined
 
-  const orderBy: Prisma.CategoryOrderByWithRelationInput =
+  const orderBy: Prisma.MembershipOrderByWithRelationInput =
     sort === 'createdAt' ? { createdAt: direction } : { name: direction }
 
-  const rows = await prisma.category.findMany({
+  const rows = await prisma.membership.findMany({
     where,
     orderBy,
-    select: categorySelect,
+    select: membershipSelect,
   })
   return rows.map(shape)
 }
 
-async function getCategoryById(id: string) {
-  const row = await prisma.category.findUnique({
+async function getMembershipById(id: string) {
+  const row = await prisma.membership.findUnique({
     where: { id },
-    select: categorySelect,
+    select: membershipSelect,
   })
   return row ? shape(row) : null
 }
 
 async function isSlugTakenByOther(slug: string, excludeId?: string) {
-  const hit = await prisma.category.findUnique({
+  const hit = await prisma.membership.findUnique({
     where: { slug },
     select: { id: true },
   })
   return hit !== null && hit.id !== excludeId
 }
 
-async function createCategory(input: CreateCategoryInput) {
+async function createMembership(input: CreateMembershipInput) {
   const baseSlug = input.slug && input.slug.length > 0 ? input.slug : input.name
   const slug = await ensureUniqueSlug(slugify(baseSlug), (candidate) =>
     isSlugTakenByOther(candidate),
@@ -80,27 +80,27 @@ async function createCategory(input: CreateCategoryInput) {
 
   // Name uniqueness is enforced by the DB; surface the failure as a
   // friendly error instead of a Prisma exception.
-  const existingName = await prisma.category.findUnique({
+  const existingName = await prisma.membership.findUnique({
     where: { name: input.name },
     select: { id: true },
   })
   if (existingName) {
-    throw new Error('A category with this name already exists')
+    throw new Error('A membership with this name already exists')
   }
 
-  const row = await prisma.category.create({
+  const row = await prisma.membership.create({
     data: {
       name: input.name,
       slug,
       description: input.description ?? null,
     },
-    select: categorySelect,
+    select: membershipSelect,
   })
   return shape(row)
 }
 
-async function updateCategory(id: string, input: UpdateCategoryInput) {
-  const data: Prisma.CategoryUpdateInput = {}
+async function updateMembership(id: string, input: UpdateMembershipInput) {
+  const data: Prisma.MembershipUpdateInput = {}
 
   if (input.name !== undefined) data.name = input.name
   if (input.description !== undefined) data.description = input.description
@@ -119,39 +119,39 @@ async function updateCategory(id: string, input: UpdateCategoryInput) {
   }
 
   if (input.name !== undefined) {
-    const existingName = await prisma.category.findUnique({
+    const existingName = await prisma.membership.findUnique({
       where: { name: input.name },
       select: { id: true },
     })
     if (existingName && existingName.id !== id) {
-      throw new Error('A category with this name already exists')
+      throw new Error('A membership with this name already exists')
     }
   }
 
-  const row = await prisma.category.update({
+  const row = await prisma.membership.update({
     where: { id },
     data,
-    select: categorySelect,
+    select: membershipSelect,
   })
   return shape(row)
 }
 
-async function deleteCategory(id: string) {
+async function deleteMembership(id: string) {
   // Junction rows cascade via the Prisma relation onDelete.
-  await prisma.category.delete({ where: { id } })
+  await prisma.membership.delete({ where: { id } })
 }
 
-export const categoryService = {
-  list: listCategories,
-  getById: getCategoryById,
-  create: createCategory,
-  update: updateCategory,
-  delete: deleteCategory,
+export const membershipService = {
+  list: listMemberships,
+  getById: getMembershipById,
+  create: createMembership,
+  update: updateMembership,
+  delete: deleteMembership,
 }
 
-export type CategoryListItem = Awaited<
-  ReturnType<typeof listCategories>
+export type MembershipListItem = Awaited<
+  ReturnType<typeof listMemberships>
 >[number]
-export type CategoryDetail = NonNullable<
-  Awaited<ReturnType<typeof getCategoryById>>
+export type MembershipDetail = NonNullable<
+  Awaited<ReturnType<typeof getMembershipById>>
 >

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Pencil, Plus, Tag, Trash2 } from 'lucide-react'
+import { BadgeCheck, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -37,33 +37,33 @@ import {
 import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
 import {
-  type CategoriesData,
-  createCategoryAction,
-  deleteCategoryAction,
-  fetchCategories,
-  updateCategoryAction,
-} from '@/app/(admin)/admin/categories/actions'
-import type { CategoryListItem } from '@/lib/services/category-service'
+  type MembershipsData,
+  createMembershipAction,
+  deleteMembershipAction,
+  fetchMemberships,
+  updateMembershipAction,
+} from '@/app/(admin)/admin/membership/actions'
+import type { MembershipListItem } from '@/lib/services/membership-service'
 
-interface CategoriesShellProps {
-  initialData: CategoriesData
+interface MembershipsShellProps {
+  initialData: MembershipsData
 }
 
 type DialogState =
   | { kind: 'closed' }
   | { kind: 'create' }
-  | { kind: 'edit'; category: CategoryListItem }
+  | { kind: 'edit'; membership: MembershipListItem }
 
-export function CategoriesShell({ initialData }: CategoriesShellProps) {
+export function MembershipsShell({ initialData }: MembershipsShellProps) {
   const [items, setItems] = useState(initialData.items)
   const [dialog, setDialog] = useState<DialogState>({ kind: 'closed' })
-  const [pendingDelete, setPendingDelete] = useState<CategoryListItem | null>(
+  const [pendingDelete, setPendingDelete] = useState<MembershipListItem | null>(
     null,
   )
   const [isDeleting, startDelete] = useTransition()
 
   async function refresh() {
-    const next = await fetchCategories()
+    const next = await fetchMemberships()
     setItems(next.items)
   }
 
@@ -71,9 +71,9 @@ export function CategoriesShell({ initialData }: CategoriesShellProps) {
     if (!pendingDelete) return
     const target = pendingDelete
     startDelete(async () => {
-      const result = await deleteCategoryAction(target.id)
+      const result = await deleteMembershipAction(target.id)
       if (!result.ok) {
-        toast.error(result.error ?? 'Could not delete category')
+        toast.error(result.error ?? 'Could not delete membership')
         return
       }
       toast.success(`Deleted "${target.name}"`)
@@ -87,12 +87,12 @@ export function CategoriesShell({ initialData }: CategoriesShellProps) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Categories"
-        description="Group courses for browsing and SEO. A course can belong to any number of categories."
+        title="Membership"
+        description="Tiers that gate which courses each member can see. A course opts into any number of tiers; a member with a tier sees courses in that tier plus free courses and any course with no tiers assigned."
         actions={
           <Button onClick={() => setDialog({ kind: 'create' })}>
             <Plus className="size-4" />
-            New category
+            New membership
           </Button>
         }
       />
@@ -109,41 +109,43 @@ export function CategoriesShell({ initialData }: CategoriesShellProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((cat) => (
-                <TableRow key={cat.id}>
+              {items.map((m) => (
+                <TableRow key={m.id}>
                   <TableCell>
                     <div className="space-y-0.5">
-                      <p className="font-medium text-foreground">{cat.name}</p>
-                      {cat.description ? (
+                      <p className="font-medium text-foreground">{m.name}</p>
+                      {m.description ? (
                         <p className="line-clamp-1 text-xs text-muted-foreground">
-                          {cat.description}
+                          {m.description}
                         </p>
                       ) : null}
                     </div>
                   </TableCell>
                   <TableCell>
                     <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                      {cat.slug}
+                      {m.slug}
                     </code>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {cat.courseCount}
+                    {m.courseCount}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => setDialog({ kind: 'edit', category: cat })}
-                        aria-label={`Edit ${cat.name}`}
+                        onClick={() =>
+                          setDialog({ kind: 'edit', membership: m })
+                        }
+                        aria-label={`Edit ${m.name}`}
                       >
                         <Pencil className="size-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => setPendingDelete(cat)}
-                        aria-label={`Delete ${cat.name}`}
+                        onClick={() => setPendingDelete(m)}
+                        aria-label={`Delete ${m.name}`}
                       >
                         <Trash2 className="size-4 text-destructive" />
                       </Button>
@@ -156,18 +158,18 @@ export function CategoriesShell({ initialData }: CategoriesShellProps) {
         </div>
       ) : (
         <EmptyState
-          icon={Tag}
-          title="No categories yet"
-          description="Categories help members browse the library and improve discoverability."
+          icon={BadgeCheck}
+          title="No memberships yet"
+          description="Create a tier to gate which courses members can access."
         >
           <Button onClick={() => setDialog({ kind: 'create' })}>
             <Plus className="size-4" />
-            Create your first category
+            Create your first membership
           </Button>
         </EmptyState>
       )}
 
-      <CategoryDialog
+      <MembershipDialog
         state={dialog}
         onClose={() => setDialog({ kind: 'closed' })}
         onSaved={async () => {
@@ -189,7 +191,7 @@ export function CategoriesShell({ initialData }: CategoriesShellProps) {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete && pendingDelete.courseCount > 0
-                ? `This category is assigned to ${pendingDelete.courseCount} course${pendingDelete.courseCount === 1 ? '' : 's'}. Those courses will lose this category but won't be deleted.`
+                ? `This membership is assigned to ${pendingDelete.courseCount} course${pendingDelete.courseCount === 1 ? '' : 's'}. Those courses will lose this membership but won't be deleted.`
                 : 'This action cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -213,13 +215,13 @@ export function CategoriesShell({ initialData }: CategoriesShellProps) {
 // Create / Edit dialog
 // =========================================================
 
-interface CategoryDialogProps {
+interface MembershipDialogProps {
   state: DialogState
   onClose: () => void
   onSaved: () => Promise<void> | void
 }
 
-function CategoryDialog({ state, onClose, onSaved }: CategoryDialogProps) {
+function MembershipDialog({ state, onClose, onSaved }: MembershipDialogProps) {
   const mode = state.kind
   const open = mode !== 'closed'
 
@@ -228,7 +230,7 @@ function CategoryDialog({ state, onClose, onSaved }: CategoryDialogProps) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {mode === 'edit' ? 'Edit category' : 'New category'}
+            {mode === 'edit' ? 'Edit membership' : 'New membership'}
           </DialogTitle>
           <DialogDescription>
             Slugs are used in URLs. Leave blank to derive from the name.
@@ -236,9 +238,9 @@ function CategoryDialog({ state, onClose, onSaved }: CategoryDialogProps) {
         </DialogHeader>
 
         {open ? (
-          <CategoryForm
-            key={mode === 'edit' ? state.category.id : 'create'}
-            defaults={mode === 'edit' ? state.category : null}
+          <MembershipForm
+            key={mode === 'edit' ? state.membership.id : 'create'}
+            defaults={mode === 'edit' ? state.membership : null}
             onCancel={onClose}
             onSaved={onSaved}
           />
@@ -248,13 +250,13 @@ function CategoryDialog({ state, onClose, onSaved }: CategoryDialogProps) {
   )
 }
 
-interface CategoryFormProps {
-  defaults: CategoryListItem | null
+interface MembershipFormProps {
+  defaults: MembershipListItem | null
   onCancel: () => void
   onSaved: () => Promise<void> | void
 }
 
-function CategoryForm({ defaults, onCancel, onSaved }: CategoryFormProps) {
+function MembershipForm({ defaults, onCancel, onSaved }: MembershipFormProps) {
   const [name, setName] = useState(defaults?.name ?? '')
   const [slug, setSlug] = useState(defaults?.slug ?? '')
   const [description, setDescription] = useState(defaults?.description ?? '')
@@ -280,8 +282,8 @@ function CategoryForm({ defaults, onCancel, onSaved }: CategoryFormProps) {
 
     startSave(async () => {
       const result = defaults
-        ? await updateCategoryAction(defaults.id, formData)
-        : await createCategoryAction(formData)
+        ? await updateMembershipAction(defaults.id, formData)
+        : await createMembershipAction(formData)
 
       if (!result.ok) {
         if (result.fieldErrors) setErrors(result.fieldErrors)
@@ -289,7 +291,7 @@ function CategoryForm({ defaults, onCancel, onSaved }: CategoryFormProps) {
         return
       }
 
-      toast.success(defaults ? 'Category updated' : 'Category created')
+      toast.success(defaults ? 'Membership updated' : 'Membership created')
       await onSaved()
     })
   }
@@ -297,12 +299,12 @@ function CategoryForm({ defaults, onCancel, onSaved }: CategoryFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="category-name">Name</Label>
+        <Label htmlFor="membership-name">Name</Label>
         <Input
-          id="category-name"
+          id="membership-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Marketing"
+          placeholder="e.g. Pro"
           disabled={isSaving}
           autoFocus
           aria-invalid={!!errors.name}
@@ -313,9 +315,9 @@ function CategoryForm({ defaults, onCancel, onSaved }: CategoryFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="category-slug">Slug</Label>
+        <Label htmlFor="membership-slug">Slug</Label>
         <Input
-          id="category-slug"
+          id="membership-slug"
           value={slug}
           onChange={(e) => setSlug(e.target.value.toLowerCase())}
           placeholder={
@@ -336,12 +338,12 @@ function CategoryForm({ defaults, onCancel, onSaved }: CategoryFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="category-description">Description</Label>
+        <Label htmlFor="membership-description">Description</Label>
         <Textarea
-          id="category-description"
+          id="membership-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Optional. Shown on category browse pages."
+          placeholder="Optional. Shown on internal member listings."
           rows={3}
           disabled={isSaving}
         />
@@ -356,7 +358,7 @@ function CategoryForm({ defaults, onCancel, onSaved }: CategoryFormProps) {
           Cancel
         </Button>
         <Button type="submit" disabled={isSaving}>
-          {isSaving ? 'Saving…' : defaults ? 'Save changes' : 'Create category'}
+          {isSaving ? 'Saving…' : defaults ? 'Save changes' : 'Create membership'}
         </Button>
       </DialogFooter>
     </form>

@@ -15,7 +15,7 @@ export interface ProvisionMemberInput {
    * Optional category tier. Only meaningful for the MEMBER role; the
    * caller (or this helper) normalises it to null for ADMIN/TEAM.
    */
-  categoryId?: string | null
+  membershipId?: string | null
 }
 
 export interface ProvisionedMember {
@@ -75,8 +75,8 @@ export async function provisionMemberWithInvite(
   input: ProvisionMemberInput,
 ): Promise<ProvisionedMember> {
   const normalizedEmail = input.email.toLowerCase().trim()
-  const effectiveCategoryId =
-    input.role === 'MEMBER' ? (input.categoryId ?? null) : null
+  const effectiveMembershipId =
+    input.role === 'MEMBER' ? (input.membershipId ?? null) : null
 
   const activeCompanyId = await getRequestCompanyId()
 
@@ -154,13 +154,13 @@ export async function provisionMemberWithInvite(
     suppressWelcomeEmail: true,
   })
 
-  if (user.role !== input.role || user.categoryId !== effectiveCategoryId) {
+  if (user.role !== input.role || user.membershipId !== effectiveMembershipId) {
     await prisma.user.update({
       where: { id: user.id },
       data: {
         ...(user.role !== input.role ? { role: input.role } : {}),
-        ...(user.categoryId !== effectiveCategoryId
-          ? { categoryId: effectiveCategoryId }
+        ...(user.membershipId !== effectiveMembershipId
+          ? { membershipId: effectiveMembershipId }
           : {}),
       },
     })

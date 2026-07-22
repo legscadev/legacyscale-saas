@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
-import { categoryService } from '@/lib/services/category-service'
+import { membershipService } from '@/lib/services/membership-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
 import { fetchMembers } from '@/app/(admin)/admin/members/actions'
 
@@ -18,7 +18,7 @@ export default async function TeamRosterPage() {
   const viewer = await requireTeamModuleAccess('team')
   if (viewer.role === 'ADMIN') redirect('/admin/team')
 
-  const [initialData, categoriesRaw] = await Promise.all([
+  const [initialData, membershipsRaw] = await Promise.all([
     fetchMembers({
       search: '',
       role: null,
@@ -28,16 +28,16 @@ export default async function TeamRosterPage() {
       direction: 'desc',
       page: 1,
     }),
-    categoryService.list(),
+    membershipService.list(),
   ])
 
-  const categories = categoriesRaw.map((c) => ({ id: c.id, name: c.name }))
+  const memberships = membershipsRaw.map((m) => ({ id: m.id, name: m.name }))
 
   return (
     <MembersShell
       currentUserId={viewer.id}
       initialData={initialData}
-      categories={categories}
+      memberships={memberships}
       lockedRoles={['ADMIN', 'TEAM']}
       pageTitle="Team"
       pageDescription="Admins, staff, and everyone with a role behind the scenes."

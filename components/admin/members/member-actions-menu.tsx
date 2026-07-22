@@ -35,15 +35,15 @@ import { AccessGridDialog } from '@/components/admin/team/access-grid-dialog'
 
 import { MemberEditDialog } from './member-edit-dialog'
 import { NudgeDialog } from './nudge-dialog'
-import type { MemberCategoryOption } from './members-shell'
+import type { MembershipOption } from './members-shell'
 
 interface MemberActionsMenuProps {
   memberId: string
   memberName: string
   memberEmail: string
   memberRole: 'ADMIN' | 'TEAM' | 'MEMBER'
-  memberCategoryId: string | null
-  categories: MemberCategoryOption[]
+  memberMembershipId: string | null
+  memberships: MembershipOption[]
   isActive: boolean
   isArchived: boolean
   isSelf: boolean
@@ -58,8 +58,8 @@ export function MemberActionsMenu({
   memberName,
   memberEmail,
   memberRole,
-  memberCategoryId,
-  categories,
+  memberMembershipId,
+  memberships,
   isActive,
   isArchived,
   isSelf,
@@ -327,9 +327,9 @@ export function MemberActionsMenu({
           name: memberName,
           email: memberEmail,
           role: memberRole,
-          categoryId: memberCategoryId,
+          membershipId: memberMembershipId,
         }}
-        categories={categories}
+        memberships={memberships}
         canChangeRole={!isSelf}
         onSaved={onRefetch}
         allowedRoles={allowedRoles}

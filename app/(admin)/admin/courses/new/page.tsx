@@ -3,7 +3,7 @@ import type { CourseAudience } from '@prisma/client'
 import { requireAdmin } from '@/lib/auth/get-user'
 import { PageHeader } from '@/components/shared'
 import { CourseForm } from '@/components/admin/courses/course-form'
-import { categoryService } from '@/lib/services/category-service'
+import { membershipService } from '@/lib/services/membership-service'
 import { createCourseAction } from '../actions'
 
 const VALID_AUDIENCES: CourseAudience[] = ['MEMBERS', 'INTERNAL', 'BOTH']
@@ -21,7 +21,7 @@ export default async function NewCoursePage({ searchParams }: NewCoursePageProps
     requested && VALID_AUDIENCES.includes(requested) ? requested : 'MEMBERS'
 
   const isTraining = defaultAudience === 'INTERNAL'
-  const categories = await categoryService.list()
+  const memberships = await membershipService.list()
 
   return (
     <div className="space-y-6">
@@ -32,7 +32,7 @@ export default async function NewCoursePage({ searchParams }: NewCoursePageProps
       <CourseForm
         mode="create"
         submitLabel={isTraining ? 'Create training' : 'Create course'}
-        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+        memberships={memberships.map((m) => ({ id: m.id, name: m.name }))}
         onSubmit={createCourseAction}
         defaults={{ audience: defaultAudience }}
       />

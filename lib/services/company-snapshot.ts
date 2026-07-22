@@ -17,7 +17,7 @@
 //   - Mux assets + LessonResource files (metadata rows are cloned,
 //     the actual file bytes stay in the source bucket path)
 //
-// Slug uniqueness: Course.slug + Category.slug are still globally
+// Slug uniqueness: Course.slug + Membership.slug are still globally
 // unique in the schema (per-tenant unique migration deferred).
 // ensureUniqueSlug walks slug → slug-2 → slug-3 … until it finds a
 // free one, and mirrors the suffix into name/title for readability.
@@ -29,7 +29,7 @@ import { prisma } from '@/lib/prisma'
 import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
 
 export interface SnapshotSummary {
-  categoriesCopied: number
+  membershipsCopied: number
   coursesCopied: number
   trainingsCopied: number
   modulesCopied: number
@@ -50,9 +50,9 @@ export interface SnapshotSummary {
 export interface SnapshotOptions {
   sourceCompanyId: string
   targetCompanyId: string
-  /** Categories (name + slug + description). Course→category links
+  /** Memberships (name + slug + description). Course→membership links
    *  are re-mapped when a course is also cloned. Default true. */
-  includeCategories?: boolean
+  includeMemberships?: boolean
   /** Courses aimed at members (audience MEMBERS or BOTH) plus their
    *  modules, chapters, lessons, quiz questions, and lesson-resource
    *  metadata. Cloned as DRAFT. Default true. */
@@ -85,7 +85,7 @@ export interface SnapshotOptions {
 /** Zeroed-out summary — used as the starting point for the running
  *  counter and returned when every flag is off. */
 const EMPTY_SUMMARY: SnapshotSummary = {
-  categoriesCopied: 0,
+  membershipsCopied: 0,
   coursesCopied: 0,
   trainingsCopied: 0,
   modulesCopied: 0,
@@ -109,7 +109,7 @@ export async function snapshotCompany(
   const {
     sourceCompanyId,
     targetCompanyId,
-    includeCategories = true,
+    includeMemberships = true,
     includeCourses = true,
     includeTrainings = false,
     includeStatistics = false,
@@ -124,7 +124,7 @@ export async function snapshotCompany(
   }
 
   const anythingChecked =
-    includeCategories ||
+    includeMemberships ||
     includeCourses ||
     includeTrainings ||
     includeStatistics ||
@@ -161,15 +161,15 @@ export async function snapshotCompany(
     //    without re-reading. Every branch is optional; disabled ones
     //    resolve to empty arrays to keep the transaction body linear.
     const [
-      categories,
+      memberships,
       courses,
       statDivisions,
       orgRevisions,
       onboardingItems,
-      memberships,
+      companyMemberships,
     ] = await Promise.all([
-      includeCategories
-        ? prisma.category.findMany({
+      includeMemberships
+        ? prisma.membership.findMany({
             where: { companyId: sourceCompanyId },
             orderBy: { createdAt: 'asc' },
           })
@@ -183,7 +183,7 @@ export async function snapshotCompany(
             },
             orderBy: { orderIndex: 'asc' },
             include: {
-              categories: { select: { categoryId: true } },
+              memberships: { select: { membershipId: true } },
               modules: {
                 where: { deletedAt: null },
                 orderBy: { orderIndex: 'asc' },
@@ -262,25 +262,25 @@ export async function snapshotCompany(
     return prisma.$transaction(
       async (tx) => {
         const summary: SnapshotSummary = { ...EMPTY_SUMMARY }
-        const categoryIdMap = new Map<string, string>()
+        const membershipIdMap = new Map<string, string>()
 
-        // 1. Categories
-        for (const cat of categories) {
-          const uniqueSlug = await ensureUniqueSlug('category', tx, cat.slug)
-          const suffix = suffixFromSlug(cat.slug, uniqueSlug)
-          const uniqueName = suffix ? `${cat.name} ${suffix}` : cat.name
-          const created = await tx.category.create({
+        // 1. Memberships
+        for (const tier of memberships) {
+          const uniqueSlug = await ensureUniqueSlug('membership', tx, tier.slug)
+          const suffix = suffixFromSlug(tier.slug, uniqueSlug)
+          const uniqueName = suffix ? `${tier.name} ${suffix}` : tier.name
+          const created = await tx.membership.create({
             data: {
               name: uniqueName,
               slug: uniqueSlug,
-              description: cat.description,
+              description: tier.description,
               companyId: targetCompanyId,
             },
             select: { id: true },
           })
-          categoryIdMap.set(cat.id, created.id)
+          membershipIdMap.set(tier.id, created.id)
         }
-        summary.categoriesCopied = categoryIdMap.size
+        summary.membershipsCopied = membershipIdMap.size
 
         // 2. Courses + Trainings (same Course model, different audiences)
         for (const course of courses) {
@@ -314,14 +314,14 @@ export async function snapshotCompany(
             summary.trainingsCopied += 1
           }
 
-          // Category memberships — only for categories we cloned.
-          for (const link of course.categories) {
-            const mappedCategoryId = categoryIdMap.get(link.categoryId)
-            if (!mappedCategoryId) continue
-            await tx.courseCategory.create({
+          // Membership links — only for tiers we cloned.
+          for (const link of course.memberships) {
+            const mappedMembershipId = membershipIdMap.get(link.membershipId)
+            if (!mappedMembershipId) continue
+            await tx.courseMembership.create({
               data: {
                 courseId: created.id,
-                categoryId: mappedCategoryId,
+                membershipId: mappedMembershipId,
                 companyId: targetCompanyId,
               },
             })
@@ -552,7 +552,7 @@ export async function snapshotCompany(
 
         // 6. People — upsert CompanyMembership per user. OWNER role
         //    is never copied even when the source has multiple owners.
-        for (const m of memberships) {
+        for (const m of companyMemberships) {
           await tx.companyMembership.upsert({
             where: {
               userId_companyId: {
@@ -589,7 +589,7 @@ export async function snapshotCompany(
  * attempts — beyond that something is very wrong.
  */
 async function ensureUniqueSlug(
-  kind: 'course' | 'category',
+  kind: 'course' | 'membership',
   tx: Prisma.TransactionClient,
   base: string,
 ): Promise<string> {
@@ -601,7 +601,7 @@ async function ensureUniqueSlug(
             where: { slug: candidate },
             select: { id: true },
           })
-        : await tx.category.findFirst({
+        : await tx.membership.findFirst({
             where: { slug: candidate },
             select: { id: true },
           })

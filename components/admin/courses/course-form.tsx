@@ -43,7 +43,7 @@ export interface CourseFormSubmitResult {
   fieldErrors?: Record<string, string[]>
 }
 
-export interface CourseFormCategoryOption {
+export interface CourseFormMembershipOption {
   id: string
   name: string
 }
@@ -59,15 +59,15 @@ export interface CourseFormDefaults {
   accessDays?: number | null
   isFree?: boolean
   audience?: CourseAudience
-  categoryIds?: string[]
+  membershipIds?: string[]
 }
 
 interface CourseFormProps {
   mode: 'create' | 'edit'
   defaults?: CourseFormDefaults
   submitLabel: string
-  /** Full list of selectable categories. Empty array hides the section. */
-  categories: CourseFormCategoryOption[]
+  /** Full list of selectable memberships. Empty array hides the section. */
+  memberships: CourseFormMembershipOption[]
   /** Existing course id for edit. Omitted on create — the form mints
    *  a UUID up front so the signed-upload flow has a stable folder
    *  before the row exists. */
@@ -92,7 +92,7 @@ export function CourseForm({
   mode,
   defaults,
   submitLabel,
-  categories,
+  memberships,
   courseId,
   onSubmit,
   destructiveAction,
@@ -126,8 +126,8 @@ export function CourseForm({
   const [audience, setAudience] = useState<CourseAudience>(
     defaults?.audience ?? 'MEMBERS',
   )
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(
-    () => new Set(defaults?.categoryIds ?? []),
+  const [selectedMembershipIds, setSelectedMembershipIds] = useState<Set<string>>(
+    () => new Set(defaults?.membershipIds ?? []),
   )
 
   const derivedSlug = useMemo(() => slugify(title), [title])
@@ -226,12 +226,12 @@ export function CourseForm({
         formData.set('clearCoverImage', '1')
       }
       formData.set('certificateEnabled', certificateEnabled ? '1' : '0')
-      // Always send the categories key — even empty — so the server
+      // Always send the memberships key — even empty — so the server
       // treats this as a full replace (clearing on edit when the
       // admin removes every chip).
-      formData.append('categoryIds', '')
-      for (const cid of selectedCategoryIds) {
-        formData.append('categoryIds', cid)
+      formData.append('membershipIds', '')
+      for (const mid of selectedMembershipIds) {
+        formData.append('membershipIds', mid)
       }
 
       const result = await onSubmit(formData)
@@ -361,14 +361,14 @@ export function CourseForm({
       </FormSection>
 
       <FormSection
-        title="Categories"
-        description="Group this course alongside related programs. Members can browse by category."
+        title="Membership"
+        description="Attach this course to any number of membership tiers. Members with one of these tiers see the course; a course with no tiers is visible to everyone."
       >
-        <CategoryPicker
-          categories={categories}
-          selected={selectedCategoryIds}
+        <MembershipPicker
+          memberships={memberships}
+          selected={selectedMembershipIds}
           onToggle={(id) => {
-            setSelectedCategoryIds((prev) => {
+            setSelectedMembershipIds((prev) => {
               const next = new Set(prev)
               if (next.has(id)) next.delete(id)
               else next.add(id)
@@ -377,9 +377,9 @@ export function CourseForm({
           }}
           disabled={submitting}
         />
-        {fieldErrors.categoryIds?.[0] && (
+        {fieldErrors.membershipIds?.[0] && (
           <p className="text-xs text-destructive" role="alert">
-            {fieldErrors.categoryIds[0]}
+            {fieldErrors.membershipIds[0]}
           </p>
         )}
       </FormSection>
@@ -638,35 +638,35 @@ function AudienceOption({
 }
 
 // ===========================================================
-// Category picker — chip-style toggle list
+// Membership picker — chip-style toggle list
 // ===========================================================
 
-interface CategoryPickerProps {
-  categories: CourseFormCategoryOption[]
+interface MembershipPickerProps {
+  memberships: CourseFormMembershipOption[]
   selected: Set<string>
   onToggle: (id: string) => void
   disabled?: boolean
 }
 
-function CategoryPicker({
-  categories,
+function MembershipPicker({
+  memberships,
   selected,
   onToggle,
   disabled,
-}: CategoryPickerProps) {
-  if (categories.length === 0) {
+}: MembershipPickerProps) {
+  if (memberships.length === 0) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
         <Tag className="size-4" />
         <span>
-          No categories yet —{' '}
+          No memberships yet —{' '}
           <a
-            href="/admin/categories"
+            href="/admin/membership"
             className="font-medium text-foreground underline-offset-2 hover:underline"
           >
             create one
           </a>{' '}
-          to start grouping courses.
+          to gate course access by tier.
         </span>
       </div>
     )
@@ -674,13 +674,13 @@ function CategoryPicker({
 
   return (
     <div className="flex flex-wrap gap-2">
-      {categories.map((cat) => {
-        const active = selected.has(cat.id)
+      {memberships.map((tier) => {
+        const active = selected.has(tier.id)
         return (
           <button
-            key={cat.id}
+            key={tier.id}
             type="button"
-            onClick={() => onToggle(cat.id)}
+            onClick={() => onToggle(tier.id)}
             disabled={disabled}
             aria-pressed={active}
             className={cn(
@@ -696,7 +696,7 @@ function CategoryPicker({
             ) : (
               <Tag className="size-3.5 text-muted-foreground" />
             )}
-            {cat.name}
+            {tier.name}
           </button>
         )
       })}

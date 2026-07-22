@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const validation = await validateBody(request, adminUpdateMemberSchema)
   if (validation.error) return validation.error
 
-  const { name, role, isActive, password, archive, categoryId } =
+  const { name, role, isActive, password, archive, membershipId } =
     validation.data
 
   // Self-modification guards. Admins can update their own name freely,
@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         ...(isActive !== undefined ? { isActive } : {}),
         ...(archive === true ? { deletedAt: new Date() } : {}),
         ...(archive === false ? { deletedAt: null } : {}),
-        ...(categoryId !== undefined ? { categoryId } : {}),
+        ...(membershipId !== undefined ? { membershipId } : {}),
       },
       select: {
         id: true,
@@ -67,8 +67,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         role: true,
         isActive: true,
         deletedAt: true,
-        categoryId: true,
-        category: { select: { id: true, name: true } },
+        membershipId: true,
+        membership: { select: { id: true, name: true } },
       },
     })
 
@@ -130,8 +130,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         role: user.role,
         isActive: user.isActive,
         archived: user.deletedAt !== null,
-        categoryId: user.categoryId,
-        category: user.category,
+        membershipId: user.membershipId,
+        membership: user.membership,
       },
     })
   } catch (err) {

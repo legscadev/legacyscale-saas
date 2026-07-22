@@ -216,13 +216,13 @@ model User {
    * have no categories at all. ADMIN/TEAM roles bypass the check.
    * Null = no tier assigned; member only sees free + uncategorized.
    */
-  categoryId              String?   @map("category_id")
+  membershipId            String?   @map("membership_id")
   createdAt               DateTime  @default(now()) @map("created_at")
   updatedAt               DateTime  @updatedAt @map("updated_at")
   deletedAt               DateTime? @map("deleted_at")
 
   // Relations
-  category              Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  membership            Membership?            @relation(fields: [membershipId], references: [id], onDelete: SetNull)
   enrollments           Enrollment[]
   lessonProgress        LessonProgress[]
   quizAttempts          QuizAttempt[]
@@ -612,7 +612,7 @@ model Course {
   chapters             Chapter[]
   modules              Module[]
   enrollments          Enrollment[]
-  categories           CourseCategory[]
+  memberships          CourseMembership[]
   certificateIssuances CertificateIssuance[]
   nudges               Nudge[]
   companyId            String                @default("00000000-0000-0000-0000-000000000001") @map("company_id")
@@ -623,10 +623,11 @@ model Course {
   @@map("courses")
 }
 
-/// Flat tag-style grouping for courses. Admins manage these in
-/// /admin/categories; courses join via the CourseCategory pivot.
-/// `slug` powers any future /categories/[slug] browse page.
-model Category {
+/// Membership tier grouping for members. Admins manage these in
+/// /admin/membership; courses opt into a tier via the
+/// CourseMembership junction so members only see the library
+/// slice their tier grants (plus free / untagged courses).
+model Membership {
   id          String   @id @default(uuid())
   name        String   @unique
   slug        String   @unique
@@ -635,29 +636,30 @@ model Category {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
-  courses CourseCategory[]
+  courses CourseMembership[]
   members User[]
 
   companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
-  @@map("categories")
+  @@map("memberships")
 }
 
-/// Junction row connecting a course to a category. Composite PK
-/// guarantees a single (course, category) edge. Both sides cascade
-/// on delete so removing a category cleans up its memberships.
-model CourseCategory {
-  courseId   String   @map("course_id")
-  categoryId String   @map("category_id")
-  createdAt  DateTime @default(now()) @map("created_at")
+/// Junction row connecting a course to a membership tier.
+/// Composite PK guarantees a single (course, membership) edge.
+/// Both sides cascade on delete so removing a tier cleans up its
+/// course associations.
+model CourseMembership {
+  courseId     String   @map("course_id")
+  membershipId String   @map("membership_id")
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  category  Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  companyId  String     @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
-  @@id([courseId, categoryId])
-  @@index([categoryId])
-  @@map("course_categories")
+  @@id([courseId, membershipId])
+  @@index([membershipId])
+  @@map("course_memberships")
 }
 
 /// Optional grouping layer between Course and Chapter. A course may

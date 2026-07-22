@@ -128,7 +128,7 @@ export interface CreateCompanyResult {
    *  Same shape as SnapshotCompanyResult.summary — kept in sync so
    *  the client toast can list every category the operator selected. */
   snapshot?: {
-    categoriesCopied: number
+    membershipsCopied: number
     coursesCopied: number
     trainingsCopied: number
     modulesCopied: number
@@ -213,7 +213,7 @@ export async function createCompanyAction(
         const summary = await snapshotCompany({
           sourceCompanyId: sourceId,
           targetCompanyId: result.company.id,
-          includeCategories: parsed.data.snapshotIncludeCategories,
+          includeMemberships: parsed.data.snapshotIncludeMemberships,
           includeCourses: parsed.data.snapshotIncludeCourses,
           includeTrainings: parsed.data.snapshotIncludeTrainings,
           includeStatistics: parsed.data.snapshotIncludeStatistics,
@@ -347,7 +347,7 @@ export async function listSnapshotSources(
 export interface SnapshotCompanyResult {
   ok: boolean
   summary?: {
-    categoriesCopied: number
+    membershipsCopied: number
     coursesCopied: number
     trainingsCopied: number
     modulesCopied: number
@@ -387,7 +387,7 @@ export async function snapshotCompanyAction(
   }
 
   const anythingChecked =
-    parsed.data.includeCategories ||
+    parsed.data.includeMemberships ||
     parsed.data.includeCourses ||
     parsed.data.includeTrainings ||
     parsed.data.includeStatistics ||
@@ -406,7 +406,7 @@ export async function snapshotCompanyAction(
     const summary = await snapshotCompany({
       sourceCompanyId: parsed.data.sourceCompanyId,
       targetCompanyId: parsed.data.targetCompanyId,
-      includeCategories: parsed.data.includeCategories,
+      includeMemberships: parsed.data.includeMemberships,
       includeCourses: parsed.data.includeCourses,
       includeTrainings: parsed.data.includeTrainings,
       includeStatistics: parsed.data.includeStatistics,

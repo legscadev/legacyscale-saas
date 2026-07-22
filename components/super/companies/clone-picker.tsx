@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 /** Every clonable axis — shared between the create-with-clone form
  *  and the row-level Clone dialog so both surfaces stay in sync. */
 export interface CloneFlags {
-  categories: boolean
+  memberships: boolean
   courses: boolean
   trainings: boolean
   statistics: boolean
@@ -19,7 +19,7 @@ export interface CloneFlags {
 }
 
 export const CLONE_FLAGS_DEFAULT: CloneFlags = {
-  categories: true,
+  memberships: true,
   courses: true,
   trainings: false,
   statistics: false,
@@ -52,10 +52,10 @@ interface Row {
 
 const TEMPLATE_ROWS: Row[] = [
   {
-    key: 'categories',
-    label: 'Categories',
+    key: 'memberships',
+    label: 'Membership',
     description:
-      'Category names, slugs, and descriptions. Course → category links are re-mapped.',
+      'Membership tier names, slugs, and descriptions. Course → membership links are re-mapped.',
   },
   {
     key: 'courses',
@@ -239,7 +239,7 @@ function CloneRow({
  * 0 trainings, 0 …".
  */
 export function summarizeSnapshot(summary: {
-  categoriesCopied: number
+  membershipsCopied: number
   coursesCopied: number
   trainingsCopied: number
   lessonsCopied: number
@@ -251,7 +251,7 @@ export function summarizeSnapshot(summary: {
   teamCopied: number
 }): string {
   const parts: string[] = []
-  if (summary.categoriesCopied) parts.push(`${summary.categoriesCopied} categories`)
+  if (summary.membershipsCopied) parts.push(`${summary.membershipsCopied} memberships`)
   if (summary.coursesCopied) parts.push(`${summary.coursesCopied} courses`)
   if (summary.trainingsCopied) parts.push(`${summary.trainingsCopied} trainings`)
   if (summary.lessonsCopied) parts.push(`${summary.lessonsCopied} lessons`)

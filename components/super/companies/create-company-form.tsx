@@ -140,7 +140,7 @@ export function CreateCompanyForm({
         ownerName: ownerMode === 'self' ? '' : ownerName,
         snapshotFromCompanyId:
           snapshotSource === NONE_SOURCE ? undefined : snapshotSource,
-        snapshotIncludeCategories: cloneFlags.categories,
+        snapshotIncludeMemberships: cloneFlags.memberships,
         snapshotIncludeCourses: cloneFlags.courses,
         snapshotIncludeTrainings: cloneFlags.trainings,
         snapshotIncludeStatistics: cloneFlags.statistics,

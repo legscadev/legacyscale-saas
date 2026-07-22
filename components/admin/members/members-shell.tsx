@@ -44,7 +44,7 @@ export const DEFAULT_QUERY_STATE: MembersQueryState = {
 
 const PAGE_SIZE = 10
 
-export interface MemberCategoryOption {
+export interface MembershipOption {
   id: string
   name: string
 }
@@ -52,7 +52,7 @@ export interface MemberCategoryOption {
 interface MembersShellProps {
   currentUserId: string
   initialData: MembersData
-  categories: MemberCategoryOption[]
+  memberships: MembershipOption[]
   /** Optional lens: pre-selects the role filter so the Community
    *  page opens on students and the Internal Team page opens on
    *  staff. Undefined = no default lens. */
@@ -69,7 +69,7 @@ interface MembersShellProps {
 export function MembersShell({
   currentUserId,
   initialData,
-  categories,
+  memberships,
   defaultRole,
   lockedRoles,
   pageTitle,
@@ -199,10 +199,10 @@ export function MembersShell({
         currentUserId,
         refetch,
         data.sparklines,
-        categories,
+        memberships,
         editAllowedRoles,
       ),
-    [currentUserId, refetch, data.sparklines, categories, editAllowedRoles],
+    [currentUserId, refetch, data.sparklines, memberships, editAllowedRoles],
   )
 
   const selectedIds = Object.keys(rowSelection)
@@ -308,7 +308,7 @@ export function MembersShell({
       <MemberCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        categories={categories}
+        memberships={memberships}
         onCreated={refetch}
         allowedRoles={
           lockedRoles ??
