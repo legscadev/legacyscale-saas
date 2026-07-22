@@ -96,8 +96,8 @@ async function listMembers(options: ListMembersOptions) {
         lastLoginAt: true,
         lastActiveAt: true,
         deletedAt: true,
-        categoryId: true,
-        category: { select: { id: true, name: true } },
+        membershipId: true,
+        membership: { select: { id: true, name: true } },
         _count: {
           select: {
             enrollments: {

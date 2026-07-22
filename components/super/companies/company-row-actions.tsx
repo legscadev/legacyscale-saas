@@ -122,7 +122,7 @@ export function CompanyRowActions({
       const result = await snapshotCompanyAction({
         sourceCompanyId: selectedSource,
         targetCompanyId: companyId,
-        includeCategories: cloneFlags.categories,
+        includeMemberships: cloneFlags.memberships,
         includeCourses: cloneFlags.courses,
         includeTrainings: cloneFlags.trainings,
         includeStatistics: cloneFlags.statistics,

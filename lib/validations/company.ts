@@ -40,7 +40,7 @@ export const createCompanySchema = z.object({
    * operator opts in via checkboxes. Ignored when snapshotFromCompanyId
    * is blank.
    */
-  snapshotIncludeCategories: z.boolean().optional().default(true),
+  snapshotIncludeMemberships: z.boolean().optional().default(true),
   snapshotIncludeCourses: z.boolean().optional().default(true),
   snapshotIncludeTrainings: z.boolean().optional().default(false),
   snapshotIncludeStatistics: z.boolean().optional().default(false),
@@ -55,7 +55,7 @@ export type CreateCompanyInput = z.infer<typeof createCompanySchema>
 export const snapshotCompanySchema = z.object({
   sourceCompanyId: z.string().uuid(),
   targetCompanyId: z.string().uuid(),
-  includeCategories: z.boolean().optional().default(true),
+  includeMemberships: z.boolean().optional().default(true),
   includeCourses: z.boolean().optional().default(true),
   includeTrainings: z.boolean().optional().default(false),
   includeStatistics: z.boolean().optional().default(false),

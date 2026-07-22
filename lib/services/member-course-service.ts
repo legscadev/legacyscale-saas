@@ -9,8 +9,8 @@ import { issueModuleCertificateIfEligible } from '@/lib/services/certificate-ser
 import { createAdminClient } from '@/lib/supabase/admin'
 import { visibleAudiencesFor } from '@/lib/auth/permissions'
 import {
-  buildMemberCategoryAccessWhere,
-  passesMemberCategoryGate,
+  buildMemberMembershipAccessWhere,
+  passesMemberMembershipGate,
   type MemberAccess,
 } from './member-course-gate'
 
@@ -39,7 +39,7 @@ const resolveMemberAccess = cache(
   async (userId: string): Promise<MemberAccess> => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, categoryId: true },
+      select: { role: true, membershipId: true },
     })
     const role = user?.role ?? ('MEMBER' as Role)
     const visibleAudiences = visibleAudiencesFor(role)
@@ -47,14 +47,14 @@ const resolveMemberAccess = cache(
     // ADMIN + TEAM bypass the member-tier category filter and see
     // every course (mirrors how INTERNAL audience is granted to them).
     const isStaff = role === 'ADMIN' || role === 'TEAM'
-    const memberCategoryId = user?.categoryId ?? null
+    const memberMembershipId = user?.membershipId ?? null
     return {
       visibleAudiences,
-      categoryAccessWhere: isStaff
+      membershipAccessWhere: isStaff
         ? {}
-        : buildMemberCategoryAccessWhere(memberCategoryId),
-      bypassesCategoryGate: isStaff,
-      memberCategoryId,
+        : buildMemberMembershipAccessWhere(memberMembershipId),
+      bypassesMembershipGate: isStaff,
+      memberMembershipId,
     }
   },
 )
@@ -96,13 +96,13 @@ const catalogSelect = {
 } as const
 
 export async function listCatalogForMember(userId: string) {
-  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
+  const { visibleAudiences, membershipAccessWhere } = await resolveMemberAccess(userId)
   const rows = await prisma.course.findMany({
     where: {
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
-      ...categoryAccessWhere,
+      ...membershipAccessWhere,
     },
     orderBy: { orderIndex: 'asc' },
     select: catalogSelect,
@@ -213,17 +213,17 @@ export async function suggestNextCourseForMember(
   userId: string,
   justFinishedCourseId: string,
 ) {
-  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
+  const { visibleAudiences, membershipAccessWhere } = await resolveMemberAccess(userId)
 
   // Course just finished — need its category memberships for the
   // sibling lookup. Use findUnique with select for a single round-trip.
   const finished = await prisma.course.findUnique({
     where: { id: justFinishedCourseId },
     select: {
-      categories: { select: { categoryId: true } },
+      memberships: { select: { membershipId: true } },
     },
   })
-  const categoryIds = finished?.categories.map((c) => c.categoryId) ?? []
+  const membershipIds = finished?.memberships.map((m) => m.membershipId) ?? []
 
   // Courses the user has already completed — never suggest these.
   const completed = await prisma.enrollment.findMany({
@@ -237,15 +237,15 @@ export async function suggestNextCourseForMember(
     status: 'PUBLISHED' as const,
     audience: { in: visibleAudiences },
     id: { notIn: [...completedIds, justFinishedCourseId] },
-    ...categoryAccessWhere,
+    ...membershipAccessWhere,
   }
 
-  // 1. Same-category sibling.
-  if (categoryIds.length > 0) {
+  // 1. Same-membership sibling.
+  if (membershipIds.length > 0) {
     const sibling = await prisma.course.findFirst({
       where: {
         ...baseWhere,
-        categories: { some: { categoryId: { in: categoryIds } } },
+        memberships: { some: { membershipId: { in: membershipIds } } },
       },
       orderBy: { orderIndex: 'asc' },
       select: {
@@ -256,7 +256,7 @@ export async function suggestNextCourseForMember(
         thumbnailUrl: true,
       },
     })
-    if (sibling) return { ...sibling, reason: 'sameCategory' as const }
+    if (sibling) return { ...sibling, reason: 'sameMembership' as const }
   }
 
   // 2. Fallback: any other enrolled, visible, uncompleted course.
@@ -269,7 +269,7 @@ export async function suggestNextCourseForMember(
         deletedAt: null,
         status: 'PUBLISHED',
         audience: { in: visibleAudiences },
-        ...categoryAccessWhere,
+        ...membershipAccessWhere,
       },
     },
     orderBy: { lastAccessedAt: 'desc' },
@@ -385,14 +385,14 @@ async function loadVisibleCourse(
   userId: string,
   by: { id: string } | { slug: string },
 ) {
-  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
+  const { visibleAudiences, membershipAccessWhere } = await resolveMemberAccess(userId)
   return prisma.course.findFirst({
     where: {
       ...by,
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
-      ...categoryAccessWhere,
+      ...membershipAccessWhere,
     },
     select: detailSelect,
   })
@@ -508,7 +508,7 @@ export type MemberCourseDetail = NonNullable<
  * function doesn't need to gate). Paid integrations land in Sprint 5+.
  */
 export async function ensureEnrollment(userId: string, courseId: string) {
-  const { visibleAudiences, categoryAccessWhere } = await resolveMemberAccess(userId)
+  const { visibleAudiences, membershipAccessWhere } = await resolveMemberAccess(userId)
   // Confirm the course is actually visible to this member before we
   // create a row.
   const course = await prisma.course.findFirst({
@@ -517,7 +517,7 @@ export async function ensureEnrollment(userId: string, courseId: string) {
       deletedAt: null,
       status: 'PUBLISHED',
       audience: { in: visibleAudiences },
-      ...categoryAccessWhere,
+      ...membershipAccessWhere,
     },
     select: { id: true, accessDays: true },
   })
@@ -575,7 +575,7 @@ export async function markLessonProgress(
               audience: true,
               deletedAt: true,
               isFree: true,
-              categories: { select: { categoryId: true } },
+              memberships: { select: { membershipId: true } },
             },
           },
         },
@@ -591,7 +591,7 @@ export async function markLessonProgress(
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
     !access.visibleAudiences.includes(course.audience) ||
-    !passesMemberCategoryGate(access, course)
+    !passesMemberMembershipGate(access, course)
   ) {
     throw new Error('Lesson not accessible')
   }
@@ -837,7 +837,7 @@ export async function submitQuizAttempt(
               audience: true,
               deletedAt: true,
               isFree: true,
-              categories: { select: { categoryId: true } },
+              memberships: { select: { membershipId: true } },
             },
           },
         },
@@ -857,7 +857,7 @@ export async function submitQuizAttempt(
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
     !access.visibleAudiences.includes(course.audience) ||
-    !passesMemberCategoryGate(access, course)
+    !passesMemberMembershipGate(access, course)
   ) {
     throw new Error('Quiz not accessible')
   }
@@ -940,7 +940,7 @@ export async function getResourceDownloadUrl(
                   audience: true,
                   deletedAt: true,
                   isFree: true,
-                  categories: { select: { categoryId: true } },
+                  memberships: { select: { membershipId: true } },
                 },
               },
             },
@@ -958,7 +958,7 @@ export async function getResourceDownloadUrl(
     course.deletedAt !== null ||
     course.status !== 'PUBLISHED' ||
     !access.visibleAudiences.includes(course.audience) ||
-    !passesMemberCategoryGate(access, course)
+    !passesMemberMembershipGate(access, course)
   ) {
     throw new Error('Resource not accessible')
   }

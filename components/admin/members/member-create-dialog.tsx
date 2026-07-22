@@ -23,20 +23,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
-import type { MemberCategoryOption } from './members-shell'
+import type { MembershipOption } from './members-shell'
 
 type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
 type FieldErrors = Partial<
-  Record<'name' | 'email' | 'role' | 'categoryId', string[]>
+  Record<'name' | 'email' | 'role' | 'membershipId', string[]>
 >
 
-/** Sentinel for "no category" — Radix Select disallows empty values. */
-const NONE_CATEGORY = '__none__'
+/** Sentinel for "no membership" — Radix Select disallows empty values. */
+const NONE_MEMBERSHIP = '__none__'
 
 interface MemberCreateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  categories: MemberCategoryOption[]
+  memberships: MembershipOption[]
   /** Fires after a member is successfully created. */
   onCreated: () => void
   /** Restrict the role picker to a subset (e.g. Team page uses
@@ -66,7 +66,7 @@ function RequiredMark() {
 export function MemberCreateDialog({
   open,
   onOpenChange,
-  categories,
+  memberships,
   onCreated,
   allowedRoles,
   defaultRole,
@@ -83,7 +83,7 @@ export function MemberCreateDialog({
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Role>(initialRole)
-  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [membershipId, setMembershipId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
@@ -92,7 +92,7 @@ export function MemberCreateDialog({
     setName('')
     setEmail('')
     setRole(initialRole)
-    setCategoryId(null)
+    setMembershipId(null)
     setError(null)
     setFieldErrors({})
     setSubmitting(false)
@@ -109,14 +109,14 @@ export function MemberCreateDialog({
     setFieldErrors({})
 
     // Category only applies to MEMBER role — admins/team bypass the gate.
-    const payloadCategoryId = role === 'MEMBER' ? categoryId : null
+    const payloadMembershipId = role === 'MEMBER' ? membershipId : null
 
     // Client-side Zod validation — same schema the API uses.
     const parsed = adminCreateMemberSchema.safeParse({
       name,
       email,
       role,
-      categoryId: payloadCategoryId,
+      membershipId: payloadMembershipId,
     })
     if (!parsed.success) {
       const next: FieldErrors = {}
@@ -126,7 +126,7 @@ export function MemberCreateDialog({
           key === 'name' ||
           key === 'email' ||
           key === 'role' ||
-          key === 'categoryId'
+          key === 'membershipId'
         ) {
           if (!next[key]) next[key] = []
           next[key]!.push(issue.message)
@@ -260,29 +260,29 @@ export function MemberCreateDialog({
 
           {role === 'MEMBER' ? (
             <div className="space-y-2">
-              <Label htmlFor="member-category">Category</Label>
+              <Label htmlFor="member-membership">Membership</Label>
               <Select
-                value={categoryId ?? NONE_CATEGORY}
+                value={membershipId ?? NONE_MEMBERSHIP}
                 onValueChange={(v) =>
-                  setCategoryId(v === NONE_CATEGORY ? null : v)
+                  setMembershipId(v === NONE_MEMBERSHIP ? null : v)
                 }
                 disabled={submitting}
               >
-                <SelectTrigger className="w-full" id="member-category">
+                <SelectTrigger className="w-full" id="member-membership">
                   <SelectValue>
                     {(v: string) =>
-                      v === NONE_CATEGORY || !v
-                        ? 'No category'
-                        : (categories.find((c) => c.id === v)?.name ??
-                          'No category')
+                      v === NONE_MEMBERSHIP || !v
+                        ? 'No membership'
+                        : (memberships.find((m) => m.id === v)?.name ??
+                          'No membership')
                     }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE_CATEGORY}>No category</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                  <SelectItem value={NONE_MEMBERSHIP}>No membership</SelectItem>
+                  {memberships.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

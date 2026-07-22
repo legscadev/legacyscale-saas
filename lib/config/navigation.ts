@@ -55,7 +55,7 @@ export const adminNav: NavSection[] = [
     label: 'Learning',
     items: [
       { label: 'Courses', href: '/admin/courses', icon: GraduationCap },
-      { label: 'Categories', href: '/admin/categories', icon: Tag },
+      { label: 'Membership', href: '/admin/membership', icon: Tag },
       { label: 'Certificates', href: '/admin/certificates', icon: Award },
       {
         label: 'Progress Tracker',

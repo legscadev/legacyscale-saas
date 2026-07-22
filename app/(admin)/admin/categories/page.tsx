@@ -1,10 +1,7 @@
-import { requireAdmin } from '@/lib/auth/get-user'
-import { CategoriesShell } from '@/components/admin/categories/categories-shell'
-import { fetchCategories } from './actions'
+import { redirect } from 'next/navigation'
 
-export default async function AdminCategoriesPage() {
-  await requireAdmin()
-  const initialData = await fetchCategories()
-
-  return <CategoriesShell initialData={initialData} />
+// Backwards-compat: the Categories module was renamed to Membership.
+// Legacy links / bookmarks land here and forward to the new home.
+export default function CategoriesRedirect() {
+  redirect('/admin/membership')
 }

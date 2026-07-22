@@ -1,14 +1,14 @@
 import { requireAdmin } from '@/lib/auth/get-user'
-import { categoryService } from '@/lib/services/category-service'
+import { membershipService } from '@/lib/services/membership-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
 import { fetchMembers } from '../members/actions'
 
 export default async function AdminTeamPage() {
   const admin = await requireAdmin()
-  // Team lens: ADMIN + TEAM only. Categories still load so the shared
-  // MembersShell renders correctly, even though category assignment
-  // is a student concept (staff rows have no category badge).
-  const [initialData, categoriesRaw] = await Promise.all([
+  // Team lens: ADMIN + TEAM only. Memberships still load so the
+  // shared MembersShell renders correctly, even though membership
+  // assignment is a student concept (staff rows have no badge).
+  const [initialData, membershipsRaw] = await Promise.all([
     fetchMembers({
       search: '',
       role: null,
@@ -18,16 +18,16 @@ export default async function AdminTeamPage() {
       direction: 'desc',
       page: 1,
     }),
-    categoryService.list(),
+    membershipService.list(),
   ])
 
-  const categories = categoriesRaw.map((c) => ({ id: c.id, name: c.name }))
+  const memberships = membershipsRaw.map((m) => ({ id: m.id, name: m.name }))
 
   return (
     <MembersShell
       currentUserId={admin.id}
       initialData={initialData}
-      categories={categories}
+      memberships={memberships}
       lockedRoles={['ADMIN', 'TEAM']}
       pageTitle="Team"
       pageDescription="Admins, staff, and everyone with a role behind the scenes."

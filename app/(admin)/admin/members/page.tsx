@@ -1,5 +1,5 @@
 import { requireAdmin } from '@/lib/auth/get-user'
-import { categoryService } from '@/lib/services/category-service'
+import { membershipService } from '@/lib/services/membership-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
 import { fetchMembers } from './actions'
 
@@ -8,7 +8,7 @@ export default async function AdminMembersPage() {
   // Members lives under Community in the sidebar → default to
   // students only. Ruby can still switch the role filter in the
   // toolbar to see staff if she needs to.
-  const [initialData, categoriesRaw] = await Promise.all([
+  const [initialData, membershipsRaw] = await Promise.all([
     fetchMembers({
       search: '',
       role: 'MEMBER',
@@ -17,16 +17,16 @@ export default async function AdminMembersPage() {
       direction: 'desc',
       page: 1,
     }),
-    categoryService.list(),
+    membershipService.list(),
   ])
 
-  const categories = categoriesRaw.map((c) => ({ id: c.id, name: c.name }))
+  const memberships = membershipsRaw.map((m) => ({ id: m.id, name: m.name }))
 
   return (
     <MembersShell
       currentUserId={admin.id}
       initialData={initialData}
-      categories={categories}
+      memberships={memberships}
       defaultRole="MEMBER"
     />
   )

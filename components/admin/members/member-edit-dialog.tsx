@@ -25,16 +25,16 @@ import {
 import { PasswordInput } from '@/components/auth/password-input'
 import { nameSchema, passwordSchema } from '@/lib/validations/common'
 import { userRoleSchema } from '@/lib/validations/user'
-import type { MemberCategoryOption } from './members-shell'
+import type { MembershipOption } from './members-shell'
 
 type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
 type FieldErrors = Partial<
-  Record<'name' | 'role' | 'password' | 'confirm' | 'categoryId', string[]>
+  Record<'name' | 'role' | 'password' | 'confirm' | 'membershipId', string[]>
 >
 
-/** Sentinel for "no category" — Radix Select disallows empty-string item
+/** Sentinel for "no membership" — Radix Select disallows empty-string item
  *  values, so we map this back to null on submit. */
-const NONE_CATEGORY = '__none__'
+const NONE_MEMBERSHIP = '__none__'
 
 interface MemberEditDialogProps {
   open: boolean
@@ -44,9 +44,9 @@ interface MemberEditDialogProps {
     name: string | null
     email: string
     role: Role
-    categoryId: string | null
+    membershipId: string | null
   }
-  categories: MemberCategoryOption[]
+  memberships: MembershipOption[]
   /** Block role edit when admin is editing themselves (server enforces too). */
   canChangeRole: boolean
   onSaved: () => void
@@ -74,7 +74,7 @@ export function MemberEditDialog({
   open,
   onOpenChange,
   member,
-  categories,
+  memberships,
   canChangeRole,
   onSaved,
   allowedRoles,
@@ -90,8 +90,8 @@ export function MemberEditDialog({
   const showRoleField = roleOptions.length > 1
   const [name, setName] = useState(member.name ?? '')
   const [role, setRole] = useState<Role>(member.role)
-  const [categoryId, setCategoryId] = useState<string | null>(
-    member.categoryId,
+  const [membershipId, setMembershipId] = useState<string | null>(
+    member.membershipId,
   )
   const [showPasswordFields, setShowPasswordFields] = useState(false)
   const [password, setPassword] = useState('')
@@ -105,14 +105,14 @@ export function MemberEditDialog({
     if (open) {
       setName(member.name ?? '')
       setRole(member.role)
-      setCategoryId(member.categoryId)
+      setMembershipId(member.membershipId)
       setShowPasswordFields(false)
       setPassword('')
       setConfirm('')
       setError(null)
       setFieldErrors({})
     }
-  }, [open, member.id, member.name, member.role, member.categoryId])
+  }, [open, member.id, member.name, member.role, member.membershipId])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -153,12 +153,12 @@ export function MemberEditDialog({
       name?: string
       role?: Role
       password?: string
-      categoryId?: string | null
+      membershipId?: string | null
     } = {}
     if (parsedName.data !== member.name) body.name = parsedName.data
     if (canChangeRole && role !== member.role) body.role = role
     if (parsedPassword !== undefined) body.password = parsedPassword
-    if (categoryId !== member.categoryId) body.categoryId = categoryId
+    if (membershipId !== member.membershipId) body.membershipId = membershipId
 
     if (Object.keys(body).length === 0) {
       // Nothing changed — just close.
@@ -282,29 +282,29 @@ export function MemberEditDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="edit-category">Category</Label>
+            <Label htmlFor="edit-membership">Membership</Label>
             <Select
-              value={categoryId ?? NONE_CATEGORY}
+              value={membershipId ?? NONE_MEMBERSHIP}
               onValueChange={(v) =>
-                setCategoryId(v === NONE_CATEGORY ? null : v)
+                setMembershipId(v === NONE_MEMBERSHIP ? null : v)
               }
               disabled={submitting}
             >
-              <SelectTrigger className="w-full" id="edit-category">
+              <SelectTrigger className="w-full" id="edit-membership">
                 <SelectValue>
                   {(v: string) =>
-                    v === NONE_CATEGORY || !v
-                      ? 'No category'
-                      : (categories.find((c) => c.id === v)?.name ??
-                        'No category')
+                    v === NONE_MEMBERSHIP || !v
+                      ? 'No membership'
+                      : (memberships.find((m) => m.id === v)?.name ??
+                        'No membership')
                   }
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE_CATEGORY}>No category</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
+                <SelectItem value={NONE_MEMBERSHIP}>No membership</SelectItem>
+                {memberships.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
                   </SelectItem>
                 ))}
               </SelectContent>

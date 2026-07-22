@@ -13,7 +13,7 @@ export const adminCreateMemberSchema = z.object({
   role: userRoleSchema.default('MEMBER'),
   /** Optional category tier — only meaningful for MEMBER role. The API
    *  ignores it for ADMIN/TEAM (they bypass the category gate). */
-  categoryId: z.string().uuid().nullable().optional(),
+  membershipId: z.string().uuid().nullable().optional(),
 })
 
 /**
@@ -33,7 +33,7 @@ export const adminUpdateMemberSchema = z
     /** true: soft-delete (sets deletedAt). false: restore from archive. */
     archive: z.boolean().optional(),
     /** Category tier. null clears it (member loses access to gated courses). */
-    categoryId: z.string().uuid().nullable().optional(),
+    membershipId: z.string().uuid().nullable().optional(),
   })
   .refine(
     (data) => Object.values(data).some((v) => v !== undefined),

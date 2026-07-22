@@ -83,9 +83,9 @@ const courseListSelect = {
   chapters: {
     select: { _count: { select: { lessons: true } } },
   },
-  categories: {
+  memberships: {
     select: {
-      category: {
+      membership: {
         select: { id: true, name: true, slug: true },
       },
     },
@@ -95,13 +95,13 @@ const courseListSelect = {
 type CourseListRow = Prisma.CourseGetPayload<{ select: typeof courseListSelect }>
 
 function withLessonCount(row: CourseListRow) {
-  const { chapters, categories, _count, ...rest } = row
+  const { chapters, memberships, _count, ...rest } = row
   const lessons = chapters.reduce((sum, c) => sum + c._count.lessons, 0)
   return {
     ...rest,
     chaptersCount: _count.chapters,
     lessonsCount: lessons,
-    categories: categories.map((c) => c.category),
+    memberships: memberships.map((m) => m.membership),
   }
 }
 
@@ -219,10 +219,10 @@ async function createCourse(
 
   const shouldPublishNow = input.status === 'PUBLISHED'
   const slug = await resolveSlug({ desired: input.slug, title: input.title })
-  const categoryIds = input.categoryIds ?? []
+  const membershipIds = input.membershipIds ?? []
 
-  // Course + CourseCategory rows are both tenant-scoped, so we
-  // split the nested `categories: { create: [...] }` into two
+  // Course + CourseMembership rows are both tenant-scoped, so we
+  // split the nested `memberships: { create: [...] }` into two
   // top-level calls. The tenancy extension only stamps companyId on
   // top-level ops — a nested create would ship without one.
   const row = await prisma.course.create({
@@ -244,11 +244,11 @@ async function createCourse(
     },
     select: courseListSelect,
   })
-  if (categoryIds.length) {
-    await prisma.courseCategory.createMany({
-      data: categoryIds.map((categoryId) => ({
+  if (membershipIds.length) {
+    await prisma.courseMembership.createMany({
+      data: membershipIds.map((membershipId) => ({
         courseId: row.id,
-        categoryId,
+        membershipId,
       })),
       skipDuplicates: true,
     })
@@ -307,17 +307,17 @@ async function updateCourse(id: string, input: UpdateCourseInput) {
     }
   }
 
-  // Replace-all semantics for category memberships: delete then create
+  // Replace-all semantics for membership tiers: delete then create
   // inside a transaction so the row never appears with a partial set.
-  if (input.categoryIds !== undefined) {
+  if (input.membershipIds !== undefined) {
     await prisma.$transaction([
-      prisma.courseCategory.deleteMany({ where: { courseId: id } }),
-      ...(input.categoryIds.length
+      prisma.courseMembership.deleteMany({ where: { courseId: id } }),
+      ...(input.membershipIds.length
         ? [
-            prisma.courseCategory.createMany({
-              data: input.categoryIds.map((categoryId) => ({
+            prisma.courseMembership.createMany({
+              data: input.membershipIds.map((membershipId) => ({
                 courseId: id,
-                categoryId,
+                membershipId,
               })),
               skipDuplicates: true,
             }),

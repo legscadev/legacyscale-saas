@@ -43,10 +43,11 @@ export const courseSlugSchema = z
     message: 'Slug may only contain lowercase letters, numbers, and hyphens',
   })
 
-// Distinct array of category UUIDs. Replace-all semantics on update.
-export const categoryIdsSchema = z
+// Distinct array of membership tier UUIDs. Replace-all semantics
+// on update.
+export const membershipIdsSchema = z
   .array(idSchema)
-  .max(20, 'Too many categories')
+  .max(20, 'Too many memberships')
   .transform((ids) => Array.from(new Set(ids)))
 
 export const createCourseSchema = z.object({
@@ -60,7 +61,7 @@ export const createCourseSchema = z.object({
   accessDays: accessDaysSchema.default(null),
   isFree: z.boolean().default(false),
   audience: courseAudienceSchema.default('MEMBERS'),
-  categoryIds: categoryIdsSchema.default([]),
+  membershipIds: membershipIdsSchema.default([]),
 })
 
 export const updateCourseSchema = z
@@ -76,7 +77,7 @@ export const updateCourseSchema = z
     isFree: z.boolean().optional(),
     audience: courseAudienceSchema.optional(),
     orderIndex: z.number().int().min(0).optional(),
-    categoryIds: categoryIdsSchema.optional(),
+    membershipIds: membershipIdsSchema.optional(),
   })
   .refine(
     (data) => Object.values(data).some((v) => v !== undefined),
