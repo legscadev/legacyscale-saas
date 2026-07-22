@@ -41,7 +41,16 @@ export interface StatMetricRow {
   orderIndex: number
   targetValue: number | null
   division: { id: string; name: string; shortLabel: string | null }
-  assignedTo: { id: string; name: string | null; email: string } | null
+  /** The Employee accountable for this metric (from /admin/onboarding).
+   *  `userId` mirrors the linked User account for "mine" / permission
+   *  checks; null when the employee has no system access. */
+  assignedTo: {
+    id: string
+    userId: string | null
+    name: string
+    roleTitle: string
+    status: 'ACTIVE' | 'OFFBOARDED'
+  } | null
   latestValue: number | null
   latestRecordedAt: Date | null
   dataPoints: StatDataPoint[]
@@ -147,7 +156,15 @@ export async function listAllMetrics(
       orderIndex: true,
       targetValue: true,
       division: { select: { id: true, name: true, shortLabel: true } },
-      assignedTo: { select: { id: true, name: true, email: true } },
+      assignedTo: {
+        select: {
+          id: true,
+          userId: true,
+          name: true,
+          roleTitle: true,
+          status: true,
+        },
+      },
       dataPoints: {
         orderBy: { recordedAt: 'desc' },
         take: points,
@@ -185,7 +202,15 @@ export async function listMetricsForDivision(
       orderIndex: true,
       targetValue: true,
       division: { select: { id: true, name: true, shortLabel: true } },
-      assignedTo: { select: { id: true, name: true, email: true } },
+      assignedTo: {
+        select: {
+          id: true,
+          userId: true,
+          name: true,
+          roleTitle: true,
+          status: true,
+        },
+      },
       dataPoints: {
         orderBy: { recordedAt: 'desc' },
         take: points,
@@ -211,7 +236,13 @@ interface RawMetric {
   orderIndex: number
   targetValue: Prisma.Decimal | null
   division: { id: string; name: string; shortLabel: string | null }
-  assignedTo: { id: string; name: string | null; email: string } | null
+  assignedTo: {
+    id: string
+    userId: string | null
+    name: string
+    roleTitle: string
+    status: 'ACTIVE' | 'OFFBOARDED'
+  } | null
   dataPoints: {
     id: string
     value: Prisma.Decimal
@@ -352,12 +383,14 @@ export async function createMetric(
   if (!division) return { ok: false, error: 'Division not found' }
 
   if (input.assignedToId) {
-    const assignee = await prisma.user.findUnique({
+    // Existence check only — offboarded employees stay assignable so
+    // historical stat imports can attribute metrics to whoever
+    // actually owned them at the time.
+    const assignee = await prisma.employee.findUnique({
       where: { id: input.assignedToId },
-      select: { id: true, isActive: true },
+      select: { id: true },
     })
     if (!assignee) return { ok: false, error: 'Assignee not found' }
-    if (!assignee.isActive) return { ok: false, error: 'Assignee is inactive' }
   }
 
   const nextOrder = await prisma.statMetric.count({
@@ -400,12 +433,14 @@ export async function updateMetric(
     if (!division) return { ok: false, error: 'Division not found' }
   }
   if (input.assignedToId) {
-    const assignee = await prisma.user.findUnique({
+    // Existence check only — offboarded employees stay assignable so
+    // historical stat imports can attribute metrics to whoever
+    // actually owned them at the time.
+    const assignee = await prisma.employee.findUnique({
       where: { id: input.assignedToId },
-      select: { id: true, isActive: true },
+      select: { id: true },
     })
     if (!assignee) return { ok: false, error: 'Assignee not found' }
-    if (!assignee.isActive) return { ok: false, error: 'Assignee is inactive' }
   }
 
   await prisma.statMetric.update({
@@ -486,11 +521,22 @@ export async function upsertDataPoint(
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const metric = await prisma.statMetric.findFirst({
     where: { id: input.metricId, deletedAt: null },
-    select: { id: true, assignedToId: true },
+    select: {
+      id: true,
+      assignedToId: true,
+      assignedTo: { select: { userId: true } },
+    },
   })
   if (!metric) return { ok: false, error: 'Metric not found' }
 
-  const isAssignee = metric.assignedToId === actorUserId
+  // Ownership authz compares the actor's User.id against the linked
+  // User of the assignee Employee. Employees without a User account
+  // can be owners on paper (see createMetric) but can't record values
+  // themselves — an admin fills in on their behalf.
+  const isAssignee =
+    metric.assignedTo?.userId !== undefined &&
+    metric.assignedTo.userId !== null &&
+    metric.assignedTo.userId === actorUserId
   const isUnassignedAdmin = metric.assignedToId === null && actorIsAdmin
   if (!isAssignee && !isUnassignedAdmin) {
     return {
@@ -539,13 +585,22 @@ export async function deleteDataPoint(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const point = await prisma.statDataPoint.findUnique({
     where: { id: dataPointId },
-    select: { id: true, metric: { select: { assignedToId: true } } },
+    select: {
+      id: true,
+      metric: {
+        select: {
+          assignedToId: true,
+          assignedTo: { select: { userId: true } },
+        },
+      },
+    },
   })
   if (!point) return { ok: false, error: 'Data point not found' }
 
-  // Symmetric with upsertDataPoint: only the assigned user (or an
-  // admin on an unassigned metric) can delete values.
-  const isAssignee = point.metric.assignedToId === actorUserId
+  // Symmetric with upsertDataPoint: only the assigned employee's
+  // linked User (or an admin on an unassigned metric) can delete.
+  const assigneeUserId = point.metric.assignedTo?.userId ?? null
+  const isAssignee = assigneeUserId !== null && assigneeUserId === actorUserId
   const isUnassignedAdmin = point.metric.assignedToId === null && actorIsAdmin
   if (!isAssignee && !isUnassignedAdmin) {
     return { ok: false, error: 'Only the assigned user can delete values' }

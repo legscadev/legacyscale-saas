@@ -240,7 +240,6 @@ model User {
   certsRevoked          CertificateIssuance[]  @relation("CertsRevoked")
   nudgesReceived        Nudge[]                @relation("NudgeRecipient")
   nudgesAuthored        Nudge[]                @relation("NudgeAuthor")
-  statMetricsAssigned   StatMetric[]           @relation("StatMetricAssignee")
   statDataPointsAdded   StatDataPoint[]        @relation("StatDataPointAuthor")
   employee              Employee?              @relation("EmployeeUser")
   orgBoardRevisions     OrgBoardRevision[]     @relation("OrgBoardRevisionAuthor")
@@ -1179,6 +1178,7 @@ model Employee {
   checklistStatuses   EmployeeChecklistItemStatus[]
   orgAssignments      OrgNode[]                     @relation("OrgNodeEmployee")
   positionAssignments PositionAssignment[]          @relation("EmployeePositionAssignments")
+  statMetricsAssigned StatMetric[]                  @relation("StatMetricAssignee")
   companyId           String                        @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([status])
@@ -1476,7 +1476,7 @@ model StatMetric {
   deletedAt    DateTime?      @map("deleted_at")
 
   division   StatDivision    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
-  assignedTo User?           @relation("StatMetricAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedTo Employee?       @relation("StatMetricAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   dataPoints StatDataPoint[]
   companyId  String          @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
