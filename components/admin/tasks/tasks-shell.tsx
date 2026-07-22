@@ -6,7 +6,7 @@
 // revalidate.
 
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useMemo, useState, useTransition } from 'react'
 import { Plus, Settings } from 'lucide-react'
 
@@ -38,6 +38,7 @@ interface TasksShellProps {
 
 export function TasksShell({ initialData }: TasksShellProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isNavigating, startNavigation] = useTransition()
   const [createOpen, setCreateOpen] = useState(false)
@@ -83,7 +84,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
     const next = new URLSearchParams(paramsCopy)
     next.set('task', id)
     startNavigation(() => {
-      router.push(`/admin/tasks?${next.toString()}`, { scroll: false })
+      router.push(`${pathname}?${next.toString()}`, { scroll: false })
     })
   }
 
@@ -92,7 +93,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
     next.delete('task')
     startNavigation(() => {
       router.push(
-        next.toString() ? `/admin/tasks?${next.toString()}` : '/admin/tasks',
+        next.toString() ? `${pathname}?${next.toString()}` : pathname,
         { scroll: false },
       )
     })
@@ -107,7 +108,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
       next.set('dir', field === 'dueDate' ? 'asc' : 'desc')
     }
     startNavigation(() => {
-      router.push(`/admin/tasks?${next.toString()}`)
+      router.push(`${pathname}?${next.toString()}`)
     })
   }
 
