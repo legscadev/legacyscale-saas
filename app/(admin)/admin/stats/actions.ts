@@ -158,11 +158,16 @@ export interface AssigneePickerOption {
   name: string | null
   email: string
   role: 'ADMIN' | 'TEAM' | 'MEMBER'
+  /** Onboarding lifecycle from the linked Employee record.
+   *  - 'ACTIVE'     — currently onboarded
+   *  - 'OFFBOARDED' — ex-employee, kept for historical metrics
+   *  - null         — no Employee record (admin without HR row) */
+  employmentStatus: 'ACTIVE' | 'OFFBOARDED' | null
 }
 
 export async function listAssigneesForStats(): Promise<AssigneePickerOption[]> {
   await requireTeamModuleAccess('stats')
-  return prisma.user.findMany({
+  const rows = await prisma.user.findMany({
     where: {
       isActive: true,
       deletedAt: null,
@@ -170,7 +175,20 @@ export async function listAssigneesForStats(): Promise<AssigneePickerOption[]> {
       ...(await memberTenantScope()),
     },
     orderBy: [{ name: 'asc' }, { email: 'asc' }],
-    select: { id: true, name: true, email: true, role: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      employee: { select: { status: true } },
+    },
     take: 500,
   })
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    role: r.role as AssigneePickerOption['role'],
+    employmentStatus: r.employee?.status ?? null,
+  }))
 }

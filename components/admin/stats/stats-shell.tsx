@@ -26,7 +26,10 @@ import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -650,6 +653,27 @@ function AssigneePicker({
   const displayName = (a: AssigneePickerOption): string =>
     a.name?.trim() || a.email.split('@')[0]!
 
+  // Split by lifecycle: Offboarded (Employee.status = OFFBOARDED) goes
+  // into its own section so ex-employees don't clutter the active
+  // roster; null (no Employee record — admins without an HR row)
+  // stays with the onboarded group.
+  const onboarded = assignees.filter((a) => a.employmentStatus !== 'OFFBOARDED')
+  const offboarded = assignees.filter((a) => a.employmentStatus === 'OFFBOARDED')
+
+  const renderOption = (a: AssigneePickerOption) => (
+    <SelectItem key={a.id} value={a.id}>
+      <span className="flex w-full items-center justify-between gap-3">
+        <span className="truncate">
+          {displayName(a)}
+          {a.id === currentUserId ? ' (You)' : ''}
+        </span>
+        <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+          {byAssignee.get(a.id) ?? 0}
+        </span>
+      </span>
+    </SelectItem>
+  )
+
   return (
     <Select
       value={value}
@@ -706,19 +730,26 @@ function AssigneePicker({
             </span>
           </span>
         </SelectItem>
-        {assignees.map((a) => (
-          <SelectItem key={a.id} value={a.id}>
-            <span className="flex w-full items-center justify-between gap-3">
-              <span className="truncate">
-                {displayName(a)}
-                {a.id === currentUserId ? ' (You)' : ''}
-              </span>
-              <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-                {byAssignee.get(a.id) ?? 0}
-              </span>
-            </span>
-          </SelectItem>
-        ))}
+        {onboarded.length > 0 ? (
+          <SelectGroup>
+            <SelectLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Onboarded
+            </SelectLabel>
+            {onboarded.map(renderOption)}
+          </SelectGroup>
+        ) : null}
+        {offboarded.length > 0 ? (
+          <>
+            <SelectSeparator />
+            <SelectGroup>
+              <SelectLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Offboarded
+              </SelectLabel>
+              {offboarded.map(renderOption)}
+            </SelectGroup>
+          </>
+        ) : null}
+        <SelectSeparator />
         <SelectItem value={UNASSIGNED}>
           <span className="flex w-full items-center justify-between gap-3">
             <span className="italic text-muted-foreground">Unassigned</span>
