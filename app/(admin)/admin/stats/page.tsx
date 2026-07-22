@@ -12,6 +12,21 @@ interface StatsPageProps {
   searchParams: Promise<{ division?: string; assignee?: string }>
 }
 
+/** Parse ?assignee=<csv> into a clean id array. Empty / missing =
+ *  no filter selected. Duplicates + blanks are stripped. */
+function parseAssigneeIds(raw: string | undefined): string[] {
+  if (!raw) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const chunk of raw.split(',')) {
+    const trimmed = chunk.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+  }
+  return out
+}
+
 export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
   const admin = await requireAdmin()
   const params = await searchParams
@@ -32,7 +47,7 @@ export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
       currentUserIsAdmin={true}
       divisions={divisions}
       initialDivisionId={params.division ?? null}
-      initialAssigneeId={params.assignee ?? null}
+      initialAssigneeIds={parseAssigneeIds(params.assignee)}
       metrics={metrics}
       assignees={assignees}
     />
