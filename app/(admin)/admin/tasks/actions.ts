@@ -24,12 +24,6 @@ import {
   type TaskAttachmentRow,
 } from '@/lib/services/task-attachment-service'
 import {
-  taskSavedViewService,
-  DuplicateSavedViewError,
-  SavedViewNotFoundError,
-  type SavedViewRow,
-} from '@/lib/services/task-saved-view-service'
-import {
   taskChecklistService,
   ChecklistItemNotFoundError,
   ChecklistNotFoundError,
@@ -109,9 +103,7 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
     err instanceof CommentNotFoundError ||
     err instanceof ChecklistNotFoundError ||
     err instanceof ChecklistItemNotFoundError ||
-    err instanceof TaskAttachmentNotFoundError ||
-    err instanceof SavedViewNotFoundError ||
-    err instanceof DuplicateSavedViewError
+    err instanceof TaskAttachmentNotFoundError
   ) {
     return { ok: false, error: err.message }
   }
@@ -367,9 +359,10 @@ export interface TaskWorkspacePayload {
    *  which comments the current viewer authored (and can therefore
    *  edit inline). Admins can delete any comment via the row menu. */
   currentUserId: string
-  /** Saved views authored by the current user in the current
-   *  tenant. Populates the "Views" dropdown next to the filter bar. */
-  savedViews: SavedViewRow[]
+  /** Active tenant id — used to key the client-side saved-views
+   *  cache in localStorage so views don't leak across tenants when
+   *  a super-admin switches workspaces on the same browser. */
+  companyId: string | null
 }
 
 /** Sole entry point for `/admin/tasks` first render. */
@@ -406,47 +399,45 @@ export async function fetchTaskWorkspaceAction(
 
   try {
     const tenantScope = await memberTenantScope()
-    const [statuses, categories, labels, members, tasks, savedViews] =
-      await Promise.all([
-        prisma.taskStatus.findMany({
-          orderBy: { orderIndex: 'asc' },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            color: true,
-            orderIndex: true,
-            isDefault: true,
-            isTerminal: true,
-            wipLimit: true,
-          },
-        }),
-        prisma.taskCategory.findMany({
-          orderBy: { name: 'asc' },
-          select: { id: true, name: true, color: true },
-        }),
-        prisma.taskLabel.findMany({
-          orderBy: { name: 'asc' },
-          select: { id: true, name: true, color: true },
-        }),
-        prisma.user.findMany({
-          where: {
-            deletedAt: null,
-            isActive: true,
-            role: { in: ['ADMIN', 'TEAM'] },
-            ...tenantScope,
-          },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            avatarUrl: true,
-          },
-          orderBy: [{ name: 'asc' }, { email: 'asc' }],
-        }),
-        taskService.list(parsedFilters.data),
-        taskSavedViewService.listMine(currentUser.id),
-      ])
+    const [statuses, categories, labels, members, tasks] = await Promise.all([
+      prisma.taskStatus.findMany({
+        orderBy: { orderIndex: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          color: true,
+          orderIndex: true,
+          isDefault: true,
+          isTerminal: true,
+          wipLimit: true,
+        },
+      }),
+      prisma.taskCategory.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, color: true },
+      }),
+      prisma.taskLabel.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, color: true },
+      }),
+      prisma.user.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+          role: { in: ['ADMIN', 'TEAM'] },
+          ...tenantScope,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true,
+        },
+        orderBy: [{ name: 'asc' }, { email: 'asc' }],
+      }),
+      taskService.list(parsedFilters.data),
+    ])
 
     return {
       ok: true,
@@ -457,7 +448,7 @@ export async function fetchTaskWorkspaceAction(
         members,
         tasks,
         currentUserId: currentUser.id,
-        savedViews,
+        companyId,
       },
     }
   } catch (err) {
@@ -821,44 +812,6 @@ export async function unwatchTaskAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not unwatch task')
-  }
-}
-
-// ============================================
-// SAVED VIEWS
-// ============================================
-
-export async function createSavedViewAction(input: {
-  name: string
-  query: string
-}): Promise<MutationResult<SavedViewRow>> {
-  const user = await requireTeamModuleAccess('tasks')
-  const name = input.name.trim()
-  if (!name) return { ok: false, error: 'Name is required' }
-  if (name.length > 60) return { ok: false, error: 'Name is too long (max 60)' }
-  try {
-    const data = await taskSavedViewService.create({
-      userId: user.id,
-      name,
-      query: input.query,
-    })
-    revalidateAll()
-    return { ok: true, data }
-  } catch (err) {
-    return toMutationErr(err, 'Could not save view')
-  }
-}
-
-export async function deleteSavedViewAction(
-  id: string,
-): Promise<MutationResult> {
-  const user = await requireTeamModuleAccess('tasks')
-  try {
-    await taskSavedViewService.delete({ id, userId: user.id })
-    revalidateAll()
-    return { ok: true, data: undefined }
-  } catch (err) {
-    return toMutationErr(err, 'Could not delete view')
   }
 }
 

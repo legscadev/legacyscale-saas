@@ -272,7 +272,6 @@ model User {
   taskActivityLogs       TaskActivityLog[]   @relation("TaskActivityActor")
   taskNotifications      TaskNotification[]  @relation("TaskNotificationRecipient")
   taskNotificationsCaused TaskNotification[] @relation("TaskNotificationActor")
-  taskSavedViews         TaskSavedView[]
 
   // Policies — mini-CMS for internal ops docs (Kondense's Makh-style
   // "hat write-ups"). Named relations because a user can be author,
@@ -1870,27 +1869,6 @@ model TaskNotification {
   @@map("task_notifications")
 }
 
-/// A named saved view = a URL query string the operator captured.
-/// Per-user (no sharing yet) so my saved "Overdue on me" doesn't
-/// pollute someone else's dropdown. Tenant-scoped so the same
-/// user across companies keeps distinct view sets.
-model TaskSavedView {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  name      String
-  /// URL query string as stored on save — e.g. "priority=HIGH&assignee=<id>&sort=dueDate&dir=asc".
-  /// The tasks shell splats this into the URL when the operator picks the view.
-  query     String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
-
-  @@unique([userId, companyId, name])
-  @@index([companyId, userId])
-  @@map("task_saved_views")
-}
 
 // ============================================
 // POLICIES
