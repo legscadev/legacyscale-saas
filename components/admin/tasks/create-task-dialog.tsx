@@ -338,7 +338,7 @@ export function CreateTaskDialog({
           </p>
         ) : null}
 
-        <DialogFooter className="border-t bg-background p-4">
+        <DialogFooter className="mx-0 mb-0 rounded-none border-t bg-background p-5">
           <Button
             type="button"
             variant="ghost"
