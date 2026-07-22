@@ -22,6 +22,7 @@ import {
   Folder,
   Link2,
   Paperclip,
+  Repeat2,
   Search,
   Tag,
   Upload,
@@ -98,6 +99,7 @@ export function CreateTaskDialog({
   const [dueDate, setDueDate] = useState('')
   const [assigneeIds, setAssigneeIds] = useState<string[]>([])
   const [labelIds, setLabelIds] = useState<string[]>([])
+  const [isRecurring, setIsRecurring] = useState(false)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [pendingLinks, setPendingLinks] = useState<
     Array<{ name: string; url: string }>
@@ -116,6 +118,7 @@ export function CreateTaskDialog({
     setDueDate('')
     setAssigneeIds([])
     setLabelIds([])
+    setIsRecurring(false)
     setPendingFiles([])
     setPendingLinks([])
     setErrors({})
@@ -148,6 +151,7 @@ export function CreateTaskDialog({
         assigneeIds,
         watcherIds: [],
         labelIds,
+        isRecurring,
       })
 
       if (!result.ok) {
@@ -314,6 +318,14 @@ export function CreateTaskDialog({
                 labels={labels}
                 value={labelIds}
                 onChange={setLabelIds}
+                disabled={isSaving}
+              />
+            </SidebarField>
+
+            <SidebarField label="Recurring">
+              <RecurringField
+                value={isRecurring}
+                onChange={setIsRecurring}
                 disabled={isSaving}
               />
             </SidebarField>
@@ -570,6 +582,37 @@ function CategoryField({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function RecurringField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: boolean
+  onChange: (next: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      disabled={disabled}
+      aria-pressed={value}
+      className={cn(
+        'flex h-9 w-full items-center gap-2 rounded-md border px-3 text-left text-sm shadow-xs transition-colors disabled:opacity-50',
+        value
+          ? 'border-sky-500/50 bg-sky-500/10 text-sky-700 hover:bg-sky-500/15'
+          : 'bg-background hover:bg-accent hover:text-foreground',
+      )}
+    >
+      <Repeat2 className="size-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1 truncate">
+        {value ? 'Auto-spawns on completion' : 'Off'}
+      </span>
+      {value ? <Check className="size-3.5 shrink-0" /> : null}
+    </button>
   )
 }
 
