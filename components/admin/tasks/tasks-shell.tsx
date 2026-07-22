@@ -51,7 +51,7 @@ export function TasksShell({ initialData }: TasksShellProps) {
     labels,
     members,
     currentUserId,
-    savedViews,
+    companyId,
   } = initialData
 
   // View comes from ?view=; defaults to board. Explicit ?view=list
@@ -142,8 +142,8 @@ export function TasksShell({ initialData }: TasksShellProps) {
 
       <div className="flex flex-wrap items-center gap-2">
         <SavedViewsMenu
-          savedViews={savedViews}
-          onChanged={refreshWorkspace}
+          companyId={companyId}
+          currentUserId={currentUserId}
         />
         <div className="min-w-0 flex-1">
           <TasksFilterBar

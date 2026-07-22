@@ -67,7 +67,6 @@ const SCOPED_MODELS = new Set<string>([
   'TaskAttachment',
   'TaskActivityLog',
   'TaskNotification',
-  'TaskSavedView',
   // Policies (Phase 1)
   'Policy',
   'PolicyCategory',
