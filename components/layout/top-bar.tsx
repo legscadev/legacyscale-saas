@@ -284,7 +284,9 @@ export function TopBar({
             </TooltipContent>
           </Tooltip>
 
-          {role === 'admin' ? <TaskNotificationsBell /> : null}
+          {role === 'admin' || grantedModules?.includes('tasks') ? (
+            <TaskNotificationsBell />
+          ) : null}
 
           <ThemeToggle locked={themeLocked} />
           <div className="ml-1 lg:hidden">
