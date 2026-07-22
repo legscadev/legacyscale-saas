@@ -335,9 +335,6 @@ export interface WorkflowStatus {
   orderIndex: number
   isDefault: boolean
   isTerminal: boolean
-  /** Marks a "template" column — dragging a task out of a
-   *  recurring column clones the task; the original stays put. */
-  isRecurring: boolean
   wipLimit: number | null
 }
 
@@ -421,7 +418,6 @@ export async function fetchTaskWorkspaceAction(
             orderIndex: true,
             isDefault: true,
             isTerminal: true,
-            isRecurring: true,
             wipLimit: true,
           },
         }),

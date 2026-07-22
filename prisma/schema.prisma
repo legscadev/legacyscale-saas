@@ -1561,12 +1561,6 @@ model TaskStatus {
   orderIndex Int      @default(0) @map("order_index")
   isDefault  Boolean  @default(false) @map("is_default")
   isTerminal Boolean  @default(false) @map("is_terminal")
-  /// Marks a "template" column for day-to-day recurring chores.
-  /// Dragging a task OUT of a recurring column clones it (original
-  /// stays put); moving the clone to a terminal status auto-archives
-  /// so Done doesn't fill up with completion rows. At most one
-  /// recurring status per tenant — enforced app-side.
-  isRecurring Boolean @default(false) @map("is_recurring")
   /// Optional soft WIP limit for Kanban columns. Null = no limit.
   wipLimit   Int?     @map("wip_limit")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -1636,12 +1630,11 @@ model Task {
   /// out its subtasks — a common accidental foot-gun.
   parentTaskId  String?      @map("parent_task_id")
 
-  /// Set on clones spawned from a Recurring column task. The clone
-  /// carries this back-reference so `changeStatus` can auto-archive
-  /// the clone on terminal transitions (keeps Done clean without
-  /// losing the completion row). Null on regular tasks. SetNull on
-  /// original delete — the clone stays as a normal completed task.
-  sourceRecurringTaskId String? @map("source_recurring_task_id")
+  /// Marks the task as a recurring template. On transition to a
+  /// terminal status the service clones a fresh copy (also flagged
+  /// recurring) into the first non-terminal status so the next
+  /// instance is ready without any manual work.
+  isRecurring   Boolean      @default(false) @map("is_recurring")
 
   startDate     DateTime?    @map("start_date") @db.Date
   dueDate       DateTime?    @map("due_date") @db.Date
@@ -1663,8 +1656,6 @@ model Task {
   reporter      User?          @relation("TaskReporter", fields: [reporterId], references: [id], onDelete: SetNull)
   parentTask    Task?          @relation("TaskParent", fields: [parentTaskId], references: [id], onDelete: SetNull)
   subtasks      Task[]         @relation("TaskParent")
-  sourceRecurring     Task?    @relation("TaskRecurringSource", fields: [sourceRecurringTaskId], references: [id], onDelete: SetNull)
-  recurringSpawns     Task[]   @relation("TaskRecurringSource")
 
   assignees     TaskAssignee[]
   watchers      TaskWatcher[]
