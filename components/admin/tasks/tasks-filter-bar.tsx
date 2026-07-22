@@ -1,14 +1,20 @@
 'use client'
 
-// URL-driven filter bar for /admin/tasks.
+// URL-driven filter bar for the Task Tracker (admin + team views).
 //
 // Every filter maps to a query-string key: q, status, priority,
 // category, label, assignee, archived. Multi-select facets encode
 // as comma-separated ids so the URL stays a shareable snapshot of
 // the view. The parent shell handles fetching — this bar only
 // mutates the URL through router.push.
+//
+// Namespace-aware: the bar is used by both /admin/tasks (ADMIN)
+// and /team/tasks (TEAM). It reads the current pathname so filter
+// clicks preserve the namespace — hardcoding /admin/tasks would
+// bounce TEAM users out of their view and into an ADMIN gate they
+// can't pass.
 
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { Check, Search, SlidersHorizontal, X } from 'lucide-react'
 
@@ -55,6 +61,7 @@ export function TasksFilterBar({
   members,
 }: TasksFilterBarProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [, startNavigation] = useTransition()
 
@@ -108,7 +115,7 @@ export function TasksFilterBar({
       else next.set(key, value)
     }
     startNavigation(() => {
-      router.push(`/admin/tasks?${next.toString()}`)
+      router.push(`${pathname}?${next.toString()}`)
     })
   }
 
@@ -127,7 +134,7 @@ export function TasksFilterBar({
   function clearAll() {
     setSearchDraft('')
     startNavigation(() => {
-      router.push('/admin/tasks')
+      router.push(pathname)
     })
   }
 

@@ -10,7 +10,7 @@
 // the popover open state + rename/save/delete dispatch. Any
 // mutation calls onChanged so the parent refetches.
 
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useMemo, useState, useTransition } from 'react'
 import {
   Bookmark,
@@ -51,6 +51,7 @@ export function SavedViewsMenu({
   onChanged,
 }: SavedViewsMenuProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [open, setOpen] = useState(false)
   const [isBusy, startBusy] = useTransition()
@@ -72,7 +73,7 @@ export function SavedViewsMenu({
     const view_ = searchParams.get('view')
     const next = new URLSearchParams(view.query)
     if (view_) next.set('view', view_)
-    router.push(`/admin/tasks?${next.toString()}`)
+    router.push(`${pathname}?${next.toString()}`)
   }
 
   function save() {

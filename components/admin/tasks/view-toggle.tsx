@@ -5,7 +5,7 @@
 // modes — the operator can filter down to their team's work in
 // list view and switch to board without losing context.
 
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useMemo, useTransition } from 'react'
 import { KanbanSquare, List } from 'lucide-react'
 
@@ -28,6 +28,7 @@ const OPTIONS: Array<{
 
 export function ViewToggle({ value }: ViewToggleProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [, startNavigation] = useTransition()
 
@@ -49,7 +50,7 @@ export function ViewToggle({ value }: ViewToggleProps) {
       next.set('view', mode)
     }
     startNavigation(() => {
-      router.push(`/admin/tasks?${next.toString()}`)
+      router.push(`${pathname}?${next.toString()}`)
     })
   }
 
