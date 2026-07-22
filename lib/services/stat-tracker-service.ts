@@ -506,11 +506,12 @@ export async function deleteMetric(
 // ============================================================
 
 /**
- * Insert or update a data point on a metric. Only the metric's
- * assigned user records values; when a metric has no assignee, an
- * admin is allowed to fill in so the card doesn't stay blank
- * forever. This mirrors the "ownership = accountability" pattern
- * from the Hubbard stat board — admins configure, assignees own.
+ * Insert or update a data point on a metric. Admins can enter values
+ * on any metric — needed for historical imports, backfills, and
+ * covering ex-employees. Non-admins can only enter values on metrics
+ * whose assigned Employee is linked to their User. Employees without
+ * a linked User account can be owners on paper but can't record
+ * values themselves; an admin fills in on their behalf.
  * Value at (metric, date) upserts a single row via the unique
  * constraint.
  */
@@ -523,25 +524,17 @@ export async function upsertDataPoint(
     where: { id: input.metricId, deletedAt: null },
     select: {
       id: true,
-      assignedToId: true,
       assignedTo: { select: { userId: true } },
     },
   })
   if (!metric) return { ok: false, error: 'Metric not found' }
 
-  // Ownership authz compares the actor's User.id against the linked
-  // User of the assignee Employee. Employees without a User account
-  // can be owners on paper (see createMetric) but can't record values
-  // themselves — an admin fills in on their behalf.
-  const isAssignee =
-    metric.assignedTo?.userId !== undefined &&
-    metric.assignedTo.userId !== null &&
-    metric.assignedTo.userId === actorUserId
-  const isUnassignedAdmin = metric.assignedToId === null && actorIsAdmin
-  if (!isAssignee && !isUnassignedAdmin) {
+  const assigneeUserId = metric.assignedTo?.userId ?? null
+  const isAssignee = assigneeUserId !== null && assigneeUserId === actorUserId
+  if (!actorIsAdmin && !isAssignee) {
     return {
       ok: false,
-      error: 'Only the assigned user can record values on this metric',
+      error: 'Only the assigned user or an admin can record values on this metric',
     }
   }
 
@@ -589,7 +582,6 @@ export async function deleteDataPoint(
       id: true,
       metric: {
         select: {
-          assignedToId: true,
           assignedTo: { select: { userId: true } },
         },
       },
@@ -597,13 +589,14 @@ export async function deleteDataPoint(
   })
   if (!point) return { ok: false, error: 'Data point not found' }
 
-  // Symmetric with upsertDataPoint: only the assigned employee's
-  // linked User (or an admin on an unassigned metric) can delete.
+  // Symmetric with upsertDataPoint: assignee-User or any admin.
   const assigneeUserId = point.metric.assignedTo?.userId ?? null
   const isAssignee = assigneeUserId !== null && assigneeUserId === actorUserId
-  const isUnassignedAdmin = point.metric.assignedToId === null && actorIsAdmin
-  if (!isAssignee && !isUnassignedAdmin) {
-    return { ok: false, error: 'Only the assigned user can delete values' }
+  if (!actorIsAdmin && !isAssignee) {
+    return {
+      ok: false,
+      error: 'Only the assigned user or an admin can delete values',
+    }
   }
 
   await prisma.statDataPoint.delete({ where: { id: dataPointId } })
