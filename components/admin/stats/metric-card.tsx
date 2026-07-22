@@ -85,7 +85,7 @@ export function MetricCard({
   // Only the assignee records values. When a metric is unassigned,
   // admins can fill in so the card doesn't sit blank forever.
   // Admins still get the kebab menu (Delete metric) regardless.
-  const isAssignee = metric.assignedTo?.id === currentUserId
+  const isAssignee = metric.assignedTo?.userId === currentUserId
   const isUnassignedAdmin = !metric.assignedTo && currentUserIsAdmin
   const canRecord = isAssignee || isUnassignedAdmin
 
@@ -140,9 +140,7 @@ export function MetricCard({
           <h3 className="truncate text-sm font-semibold">{metric.name}</h3>
           <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <User className="size-3" />
-            {metric.assignedTo?.name?.trim() ||
-              metric.assignedTo?.email.split('@')[0] ||
-              'Unassigned'}
+            {metric.assignedTo?.name.trim() || 'Unassigned'}
           </div>
         </div>
         {/* One primary + one overflow. Keeps the header tidy no
@@ -216,8 +214,7 @@ export function MetricCard({
         targetValue={metric.targetValue}
         canRecord={canRecord}
         assigneeName={
-          metric.assignedTo?.name?.trim() ||
-          metric.assignedTo?.email.split('@')[0] ||
+          metric.assignedTo?.name.trim() ||
           null
         }
         fromDate={fromDate}
@@ -235,8 +232,7 @@ export function MetricCard({
           metric.division.shortLabel ?? metric.division.name
         }
         assigneeName={
-          metric.assignedTo?.name?.trim() ||
-          metric.assignedTo?.email.split('@')[0] ||
+          metric.assignedTo?.name.trim() ||
           null
         }
         allPoints={metric.dataPoints}

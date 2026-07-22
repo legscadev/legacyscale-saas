@@ -254,7 +254,8 @@ export function MetricDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Only ADMIN and TEAM users can be assigned.
+              Employees come from Onboarding. Offboarded employees stay
+              assignable for historical imports.
             </p>
           </div>
 
@@ -307,11 +308,7 @@ export function MetricDialog({
   )
 }
 
-function displayName(
-  user: { name: string | null; email: string } | undefined,
-): string {
-  if (!user) return ''
-  const name = user.name?.trim()
-  if (name) return name
-  return user.email.split('@')[0] ?? ''
+function displayName(employee: AssigneePickerOption | undefined): string {
+  if (!employee) return ''
+  return employee.name.trim()
 }

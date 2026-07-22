@@ -151,44 +151,43 @@ export async function deleteDataPointAction(
   return result
 }
 
-// ─── PICKER: users eligible to be assigned ─────────────────────
+// ─── PICKER: employees eligible to own a metric ────────────────
 
 export interface AssigneePickerOption {
+  /** Employee.id — used as the metric's assignedToId. */
   id: string
-  name: string | null
-  email: string
-  role: 'ADMIN' | 'TEAM' | 'MEMBER'
-  /** Onboarding lifecycle from the linked Employee record.
-   *  - 'ACTIVE'     — currently onboarded
-   *  - 'OFFBOARDED' — ex-employee, kept for historical metrics
-   *  - null         — no Employee record (admin without HR row) */
-  employmentStatus: 'ACTIVE' | 'OFFBOARDED' | null
+  /** Linked User.id (null when the Employee has no system access).
+   *  Used by "Only mine" and edit-permission checks in the UI. */
+  userId: string | null
+  name: string
+  roleTitle: string
+  employmentStatus: 'ACTIVE' | 'OFFBOARDED'
 }
 
+/**
+ * Assignees for the stats picker come from the HR roster
+ * (/admin/onboarding), not the system-access list. Offboarded
+ * employees stay in the list so historical stat imports can still
+ * attribute metrics to whoever actually owned them at the time.
+ */
 export async function listAssigneesForStats(): Promise<AssigneePickerOption[]> {
   await requireTeamModuleAccess('stats')
-  const rows = await prisma.user.findMany({
-    where: {
-      isActive: true,
-      deletedAt: null,
-      role: { in: ['ADMIN', 'TEAM'] },
-      ...(await memberTenantScope()),
-    },
-    orderBy: [{ name: 'asc' }, { email: 'asc' }],
+  const rows = await prisma.employee.findMany({
+    orderBy: [{ status: 'asc' }, { name: 'asc' }],
     select: {
       id: true,
+      userId: true,
       name: true,
-      email: true,
-      role: true,
-      employee: { select: { status: true } },
+      roleTitle: true,
+      status: true,
     },
     take: 500,
   })
   return rows.map((r) => ({
     id: r.id,
+    userId: r.userId,
     name: r.name,
-    email: r.email,
-    role: r.role as AssigneePickerOption['role'],
-    employmentStatus: r.employee?.status ?? null,
+    roleTitle: r.roleTitle,
+    employmentStatus: r.status,
   }))
 }

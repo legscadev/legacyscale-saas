@@ -145,7 +145,9 @@ async function main() {
         name: 'Tenant B Metric',
         unit: 'COUNT',
         divisionId: division.id,
-        assignedToId: owner.id,
+        // assignedToId now references Employee.id (post-refactor).
+        // Test tenant doesn't seed employees, so leave unassigned.
+        assignedToId: null,
         companyId: TENANT_B_ID,
       },
     }))

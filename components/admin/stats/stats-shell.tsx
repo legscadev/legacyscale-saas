@@ -170,7 +170,7 @@ export function StatsShell({
         ? metrics
         : metrics.filter((m) => m.division.id === selectedGroupId)
     const mine = scoped.filter(
-      (m) => m.assignedTo?.id === currentUserId,
+      (m) => m.assignedTo?.userId === currentUserId,
     ).length
     const withValues = metrics.filter((m) => m.dataPoints.length > 0).length
     return {
@@ -198,7 +198,7 @@ export function StatsShell({
       } else if (selectedAssigneeId !== ALL_ASSIGNEES) {
         if (m.assignedTo?.id !== selectedAssigneeId) return false
       }
-      if (onlyMine && m.assignedTo?.id !== currentUserId) return false
+      if (onlyMine && m.assignedTo?.userId !== currentUserId) return false
       if (q) {
         const hay = `${m.name} ${m.description ?? ''} ${m.division.name}`.toLowerCase()
         if (!hay.includes(q)) return false
@@ -650,8 +650,7 @@ function AssigneePicker({
     }
   }, [metrics, scopedGroupId])
 
-  const displayName = (a: AssigneePickerOption): string =>
-    a.name?.trim() || a.email.split('@')[0]!
+  const displayName = (a: AssigneePickerOption): string => a.name.trim()
 
   // Split by lifecycle: Offboarded (Employee.status = OFFBOARDED) goes
   // into its own section so ex-employees don't clutter the active
@@ -665,7 +664,7 @@ function AssigneePicker({
       <span className="flex w-full items-center justify-between gap-3">
         <span className="truncate">
           {displayName(a)}
-          {a.id === currentUserId ? ' (You)' : ''}
+          {a.userId === currentUserId ? ' (You)' : ''}
         </span>
         <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
           {byAssignee.get(a.id) ?? 0}
@@ -706,7 +705,7 @@ function AssigneePicker({
             }
             const a = assignees.find((x) => x.id === v)
             if (!a) return 'Choose an assignee'
-            const suffix = a.id === currentUserId ? ' (You)' : ''
+            const suffix = a.userId === currentUserId ? ' (You)' : ''
             return (
               <span className="flex w-full items-center justify-between gap-3">
                 <span className="truncate">
