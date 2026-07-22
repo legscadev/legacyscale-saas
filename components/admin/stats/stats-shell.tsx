@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { BarChart3, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { BarChart3, Check, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -26,10 +26,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -41,13 +38,16 @@ import { MetricCard } from './metric-card'
 import type {
   AssigneePickerOption,
 } from '@/app/(admin)/admin/stats/actions'
+import { cn } from '@/lib/utils'
 import type {
   StatDivisionSummary,
   StatMetricRow,
 } from '@/lib/services/stat-tracker-service'
 
 const ALL_GROUPS = '__all__'
-const ALL_ASSIGNEES = '__all_assignees__'
+/** URL sentinel + picker value that filters to metrics with no
+ *  assignee. Sits alongside real Employee.id values in the multi-
+ *  select set so "Alice + Unassigned" is one selection. */
 const UNASSIGNED = '__unassigned__'
 
 interface StatsShellProps {
@@ -57,9 +57,10 @@ interface StatsShellProps {
   /** Group from ?division=… — used as the initial selection but
    *  otherwise driven by client state. Null / missing = "all". */
   initialDivisionId: string | null
-  /** Assignee filter from ?assignee=… — user id, or the special
-   *  UNASSIGNED sentinel for "no one assigned", or null for "all". */
-  initialAssigneeId: string | null
+  /** Assignee filter from ?assignee=… — comma-separated Employee ids
+   *  and/or the UNASSIGNED sentinel. Empty list means no filter
+   *  (all metrics visible). */
+  initialAssigneeIds: string[]
   metrics: StatMetricRow[]
   assignees: AssigneePickerOption[]
 }
@@ -69,7 +70,7 @@ export function StatsShell({
   currentUserIsAdmin,
   divisions,
   initialDivisionId,
-  initialAssigneeId,
+  initialAssigneeIds,
   metrics,
   assignees,
 }: StatsShellProps) {
@@ -85,16 +86,18 @@ export function StatsShell({
       ? initialDivisionId
       : ALL_GROUPS,
   )
-  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>(() => {
-    if (initialAssigneeId === UNASSIGNED) return UNASSIGNED
-    if (
-      initialAssigneeId &&
-      assignees.some((a) => a.id === initialAssigneeId)
-    ) {
-      return initialAssigneeId
-    }
-    return ALL_ASSIGNEES
-  })
+  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>(
+    () => {
+      // Drop URL entries that no longer resolve to an assignee — a
+      // deleted Employee (or a hand-typed junk id) would otherwise
+      // silently zero out the board. UNASSIGNED sentinel is always
+      // valid.
+      const known = new Set(assignees.map((a) => a.id))
+      return initialAssigneeIds.filter(
+        (id) => id === UNASSIGNED || known.has(id),
+      )
+    },
+  )
   const [search, setSearch] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
   // Default the date range to today on both sides so the board opens
@@ -150,11 +153,11 @@ export function StatsShell({
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
-  function selectAssignee(id: string) {
-    setSelectedAssigneeId(id)
+  function setAssignees(ids: string[]) {
+    setSelectedAssigneeIds(ids)
     const params = new URLSearchParams(searchParams?.toString() ?? '')
-    if (id === ALL_ASSIGNEES) params.delete('assignee')
-    else params.set('assignee', id)
+    if (ids.length === 0) params.delete('assignee')
+    else params.set('assignee', ids.join(','))
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
@@ -190,13 +193,16 @@ export function StatsShell({
       ) {
         return false
       }
-      // Assignee filter: 'all' passes everyone; a real user id only
-      // passes metrics assigned to that user; UNASSIGNED sentinel
-      // passes metrics with no assignee.
-      if (selectedAssigneeId === UNASSIGNED) {
-        if (m.assignedTo) return false
-      } else if (selectedAssigneeId !== ALL_ASSIGNEES) {
-        if (m.assignedTo?.id !== selectedAssigneeId) return false
+      // Assignee filter: empty set = no filter (all pass); otherwise
+      // a metric passes only if its assignee (or the UNASSIGNED
+      // sentinel for null-assigned metrics) is in the set.
+      if (selectedAssigneeIds.length > 0) {
+        const set = new Set(selectedAssigneeIds)
+        if (m.assignedTo === null) {
+          if (!set.has(UNASSIGNED)) return false
+        } else if (!set.has(m.assignedTo.id)) {
+          return false
+        }
       }
       if (onlyMine && m.assignedTo?.userId !== currentUserId) return false
       if (q) {
@@ -205,7 +211,7 @@ export function StatsShell({
       }
       return true
     })
-  }, [metrics, selectedGroupId, selectedAssigneeId, onlyMine, search, currentUserId])
+  }, [metrics, selectedGroupId, selectedAssigneeIds, onlyMine, search, currentUserId])
 
   // ─── DELETE HANDLER ─────────────────────────────────────────
   function handleDeleteDivision() {
@@ -241,8 +247,8 @@ export function StatsShell({
           {assignees.length > 0 ? (
             <AssigneePicker
               assignees={assignees}
-              value={selectedAssigneeId}
-              onChange={selectAssignee}
+              selected={selectedAssigneeIds}
+              onChange={setAssignees}
               currentUserId={currentUserId}
               metrics={metrics}
               scopedGroupId={selectedGroupId}
@@ -604,8 +610,10 @@ function GroupPicker({
 
 interface AssigneePickerProps {
   assignees: AssigneePickerOption[]
-  value: string
-  onChange: (id: string) => void
+  /** Selected filter values — Employee ids plus the UNASSIGNED
+   *  sentinel. Empty = no filter (all pass). */
+  selected: string[]
+  onChange: (next: string[]) => void
   currentUserId: string
   /** Full metric list — used to compute per-assignee counts so the
    *  picker doubles as an at-a-glance "how many metrics does each
@@ -616,18 +624,28 @@ interface AssigneePickerProps {
   scopedGroupId: string
 }
 
-/** Header-inline picker: "All assignees" at the top, then each
- *  ADMIN/TEAM user with the count of metrics they own in the
- *  current group scope. UNASSIGNED sits at the bottom so orphaned
- *  metrics are one click away. */
+/** Multi-select picker with search + per-row checkboxes.
+ *
+ * Selection semantics:
+ *   - Empty set          → no filter; the trigger says "All assignees"
+ *   - One id             → the trigger shows the person's name (or
+ *                          "Unassigned") + their metric count
+ *   - Multiple           → the trigger shows "N assignees" + the sum
+ *
+ * Onboarded and Offboarded sections stay grouped so ex-employees
+ * don't clutter the roster. The Unassigned row sits at the bottom
+ * and toggles the UNASSIGNED sentinel alongside real ids. */
 function AssigneePicker({
   assignees,
-  value,
+  selected,
   onChange,
   currentUserId,
   metrics,
   scopedGroupId,
 }: AssigneePickerProps) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
   // Precompute counts once — one pass through metrics.
   const { totalCount, unassignedCount, byAssignee } = useMemo(() => {
     const scoped =
@@ -652,113 +670,219 @@ function AssigneePicker({
 
   const displayName = (a: AssigneePickerOption): string => a.name.trim()
 
-  // Split by lifecycle: Offboarded (Employee.status = OFFBOARDED) goes
-  // into its own section so ex-employees don't clutter the active
-  // roster; null (no Employee record — admins without an HR row)
-  // stays with the onboarded group.
-  const onboarded = assignees.filter((a) => a.employmentStatus !== 'OFFBOARDED')
-  const offboarded = assignees.filter((a) => a.employmentStatus === 'OFFBOARDED')
+  // Selection state helpers — kept as a Set for O(1) `has` in render.
+  const selectedSet = useMemo(() => new Set(selected), [selected])
 
-  const renderOption = (a: AssigneePickerOption) => (
-    <SelectItem key={a.id} value={a.id}>
-      <span className="flex w-full items-center justify-between gap-3">
-        <span className="truncate">
-          {displayName(a)}
-          {a.userId === currentUserId ? ' (You)' : ''}
-        </span>
-        <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-          {byAssignee.get(a.id) ?? 0}
-        </span>
-      </span>
-    </SelectItem>
-  )
+  function toggle(id: string) {
+    if (selectedSet.has(id)) {
+      onChange(selected.filter((v) => v !== id))
+    } else {
+      onChange([...selected, id])
+    }
+  }
+
+  function clearAll() {
+    onChange([])
+  }
+
+  // Search filters both sections. Case-insensitive substring on
+  // name + role title (so "designer" finds all designers). Unassigned
+  // row hides when the query doesn't match "unassigned".
+  const q = query.trim().toLowerCase()
+  const matches = (a: AssigneePickerOption): boolean => {
+    if (!q) return true
+    return (
+      a.name.toLowerCase().includes(q) ||
+      a.roleTitle.toLowerCase().includes(q)
+    )
+  }
+  const showUnassigned = !q || 'unassigned'.includes(q)
+
+  const onboarded = assignees
+    .filter((a) => a.employmentStatus !== 'OFFBOARDED')
+    .filter(matches)
+  const offboarded = assignees
+    .filter((a) => a.employmentStatus === 'OFFBOARDED')
+    .filter(matches)
+
+  // Trigger label — 3 cases: none / one / many.
+  const triggerLabel = (() => {
+    if (selected.length === 0) {
+      return { label: 'All assignees', count: totalCount, italic: false }
+    }
+    if (selected.length === 1) {
+      const only = selected[0]!
+      if (only === UNASSIGNED) {
+        return { label: 'Unassigned', count: unassignedCount, italic: true }
+      }
+      const a = assignees.find((x) => x.id === only)
+      if (!a) return { label: '1 assignee', count: 0, italic: false }
+      const suffix = a.userId === currentUserId ? ' (You)' : ''
+      return {
+        label: `${displayName(a)}${suffix}`,
+        count: byAssignee.get(a.id) ?? 0,
+        italic: false,
+      }
+    }
+    // Sum counts across everything selected so the trigger badge
+    // matches the number of visible metrics (minus other filters).
+    let sum = 0
+    for (const id of selected) {
+      sum += id === UNASSIGNED ? unassignedCount : (byAssignee.get(id) ?? 0)
+    }
+    return {
+      label: `${selected.length} assignees`,
+      count: sum,
+      italic: false,
+    }
+  })()
+
+  const renderRow = (a: AssigneePickerOption) => {
+    const checked = selectedSet.has(a.id)
+    return (
+      <li key={a.id}>
+        <button
+          type="button"
+          onClick={() => toggle(a.id)}
+          className={cn(
+            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+            'hover:bg-accent',
+          )}
+        >
+          <div
+            className={cn(
+              'flex size-4 shrink-0 items-center justify-center rounded-sm border',
+              checked
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-input',
+            )}
+            aria-hidden
+          >
+            {checked ? <Check className="size-3" /> : null}
+          </div>
+          <span className="min-w-0 flex-1 truncate">
+            {displayName(a)}
+            {a.userId === currentUserId ? ' (You)' : ''}
+          </span>
+          <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+            {byAssignee.get(a.id) ?? 0}
+          </span>
+        </button>
+      </li>
+    )
+  }
 
   return (
-    <Select
-      value={value}
-      onValueChange={(v) => {
-        if (v) onChange(v)
-      }}
-    >
-      <SelectTrigger aria-label="Assignee" className="w-full sm:w-60">
-        <SelectValue placeholder="Choose an assignee">
-          {(v: string) => {
-            if (v === ALL_ASSIGNEES) {
-              return (
-                <span className="flex w-full items-center justify-between gap-3">
-                  <span className="truncate">All assignees</span>
-                  <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-                    {totalCount}
-                  </span>
-                </span>
-              )
-            }
-            if (v === UNASSIGNED) {
-              return (
-                <span className="flex w-full items-center justify-between gap-3">
-                  <span className="truncate italic">Unassigned</span>
-                  <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-                    {unassignedCount}
-                  </span>
-                </span>
-              )
-            }
-            const a = assignees.find((x) => x.id === v)
-            if (!a) return 'Choose an assignee'
-            const suffix = a.userId === currentUserId ? ' (You)' : ''
-            return (
-              <span className="flex w-full items-center justify-between gap-3">
-                <span className="truncate">
-                  {displayName(a)}
-                  {suffix}
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Assignee filter"
+            className={cn(
+              'flex h-9 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm shadow-xs transition-colors',
+              'hover:bg-accent hover:text-accent-foreground sm:w-60',
+              selected.length > 0 && 'border-primary/40 bg-primary/5',
+            )}
+          />
+        }
+      >
+        <span
+          className={cn(
+            'min-w-0 flex-1 truncate',
+            triggerLabel.italic && 'italic text-muted-foreground',
+          )}
+        >
+          {triggerLabel.label}
+        </span>
+        <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
+          {triggerLabel.count}
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72 p-0">
+        <div className="flex items-center gap-1 border-b p-2">
+          <div className="relative flex-1">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search assignees…"
+              className="h-8 pl-7 text-sm"
+              autoFocus
+            />
+          </div>
+          {selected.length > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={clearAll}
+              className="h-8 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </Button>
+          ) : null}
+        </div>
+        <div className="max-h-72 space-y-1 overflow-y-auto p-1">
+          {onboarded.length > 0 ? (
+            <div>
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Onboarded
+              </p>
+              <ul>{onboarded.map(renderRow)}</ul>
+            </div>
+          ) : null}
+          {offboarded.length > 0 ? (
+            <div>
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Offboarded
+              </p>
+              <ul>{offboarded.map(renderRow)}</ul>
+            </div>
+          ) : null}
+          {showUnassigned ? (
+            <div className="border-t pt-1">
+              <button
+                type="button"
+                onClick={() => toggle(UNASSIGNED)}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+                  'hover:bg-accent',
+                )}
+              >
+                <div
+                  className={cn(
+                    'flex size-4 shrink-0 items-center justify-center rounded-sm border',
+                    selectedSet.has(UNASSIGNED)
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-input',
+                  )}
+                  aria-hidden
+                >
+                  {selectedSet.has(UNASSIGNED) ? (
+                    <Check className="size-3" />
+                  ) : null}
+                </div>
+                <span className="min-w-0 flex-1 italic text-muted-foreground">
+                  Unassigned
                 </span>
                 <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-                  {byAssignee.get(a.id) ?? 0}
+                  {unassignedCount}
                 </span>
-              </span>
-            )
-          }}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={ALL_ASSIGNEES}>
-          <span className="flex w-full items-center justify-between gap-3">
-            <span>All assignees</span>
-            <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-              {totalCount}
-            </span>
-          </span>
-        </SelectItem>
-        {onboarded.length > 0 ? (
-          <SelectGroup>
-            <SelectLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Onboarded
-            </SelectLabel>
-            {onboarded.map(renderOption)}
-          </SelectGroup>
-        ) : null}
-        {offboarded.length > 0 ? (
-          <>
-            <SelectSeparator />
-            <SelectGroup>
-              <SelectLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Offboarded
-              </SelectLabel>
-              {offboarded.map(renderOption)}
-            </SelectGroup>
-          </>
-        ) : null}
-        <SelectSeparator />
-        <SelectItem value={UNASSIGNED}>
-          <span className="flex w-full items-center justify-between gap-3">
-            <span className="italic text-muted-foreground">Unassigned</span>
-            <span className="shrink-0 rounded bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-muted-foreground">
-              {unassignedCount}
-            </span>
-          </span>
-        </SelectItem>
-      </SelectContent>
-    </Select>
+              </button>
+            </div>
+          ) : null}
+          {onboarded.length === 0 && offboarded.length === 0 && !showUnassigned ? (
+            <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+              No matches.
+            </p>
+          ) : null}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
