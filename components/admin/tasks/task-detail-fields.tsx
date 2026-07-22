@@ -14,7 +14,7 @@
 //  - The bare read view mimics the read-only design in 4.1 so
 //    swapping between the two feels continuous.
 
-import { CalendarDays, Check, Pencil, X } from 'lucide-react'
+import { CalendarDays, Check, Pencil, Repeat2, X } from 'lucide-react'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
@@ -302,6 +302,45 @@ export function EditableStatus({
         ))}
       </SelectContent>
     </Select>
+  )
+}
+
+export function EditableRecurring({ task, onSaved }: CommonProps) {
+  const [, startSave] = useTransition()
+
+  function toggle() {
+    const next = !task.isRecurring
+    startSave(async () => {
+      const res = await updateTaskAction(task.id, { isRecurring: next })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not update recurring flag')
+        return
+      }
+      onSaved({ isRecurring: next })
+    })
+  }
+
+  const label = task.isRecurring
+    ? 'Recurring — a fresh copy will be created when this is completed'
+    : 'Mark as recurring — a fresh copy will spawn when this task is completed'
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title={label}
+      aria-label={label}
+      aria-pressed={task.isRecurring}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap transition-colors',
+        task.isRecurring
+          ? 'border-sky-500/40 bg-sky-500/10 text-sky-700 hover:bg-sky-500/15'
+          : 'border-transparent bg-transparent text-muted-foreground hover:bg-muted/60',
+      )}
+    >
+      <Repeat2 className="size-3.5" aria-hidden />
+      Recurring
+    </button>
   )
 }
 

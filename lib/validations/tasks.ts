@@ -75,6 +75,7 @@ export const createTaskSchema = z.object({
   assigneeIds: z.array(z.string().uuid()).max(50).optional().default([]),
   watcherIds: z.array(z.string().uuid()).max(100).optional().default([]),
   labelIds: z.array(z.string().uuid()).max(50).optional().default([]),
+  isRecurring: z.boolean().optional().default(false),
 })
 export type CreateTaskInput = z.input<typeof createTaskSchema>
 export type CreateTaskOutput = z.output<typeof createTaskSchema>
@@ -99,6 +100,7 @@ export const updateTaskSchema = z.object({
   assigneeIds: z.array(z.string().uuid()).max(50).optional(),
   watcherIds: z.array(z.string().uuid()).max(100).optional(),
   labelIds: z.array(z.string().uuid()).max(50).optional(),
+  isRecurring: z.boolean().optional(),
 })
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>
 export type UpdateTaskOutput = z.output<typeof updateTaskSchema>

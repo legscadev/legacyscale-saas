@@ -42,6 +42,7 @@ import {
   EditableDescription,
   EditableHours,
   EditablePriority,
+  EditableRecurring,
   EditableStatus,
   EditableTitle,
 } from './task-detail-fields'
@@ -245,6 +246,7 @@ function EditableBody({
           categories={categories}
           onSaved={onPatch}
         />
+        <EditableRecurring task={task} onSaved={onPatch} />
       </div>
 
       <Section label="Description">

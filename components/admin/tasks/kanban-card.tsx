@@ -7,7 +7,7 @@
 
 import { isPast } from 'date-fns'
 import { forwardRef } from 'react'
-import { CalendarDays, MessageSquare, Paperclip } from 'lucide-react'
+import { CalendarDays, MessageSquare, Paperclip, Repeat2 } from 'lucide-react'
 
 import { AvatarGroup } from '@/components/shared/avatar-group'
 import { fmtCalendarDateShort } from '@/lib/format'
@@ -58,9 +58,17 @@ export const KanbanCard = forwardRef<HTMLDivElement, KanbanCardProps>(
         )}
       >
         <div className="flex items-start justify-between gap-2">
-          <p className="line-clamp-2 text-sm font-medium leading-snug">
-            {task.title}
-          </p>
+          <div className="flex min-w-0 items-start gap-1.5">
+            {task.isRecurring ? (
+              <Repeat2
+                className="mt-0.5 size-3.5 shrink-0 text-sky-600"
+                aria-label="Recurring — spawns a fresh copy when completed"
+              />
+            ) : null}
+            <p className="line-clamp-2 text-sm font-medium leading-snug">
+              {task.title}
+            </p>
+          </div>
           <PriorityPill priority={task.priority} className="shrink-0" />
         </div>
 

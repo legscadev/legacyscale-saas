@@ -1630,6 +1630,12 @@ model Task {
   /// out its subtasks — a common accidental foot-gun.
   parentTaskId  String?      @map("parent_task_id")
 
+  /// Marks the task as a recurring template. On transition to a
+  /// terminal status the service clones a fresh copy (also flagged
+  /// recurring) into the first non-terminal status so the next
+  /// instance is ready without any manual work.
+  isRecurring   Boolean      @default(false) @map("is_recurring")
+
   startDate     DateTime?    @map("start_date") @db.Date
   dueDate       DateTime?    @map("due_date") @db.Date
   estimatedHours Decimal?    @map("estimated_hours") @db.Decimal(8, 2)

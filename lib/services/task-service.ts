@@ -82,6 +82,7 @@ export interface TaskListItem {
   subtaskCount: number
   checklistTotal: number
   checklistDone: number
+  isRecurring: boolean
   archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
@@ -213,6 +214,7 @@ function mapListRow(t: TaskWithIncludes): TaskListItem {
     subtaskCount: t._count.subtasks,
     checklistTotal,
     checklistDone,
+    isRecurring: t.isRecurring,
     archivedAt: t.archivedAt,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
@@ -421,6 +423,7 @@ class TaskService {
         dueDate: input.dueDate ?? null,
         estimatedHours: input.estimatedHours ?? null,
         orderIndex,
+        isRecurring: input.isRecurring,
         // Nested creates aren't touched by the tenancy extension —
         // stamp companyId explicitly on every join row.
         assignees: {
@@ -468,6 +471,7 @@ class TaskService {
         priority: true,
         categoryId: true,
         dueDate: true,
+        isRecurring: true,
         assignees: { select: { userId: true } },
         watchers: { select: { userId: true } },
         labels: { select: { labelId: true } },
@@ -487,6 +491,23 @@ class TaskService {
     }
     if (input.actualHours !== undefined) data.actualHours = input.actualHours
     if (input.orderIndex !== undefined) data.orderIndex = input.orderIndex
+    if (input.isRecurring !== undefined) data.isRecurring = input.isRecurring
+
+    // Same terminal-transition semantics as changeStatus: if the
+    // final state is "recurring task hitting terminal", spawn a
+    // fresh instance and clear the flag on the completed row.
+    let shouldSpawn = false
+    if (input.statusId !== undefined && input.statusId !== existing.statusId) {
+      const target = await prisma.taskStatus.findFirst({
+        where: { id: input.statusId },
+        select: { isTerminal: true },
+      })
+      const effectiveRecurring = input.isRecurring ?? existing.isRecurring
+      if (target?.isTerminal && effectiveRecurring) {
+        shouldSpawn = true
+        data.isRecurring = false
+      }
+    }
 
     if (input.statusId !== undefined) {
       data.status = { connect: { id: input.statusId } }
@@ -650,6 +671,10 @@ class TaskService {
       }
     }, { timeout: 15_000 })
 
+    if (shouldSpawn) {
+      await this.spawnRecurringInstance(id, actorId)
+    }
+
     return this.get(id)
   }
 
@@ -774,6 +799,13 @@ class TaskService {
    * Dedicated status transition. Cheap path for drag-drop — updates
    * statusId + orderIndex without touching the rest of the task.
    * Falls back to `nextOrderIndex` when position isn't specified.
+   *
+   * Recurring flag: when a task with `isRecurring=true` transitions
+   * into a terminal status, the service clones it (also flagged
+   * recurring) into the first non-terminal status so the next
+   * instance is queued up automatically. The completed task's own
+   * flag is cleared to prevent double-spawning if it's later
+   * reopened.
    */
   async changeStatus(
     id: string,
@@ -784,17 +816,36 @@ class TaskService {
     const companyId = await requireCompanyId()
     const existing = await prisma.task.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, statusId: true },
+      select: { id: true, statusId: true, isRecurring: true },
     })
     if (!existing) throw new TaskNotFoundError('Task not found')
+
+    const targetStatus = await prisma.taskStatus.findFirst({
+      where: { id: statusId },
+      select: { id: true, isTerminal: true },
+    })
+    if (!targetStatus) throw new Error('Target status not found')
 
     const finalOrderIndex =
       orderIndex ?? (await nextOrderIndex(companyId, statusId))
 
+    const shouldSpawn =
+      targetStatus.isTerminal &&
+      existing.isRecurring &&
+      statusId !== existing.statusId
+
     await prisma.task.update({
       where: { id },
-      data: { statusId, orderIndex: finalOrderIndex },
+      data: {
+        statusId,
+        orderIndex: finalOrderIndex,
+        ...(shouldSpawn ? { isRecurring: false } : {}),
+      },
     })
+
+    if (shouldSpawn) {
+      await this.spawnRecurringInstance(id, actorId)
+    }
 
     if (statusId !== existing.statusId) {
       await logDiffIfChanged({
@@ -817,6 +868,75 @@ class TaskService {
       })
     }
     return this.get(id)
+  }
+
+  /**
+   * Clone a recurring task into the tenant's first non-terminal
+   * status so the next instance is ready to work. Preserves core
+   * fields + assignees/watchers/labels; skips comments, checklists,
+   * attachments, subtasks. The clone inherits `isRecurring=true`
+   * so it self-perpetuates.
+   */
+  private async spawnRecurringInstance(
+    sourceId: string,
+    actorId: string | null,
+  ): Promise<void> {
+    const companyId = await requireCompanyId()
+    const src = await prisma.task.findFirst({
+      where: { id: sourceId, deletedAt: null },
+      include: {
+        assignees: { select: { userId: true } },
+        watchers: { select: { userId: true } },
+        labels: { select: { labelId: true } },
+      },
+    })
+    if (!src) return
+
+    const target = await prisma.taskStatus.findFirst({
+      where: { isTerminal: false },
+      orderBy: { orderIndex: 'asc' },
+      select: { id: true },
+    })
+    if (!target) return
+
+    const orderIndex = await nextOrderIndex(companyId, target.id)
+
+    const clone = await prisma.task.create({
+      data: {
+        title: src.title,
+        description: src.description,
+        statusId: target.id,
+        priority: src.priority,
+        categoryId: src.categoryId,
+        parentTaskId: src.parentTaskId,
+        reporterId: src.reporterId,
+        startDate: src.startDate,
+        dueDate: src.dueDate,
+        estimatedHours: src.estimatedHours,
+        orderIndex,
+        isRecurring: true,
+        assignees: {
+          create: src.assignees.map((a) => ({ userId: a.userId, companyId })),
+        },
+        watchers: {
+          create: src.watchers.map((w) => ({ userId: w.userId, companyId })),
+        },
+        labels: {
+          create: src.labels.map((l) => ({ labelId: l.labelId, companyId })),
+        },
+      },
+      select: { id: true },
+    })
+
+    await taskActivityService.logEvent({
+      taskId: clone.id,
+      actorId,
+      action: 'created',
+      toValue: {
+        spawnedFromRecurringId: sourceId,
+        title: src.title,
+      },
+    })
   }
 }
 
