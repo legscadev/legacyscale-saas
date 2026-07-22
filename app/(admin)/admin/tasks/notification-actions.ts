@@ -3,10 +3,14 @@
 // Notification-only actions kept in a separate file from
 // tasks/actions.ts so the top-bar bell dropdown doesn't drag the
 // full workspace surface into every admin page's bundle.
+//
+// Gated on the same "tasks" module grant as the workspace itself
+// so TEAM users with tasks access also get their notifications
+// (assigned, unassigned, comments, status changes, watcher adds).
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import {
   taskNotificationService,
   type TaskNotificationRow,
@@ -26,7 +30,7 @@ export async function fetchTaskNotificationsAction(): Promise<
   | { ok: true; data: NotificationBellPayload }
   | { ok: false; error: string }
 > {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     const [unread, items] = await Promise.all([
       taskNotificationService.countUnread(user.id),
@@ -45,7 +49,7 @@ export async function fetchTaskNotificationsAction(): Promise<
 export async function markNotificationsReadAction(
   ids: string[],
 ): Promise<{ ok: true; data: { count: number } } | { ok: false; error: string }> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     const count = await taskNotificationService.markRead(user.id, ids)
     revalidatePath('/admin', 'layout')
@@ -61,7 +65,7 @@ export async function markNotificationsReadAction(
 export async function markAllNotificationsReadAction(): Promise<
   { ok: true; data: { count: number } } | { ok: false; error: string }
 > {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess('tasks')
   try {
     const count = await taskNotificationService.markAllRead(user.id)
     revalidatePath('/admin', 'layout')

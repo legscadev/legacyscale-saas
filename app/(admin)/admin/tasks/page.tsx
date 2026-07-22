@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamOrAdmin } from '@/lib/auth/get-user'
 import { TasksShell } from '@/components/admin/tasks/tasks-shell'
 
 import { fetchTaskWorkspaceAction } from './actions'
@@ -45,8 +45,23 @@ interface AdminTasksPageProps {
 export default async function AdminTasksPage({
   searchParams,
 }: AdminTasksPageProps) {
-  await requireAdmin()
+  // TEAM users have their own view at /team/tasks — send them
+  // there with the query params intact so bookmarks and inbound
+  // /admin/tasks?task=… links still land somewhere useful instead
+  // of hitting a hard redirect to /dashboard.
+  const viewer = await requireTeamOrAdmin()
   const raw = await searchParams
+  if (viewer.role !== 'ADMIN') {
+    const qs = new URLSearchParams()
+    for (const [key, value] of Object.entries(raw)) {
+      if (value === undefined) continue
+      if (Array.isArray(value)) value.forEach((v) => qs.append(key, v))
+      else qs.set(key, value)
+    }
+    const suffix = qs.toString()
+    redirect(suffix ? `/team/tasks?${suffix}` : '/team/tasks')
+  }
+
   const filters = parseFiltersFromSearchParams(raw)
 
   // Board is the default view — lift the page cap + force

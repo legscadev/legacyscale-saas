@@ -6,7 +6,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import {
   taskWorkflowAdminService,
   LastStatusError,
@@ -75,7 +75,7 @@ export interface WorkflowSettingsPayload {
 export async function fetchWorkflowSettingsAction(): Promise<
   Result<WorkflowSettingsPayload>
 > {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   try {
     const [statuses, categories, labels] = await Promise.all([
       taskWorkflowAdminService.listStatuses(),
@@ -95,7 +95,7 @@ export async function fetchWorkflowSettingsAction(): Promise<
 export async function upsertStatusAction(
   input: Record<string, unknown>,
 ): Promise<Result<StatusListItem>> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   const parsed = upsertStatusSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -110,7 +110,7 @@ export async function upsertStatusAction(
 }
 
 export async function deleteStatusAction(id: string): Promise<Result> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   try {
     await taskWorkflowAdminService.deleteStatus(id)
     revalidateAll()
@@ -123,7 +123,7 @@ export async function deleteStatusAction(id: string): Promise<Result> {
 export async function reorderStatusesAction(
   ids: string[],
 ): Promise<Result> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   try {
     await taskWorkflowAdminService.reorderStatuses(ids)
     revalidateAll()
@@ -140,7 +140,7 @@ export async function reorderStatusesAction(
 export async function upsertCategoryAction(
   input: Record<string, unknown>,
 ): Promise<Result<CategoryListItem>> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   const parsed = upsertCategorySchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -155,7 +155,7 @@ export async function upsertCategoryAction(
 }
 
 export async function deleteCategoryAction(id: string): Promise<Result> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   try {
     await taskWorkflowAdminService.deleteCategory(id)
     revalidateAll()
@@ -172,7 +172,7 @@ export async function deleteCategoryAction(id: string): Promise<Result> {
 export async function upsertLabelAction(
   input: Record<string, unknown>,
 ): Promise<Result<LabelListItem>> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   const parsed = upsertLabelSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -187,7 +187,7 @@ export async function upsertLabelAction(
 }
 
 export async function deleteLabelAction(id: string): Promise<Result> {
-  await requireAdmin()
+  await requireTeamModuleAccess('tasks')
   try {
     await taskWorkflowAdminService.deleteLabel(id)
     revalidateAll()
