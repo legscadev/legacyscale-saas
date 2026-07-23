@@ -14,6 +14,8 @@ const PUBLIC_PREFIXES = [
   '/maintenance',
   '/prototype', // static UI mockups (no auth)
   '/manifest.webmanifest', // per-tenant PWA manifest — no secrets
+  '/privacy', // public legal pages — must be reachable pre-signup
+  '/terms',
 ]
 
 // ────────────────────────────────────────────
