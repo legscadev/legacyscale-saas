@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import { PageHeader } from '@/components/shared'
 import {
   Tabs,
@@ -108,6 +110,29 @@ export default async function AdminSettingsPage() {
           />
         </TabsContent>
       </Tabs>
+
+      <div className="border-t pt-4 text-xs text-muted-foreground">
+        <span className="font-medium uppercase tracking-wider">Legal</span>
+        <span className="ml-3">
+          <Link
+            href="/privacy"
+            className="underline-offset-2 hover:text-foreground hover:underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Privacy Policy
+          </Link>
+          <span className="mx-2 text-muted-foreground/60">·</span>
+          <Link
+            href="/terms"
+            className="underline-offset-2 hover:text-foreground hover:underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Terms of Service
+          </Link>
+        </span>
+      </div>
     </div>
   )
 }

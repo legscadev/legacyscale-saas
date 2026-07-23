@@ -78,10 +78,16 @@ export function MarketingFooter() {
         <div className="mt-16 flex flex-col items-start justify-between gap-4 pt-8 text-xs text-white/40 sm:flex-row sm:items-center">
           <div>© {new Date().getFullYear()} Kondense. All rights reserved.</div>
           <div className="flex items-center gap-6">
-            <Link href="#" className="transition-colors hover:text-white/70">
+            <Link
+              href="/privacy"
+              className="transition-colors hover:text-white/70"
+            >
               Privacy
             </Link>
-            <Link href="#" className="transition-colors hover:text-white/70">
+            <Link
+              href="/terms"
+              className="transition-colors hover:text-white/70"
+            >
               Terms
             </Link>
           </div>
