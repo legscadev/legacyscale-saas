@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { User } from 'lucide-react'
+import { LineChart, Table as TableIcon, User } from 'lucide-react'
 
 import {
   Dialog,
@@ -10,9 +10,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 import { MetricChart } from './metric-chart'
+import { MetricsTableView } from './metrics-table-view'
 import { formatMetricValue } from '@/lib/format/stat'
 import type { MetricUnit } from '@/lib/format/stat'
+import type { StatMetricRow } from '@/lib/services/stat-tracker-service'
+
+type DetailView = 'chart' | 'table'
 
 interface MetricDetailDialogProps {
   open: boolean
@@ -31,6 +36,12 @@ interface MetricDetailDialogProps {
    *  inside the modal. */
   initialFromDate: string | null
   initialToDate: string | null
+  /** Full metric row — powers the per-metric Table view (month
+   *  grid with editable day cells). The chart view uses the
+   *  scalar props above. */
+  metric: StatMetricRow
+  currentUserId: string
+  currentUserIsAdmin: boolean
 }
 
 /**
@@ -50,9 +61,13 @@ export function MetricDetailDialog({
   allPoints,
   initialFromDate,
   initialToDate,
+  metric,
+  currentUserId,
+  currentUserIsAdmin,
 }: MetricDetailDialogProps) {
   const [fromDate, setFromDate] = useState<string>(initialFromDate ?? '')
   const [toDate, setToDate] = useState<string>(initialToDate ?? '')
+  const [view, setView] = useState<DetailView>('chart')
 
   // Re-seed the modal's local range whenever a fresh open flips the
   // target metric so it always starts from the page's current range.
@@ -120,14 +135,52 @@ export function MetricDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[90vh] max-h-[90vh] flex-col sm:max-w-4xl">
         <DialogHeader className="shrink-0">
-          <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            <span className="rounded bg-muted px-1.5 py-0.5">
-              {divisionLabel}
-            </span>
-            <span className="flex items-center gap-1">
-              <User className="size-3" />
-              {assigneeName ?? 'Unassigned'}
-            </span>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="rounded bg-muted px-1.5 py-0.5">
+                {divisionLabel}
+              </span>
+              <span className="flex items-center gap-1">
+                <User className="size-3" />
+                {assigneeName ?? 'Unassigned'}
+              </span>
+            </div>
+            <div
+              role="tablist"
+              aria-label="View mode"
+              className="mr-8 inline-flex overflow-hidden rounded-md border bg-background shadow-xs"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === 'chart'}
+                onClick={() => setView('chart')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium transition-colors',
+                  view === 'chart'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <LineChart className="size-3.5" />
+                Chart
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === 'table'}
+                onClick={() => setView('table')}
+                className={cn(
+                  'inline-flex items-center gap-1.5 border-l px-2.5 py-1 text-xs font-medium transition-colors',
+                  view === 'table'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <TableIcon className="size-3.5" />
+                Table
+              </button>
+            </div>
           </div>
           <DialogTitle className="text-xl">{name}</DialogTitle>
           {description ? (
@@ -135,6 +188,19 @@ export function MetricDetailDialog({
           ) : null}
         </DialogHeader>
 
+        {view === 'table' ? (
+          /* Table view — full-height month grid for this metric alone.
+             Reuses MetricsTableView with a single-metric array so
+             mutations still flow through the shared upsert path. */
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <MetricsTableView
+              metrics={[metric]}
+              currentUserId={currentUserId}
+              currentUserIsAdmin={currentUserIsAdmin}
+            />
+          </div>
+        ) : (
+        <>
         {/* Summary + range controls stay compact so the chart takes
             the rest of the modal. */}
         <div className="shrink-0 space-y-3">
@@ -224,6 +290,8 @@ export function MetricDetailDialog({
             fillHeight
           />
         </div>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   )

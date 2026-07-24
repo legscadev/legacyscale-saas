@@ -237,6 +237,9 @@ export function MetricCard({
         allPoints={metric.dataPoints}
         initialFromDate={fromDate}
         initialToDate={toDate}
+        metric={metric}
+        currentUserId={currentUserId}
+        currentUserIsAdmin={currentUserIsAdmin}
       />
 
       <ManageValuesDialog
