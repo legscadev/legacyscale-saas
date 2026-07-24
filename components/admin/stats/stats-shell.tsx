@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { BarChart3, Check, MoreVertical, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { BarChart3, Check, LayoutGrid, MoreVertical, Pencil, Plus, Search, Table as TableIcon, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -35,6 +35,7 @@ import { deleteDivisionAction } from '@/app/(admin)/admin/stats/actions'
 import { DivisionDialog } from './division-dialog'
 import { MetricDialog } from './metric-dialog'
 import { MetricCard } from './metric-card'
+import { MetricsTableView } from './metrics-table-view'
 import type {
   AssigneePickerOption,
 } from '@/app/(admin)/admin/stats/actions'
@@ -49,6 +50,8 @@ const ALL_GROUPS = '__all__'
  *  assignee. Sits alongside real Employee.id values in the multi-
  *  select set so "Alice + Unassigned" is one selection. */
 const UNASSIGNED = '__unassigned__'
+
+type ViewMode = 'cards' | 'table'
 
 interface StatsShellProps {
   currentUserId: string
@@ -100,6 +103,19 @@ export function StatsShell({
   )
   const [search, setSearch] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
+  const [view, setView] = useState<ViewMode>(() => {
+    const raw = searchParams?.get('view')
+    return raw === 'table' ? 'table' : 'cards'
+  })
+
+  function setViewMode(next: ViewMode) {
+    setView(next)
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    if (next === 'cards') params.delete('view')
+    else params.set('view', next)
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
   // Default the date range to today on both sides so the board opens
   // showing "what got recorded today." Users can widen with a preset
   // chip or a manual From/To pick.
@@ -254,6 +270,42 @@ export function StatsShell({
               scopedGroupId={selectedGroupId}
             />
           ) : null}
+          <div
+            role="tablist"
+            aria-label="View mode"
+            className="inline-flex overflow-hidden rounded-md border bg-background shadow-xs"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'cards'}
+              onClick={() => setViewMode('cards')}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                view === 'cards'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <LayoutGrid className="size-3.5" />
+              Cards
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'table'}
+              onClick={() => setViewMode('table')}
+              className={cn(
+                'inline-flex items-center gap-1.5 border-l px-3 py-1.5 text-xs font-medium transition-colors',
+                view === 'table'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              <TableIcon className="size-3.5" />
+              Table
+            </button>
+          </div>
           {currentUserIsAdmin ? (
             <Button onClick={() => setCreatingDivision(true)}>
               <Plus />
@@ -434,7 +486,7 @@ export function StatsShell({
               </div>
             )}
 
-          {/* Grid */}
+          {/* Grid / Table */}
           {filteredMetrics.length === 0 ? (
             <EmptyState
               icon={BarChart3}
@@ -450,6 +502,13 @@ export function StatsShell({
                     : 'An admin needs to add metrics before values can be recorded.'
                   : 'Clear the search or "Only mine" filter to widen the view.'
               }
+            />
+          ) : view === 'table' ? (
+            <MetricsTableView
+              metrics={filteredMetrics}
+              currentUserId={currentUserId}
+              currentUserIsAdmin={currentUserIsAdmin}
+              onChanged={() => router.refresh()}
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -48,9 +48,14 @@ export async function fetchDivisionMetrics(
   return listMetricsForDivision(divisionId)
 }
 
+/** Points window covers ~2 months so the monthly table view can
+ *  show the current + previous month without a second fetch. The
+ *  chart view still uses the first 26 (reverse-chronological order
+ *  matches the sparkline's oldest-first layout after `shapeMetricRow`
+ *  reverses). */
 export async function fetchAllMetrics(): Promise<StatMetricRow[]> {
   await requireActiveUser()
-  return listAllMetrics()
+  return listAllMetrics(62)
 }
 
 // ─── WRITE — admin only ────────────────────────────────────────
