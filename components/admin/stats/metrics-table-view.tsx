@@ -234,11 +234,11 @@ export function MetricsTableView({
 
       <div className="overflow-x-auto rounded-lg border bg-card">
         <table className="min-w-full border-collapse text-sm">
-          <thead className="bg-muted/40">
+          <thead className="bg-muted">
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 z-20 min-w-[16rem] border-b bg-muted/40 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                className="sticky left-0 z-20 min-w-[16rem] border-b bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
                 Metric
               </th>
