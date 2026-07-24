@@ -1023,8 +1023,15 @@ export function CourseBuilder({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-4">
+      {/* Course builder is a two-pane layout at any width. On
+          narrow viewports the inner grid keeps its full desktop
+          size (~960px) and the wrapper horizontal-scrolls rather
+          than collapsing into a stacked mobile layout — the
+          drag-and-drop chapter tree doesn't work well when the
+          sidebar sits below it. */}
+      <div className="-mx-4 overflow-x-auto sm:-mx-6 lg:mx-0">
+        <div className="grid min-w-[960px] grid-cols-[1fr_320px] gap-6 px-4 sm:px-6 lg:px-0">
+          <div className="space-y-4">
           {modules.length === 0 && chapters.length === 0 ? (
             <EmptyState
               icon={Layers}
@@ -1196,6 +1203,7 @@ export function CourseBuilder({
             </Link>
           </Card>
         </aside>
+        </div>
       </div>
 
       <LessonEditorDialog
