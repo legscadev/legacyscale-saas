@@ -13,6 +13,7 @@
 // navigates (their layout re-reads grants on next request).
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   teamAccessService,
   TeamAccessTargetError,
@@ -65,6 +66,13 @@ export async function grantModuleAccessAction(input: {
       moduleKey: input.moduleKey,
       grantedById: admin.id,
     })
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'access.grant',
+      resourceType: 'teamModuleGrant',
+      resourceId: input.targetUserId,
+      summary: `Granted ${input.moduleKey} access to user ${input.targetUserId}`,
+    })
     return { ok: true, data }
   } catch (err) {
     return toErr(err, 'Could not grant access')
@@ -81,6 +89,13 @@ export async function revokeModuleAccessAction(input: {
       targetUserId: input.targetUserId,
       moduleKey: input.moduleKey,
       revokedById: admin.id,
+    })
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'access.revoke',
+      resourceType: 'teamModuleGrant',
+      resourceId: input.targetUserId,
+      summary: `Revoked ${input.moduleKey} access from user ${input.targetUserId}`,
     })
     return { ok: true, data: undefined }
   } catch (err) {

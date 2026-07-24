@@ -2,6 +2,7 @@
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { createNudge } from '@/lib/services/nudge-service'
 
 export interface NudgeCoursePickerOption {
@@ -46,5 +47,13 @@ export async function sendNudgeAction(
     message,
   })
   if (!result.ok) return result
+  await writeAuditLog({
+    actorId: admin.id,
+    action: 'nudge.send',
+    resourceType: 'user',
+    resourceId: memberId,
+    summary: `Sent nudge to member ${memberId}${courseId ? ` (course ${courseId})` : ''}`,
+    metadata: { courseId, message },
+  })
   return { ok: true, emailed: result.emailed }
 }

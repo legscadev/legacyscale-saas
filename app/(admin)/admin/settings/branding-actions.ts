@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { brandingInputSchema, type BrandingInput } from '@/lib/branding/schema'
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -146,13 +147,20 @@ export async function uploadBrandingAssetAction(
  * BrandingCard a way out.
  */
 export async function clearBrandingAction(): Promise<BrandingSaveResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
   const company = await getActiveCompany()
   if (!company) return { ok: false, error: 'No active company.' }
   try {
     await prisma.company.update({
       where: { id: company.id },
       data: { brand: Prisma.DbNull as unknown as Prisma.InputJsonValue },
+    })
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'settings.branding.clear',
+      resourceType: 'company',
+      resourceId: company.id,
+      summary: 'Reset branding to platform defaults',
     })
     revalidatePath('/', 'layout')
     return { ok: true }
@@ -184,7 +192,7 @@ export async function getCurrentBrandingAction(): Promise<BrandingInput | null> 
 export async function updateBrandingAction(
   formData: FormData,
 ): Promise<BrandingSaveResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
   const company = await getActiveCompany()
   if (!company) {
     return {
@@ -282,6 +290,13 @@ export async function updateBrandingAction(
     // whole layout tree so the sidebar / <title> / favicon pick up
     // the change on the next request.
     revalidatePath('/', 'layout')
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'settings.branding.update',
+      resourceType: 'company',
+      resourceId: company.id,
+      summary: 'Updated tenant branding',
+    })
     return { ok: true }
   } catch (err) {
     console.error('updateBrandingAction failed:', err)

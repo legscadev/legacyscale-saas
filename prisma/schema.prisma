@@ -234,6 +234,7 @@ model User {
   announcementAuditLogs AnnouncementAuditLog[]
   invites               Invite[]
   loginEvents           LoginEvent[]
+  auditLogEntries       AuditLog[]             @relation("AuditLogActor")
   appSettingsUpdated    AppSetting[]           @relation("AppSettingUpdater")
   certificateIssuances  CertificateIssuance[]
   certsManuallyIssued   CertificateIssuance[]  @relation("CertsManuallyIssued")
@@ -561,6 +562,44 @@ model LoginEvent {
   @@index([userId, loginAt])
   @@index([companyId, userId, loginAt])
   @@map("login_events")
+}
+
+/// Cross-domain audit trail. Existing per-module logs
+/// (TaskActivityLog, PolicyActivityLog, OrgNodeAuditLog,
+/// AnnouncementAuditLog, LoginEvent) stay as source of truth for
+/// their domains — this table captures everything else that
+/// mutates state and matters to an admin: member CRUD, settings
+/// changes, course structure edits, membership tier edits,
+/// employee onboarding lifecycle, certificate issuance/revoke,
+/// etc. The /admin/activity feed unions all of the above.
+///
+/// `action` is a dot-namespaced token ("member.create",
+/// "settings.branding.update") so filters + reports can group
+/// naturally. `metadata` is optional structured detail for
+/// diffs; the UI shows `summary` as the human-readable one-liner.
+model AuditLog {
+  id           String   @id @default(uuid())
+  /// Nullable — system-triggered actions (background jobs,
+  /// automations) have no human actor. SetNull on user delete so
+  /// the audit trail survives account cleanup.
+  actorId      String?  @map("actor_id")
+  action       String
+  resourceType String   @map("resource_type")
+  /// Optional — actions that don't map to a single row
+  /// (e.g. bulk import) leave this null.
+  resourceId   String?  @map("resource_id")
+  summary      String
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
 }
 
 // ============================================

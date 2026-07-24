@@ -7,6 +7,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   taskWorkflowAdminService,
   LastStatusError,
@@ -95,13 +96,20 @@ export async function fetchWorkflowSettingsAction(): Promise<
 export async function upsertStatusAction(
   input: Record<string, unknown>,
 ): Promise<Result<StatusListItem>> {
-  await requireTeamModuleAccess('tasks')
+  const actor = await requireTeamModuleAccess('tasks')
   const parsed = upsertStatusSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
   }
   try {
     const data = await taskWorkflowAdminService.upsertStatus(parsed.data)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: parsed.data.id ? 'workflow.status.update' : 'workflow.status.create',
+      resourceType: 'taskStatus',
+      resourceId: data.id,
+      summary: `${parsed.data.id ? 'Updated' : 'Created'} task status "${data.name}"`,
+    })
     revalidateAll()
     return { ok: true, data }
   } catch (err) {
@@ -110,9 +118,16 @@ export async function upsertStatusAction(
 }
 
 export async function deleteStatusAction(id: string): Promise<Result> {
-  await requireTeamModuleAccess('tasks')
+  const actor = await requireTeamModuleAccess('tasks')
   try {
     await taskWorkflowAdminService.deleteStatus(id)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'workflow.status.delete',
+      resourceType: 'taskStatus',
+      resourceId: id,
+      summary: `Deleted task status ${id}`,
+    })
     revalidateAll()
     return { ok: true, data: undefined }
   } catch (err) {
@@ -123,9 +138,16 @@ export async function deleteStatusAction(id: string): Promise<Result> {
 export async function reorderStatusesAction(
   ids: string[],
 ): Promise<Result> {
-  await requireTeamModuleAccess('tasks')
+  const actor = await requireTeamModuleAccess('tasks')
   try {
     await taskWorkflowAdminService.reorderStatuses(ids)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'workflow.status.reorder',
+      resourceType: 'taskStatus',
+      resourceId: null,
+      summary: `Reordered ${ids.length} task statuses`,
+    })
     revalidateAll()
     return { ok: true, data: undefined }
   } catch (err) {
@@ -140,13 +162,20 @@ export async function reorderStatusesAction(
 export async function upsertCategoryAction(
   input: Record<string, unknown>,
 ): Promise<Result<CategoryListItem>> {
-  await requireTeamModuleAccess('tasks')
+  const actor = await requireTeamModuleAccess('tasks')
   const parsed = upsertCategorySchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
   }
   try {
     const data = await taskWorkflowAdminService.upsertCategory(parsed.data)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: parsed.data.id ? 'workflow.category.update' : 'workflow.category.create',
+      resourceType: 'taskCategory',
+      resourceId: data.id,
+      summary: `${parsed.data.id ? 'Updated' : 'Created'} task category "${data.name}"`,
+    })
     revalidateAll()
     return { ok: true, data }
   } catch (err) {
@@ -155,9 +184,16 @@ export async function upsertCategoryAction(
 }
 
 export async function deleteCategoryAction(id: string): Promise<Result> {
-  await requireTeamModuleAccess('tasks')
+  const actor = await requireTeamModuleAccess('tasks')
   try {
     await taskWorkflowAdminService.deleteCategory(id)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'workflow.category.delete',
+      resourceType: 'taskCategory',
+      resourceId: id,
+      summary: `Deleted task category ${id}`,
+    })
     revalidateAll()
     return { ok: true, data: undefined }
   } catch (err) {
@@ -172,13 +208,20 @@ export async function deleteCategoryAction(id: string): Promise<Result> {
 export async function upsertLabelAction(
   input: Record<string, unknown>,
 ): Promise<Result<LabelListItem>> {
-  await requireTeamModuleAccess('tasks')
+  const actor = await requireTeamModuleAccess('tasks')
   const parsed = upsertLabelSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
   }
   try {
     const data = await taskWorkflowAdminService.upsertLabel(parsed.data)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: parsed.data.id ? 'workflow.label.update' : 'workflow.label.create',
+      resourceType: 'taskLabel',
+      resourceId: data.id,
+      summary: `${parsed.data.id ? 'Updated' : 'Created'} task label "${data.name}"`,
+    })
     revalidateAll()
     return { ok: true, data }
   } catch (err) {
@@ -187,9 +230,16 @@ export async function upsertLabelAction(
 }
 
 export async function deleteLabelAction(id: string): Promise<Result> {
-  await requireTeamModuleAccess('tasks')
+  const actor = await requireTeamModuleAccess('tasks')
   try {
     await taskWorkflowAdminService.deleteLabel(id)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'workflow.label.delete',
+      resourceType: 'taskLabel',
+      resourceId: id,
+      summary: `Deleted task label ${id}`,
+    })
     revalidateAll()
     return { ok: true, data: undefined }
   } catch (err) {

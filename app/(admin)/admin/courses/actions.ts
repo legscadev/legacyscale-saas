@@ -5,6 +5,7 @@ import type { CourseAudience, CourseStatus } from '@prisma/client'
 import { z } from 'zod'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   courseService,
   type CourseCounts,
@@ -267,6 +268,15 @@ export async function createCourseAction(
   // different extension (e.g. the admin replaced jpg with png mid-flow).
   await cleanupStaleImages(courseId, imageResolve.usedPaths)
 
+  await writeAuditLog({
+    actorId: admin.id,
+    action: parsed.data.audience === 'INTERNAL' ? 'training.create' : 'course.create',
+    resourceType: 'course',
+    resourceId: course.id,
+    summary: `Created ${parsed.data.audience === 'INTERNAL' ? 'training' : 'course'} "${parsed.data.title}"`,
+    metadata: { status: parsed.data.status, audience: parsed.data.audience },
+  })
+
   revalidatePath('/admin/courses')
   return { ok: true, id: course.id }
 }
@@ -373,7 +383,7 @@ export async function updateCourseAction(
   courseId: string,
   formData: FormData,
 ): Promise<UpdateCourseResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   // Only forward fields the form actually sent. Partial saves (e.g.
   // the builder sidebar's debounced description-only update) must not
@@ -434,7 +444,15 @@ export async function updateCourseAction(
   }
 
   try {
-    await courseService.update(courseId, update)
+    const updated = await courseService.update(courseId, update)
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'course.update',
+      resourceType: 'course',
+      resourceId: courseId,
+      summary: `Updated course "${updated.title}"`,
+      metadata: parsed.data as Record<string, unknown>,
+    })
   } catch (err) {
     console.error('Course update failed:', err)
     return { ok: false, error: 'Could not update course' }
@@ -475,9 +493,16 @@ export interface SimpleResult {
 export async function softDeleteCourseAction(
   courseId: string,
 ): Promise<SimpleResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
   try {
     await courseService.softDelete(courseId)
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'course.delete',
+      resourceType: 'course',
+      resourceId: courseId,
+      summary: `Deleted course ${courseId}`,
+    })
     revalidatePath('/admin/courses')
     return { ok: true }
   } catch (err) {
