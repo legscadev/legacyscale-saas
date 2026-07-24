@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   MemberEmailConflictError,
   provisionMemberWithInvite,
@@ -20,7 +21,7 @@ function emailConflictResponse() {
 }
 
 export async function POST(request: NextRequest) {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   const validation = await validateBody(request, adminCreateMemberSchema)
   if (validation.error) return validation.error
@@ -33,6 +34,14 @@ export async function POST(request: NextRequest) {
       email,
       role,
       membershipId,
+    })
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'member.create',
+      resourceType: 'user',
+      resourceId: member.id,
+      summary: `Invited ${email} as ${role}`,
+      metadata: { role, membershipId: membershipId ?? null },
     })
     return successResponse({ member }, 201)
   } catch (err) {

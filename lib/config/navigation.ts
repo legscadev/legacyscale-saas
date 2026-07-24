@@ -6,6 +6,7 @@ import {
   BookText,
   Building2,
   CheckSquare,
+  ClipboardList,
   GraduationCap,
   LayoutDashboard,
   type LucideIcon,
@@ -89,7 +90,10 @@ export const adminNav: NavSection[] = [
   },
   {
     label: 'System',
-    items: [{ label: 'Settings', href: '/admin/settings', icon: Settings }],
+    items: [
+      { label: 'Activity log', href: '/admin/activity', icon: ClipboardList },
+      { label: 'Settings', href: '/admin/settings', icon: Settings },
+    ],
   },
 ]
 

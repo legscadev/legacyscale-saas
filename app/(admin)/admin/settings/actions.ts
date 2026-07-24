@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { testDiscordWebhook } from '@/lib/discord'
 import {
   getRawSetting,
@@ -64,6 +65,15 @@ async function updateWebhookSetting(
   try {
     const next = parsed.data.webhookUrl.trim()
     await setSetting(key, next === '' ? null : next, admin.id)
+    await writeAuditLog({
+      actorId: admin.id,
+      action: next === '' ? 'settings.webhook.clear' : 'settings.webhook.update',
+      resourceType: 'setting',
+      resourceId: key,
+      summary: next === ''
+        ? `Cleared webhook: ${key}`
+        : `Updated webhook: ${key}`,
+    })
     revalidatePath('/admin/settings')
     return { ok: true }
   } catch (err) {

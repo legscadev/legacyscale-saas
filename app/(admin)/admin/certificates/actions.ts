@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { prisma } from '@/lib/prisma'
 import { memberTenantScope } from '@/lib/tenancy/request-company'
 import {
@@ -48,16 +49,35 @@ export async function revokeCertificateAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const admin = await requireAdmin()
   const result = await revokeCertificate(admin.id, issuanceId, reason)
-  if (result.ok) revalidatePath('/admin/certificates')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'certificate.revoke',
+      resourceType: 'certificateIssuance',
+      resourceId: issuanceId,
+      summary: `Revoked certificate ${issuanceId}`,
+      metadata: { reason },
+    })
+    revalidatePath('/admin/certificates')
+  }
   return result
 }
 
 export async function reinstateCertificateAction(
   issuanceId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin()
+  const admin = await requireAdmin()
   const result = await reinstateCertificate(issuanceId)
-  if (result.ok) revalidatePath('/admin/certificates')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'certificate.reinstate',
+      resourceType: 'certificateIssuance',
+      resourceId: issuanceId,
+      summary: `Reinstated certificate ${issuanceId}`,
+    })
+    revalidatePath('/admin/certificates')
+  }
   return result
 }
 
@@ -67,7 +87,17 @@ export async function issueCertificateAction(
 ): Promise<{ ok: true; issuanceId: string } | { ok: false; error: string }> {
   const admin = await requireAdmin()
   const result = await manuallyIssueCertificate(admin.id, { userId, moduleId })
-  if (result.ok) revalidatePath('/admin/certificates')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'certificate.issue',
+      resourceType: 'certificateIssuance',
+      resourceId: result.issuanceId,
+      summary: `Manually issued certificate to user ${userId}`,
+      metadata: { userId, moduleId },
+    })
+    revalidatePath('/admin/certificates')
+  }
   return result
 }
 
@@ -82,6 +112,14 @@ export async function issueCertificatesBulkAction(
   const admin = await requireAdmin()
   const result = await manuallyIssueBulkCertificates(admin.id, userId, moduleIds)
   if (result.ok && result.issuedCount > 0) {
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'certificate.issue_bulk',
+      resourceType: 'user',
+      resourceId: userId,
+      summary: `Bulk-issued ${result.issuedCount} certificate(s) to user ${userId}`,
+      metadata: { moduleIds, issuedCount: result.issuedCount },
+    })
     revalidatePath('/admin/certificates')
   }
   return result

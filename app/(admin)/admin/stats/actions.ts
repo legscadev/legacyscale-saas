@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { requireActiveUser } from '@/lib/auth'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { prisma } from '@/lib/prisma'
 import { memberTenantScope } from '@/lib/tenancy/request-company'
 import {
@@ -63,9 +64,18 @@ export async function fetchAllMetrics(): Promise<StatMetricRow[]> {
 export async function createDivisionAction(
   input: CreateDivisionInput,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  await requireTeamModuleAccess('stats')
+  const actor = await requireTeamModuleAccess('stats')
   const result = await createDivision(input)
-  if (result.ok) revalidatePath('/admin/stats')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.division.create',
+      resourceType: 'statDivision',
+      resourceId: result.id,
+      summary: `Created stat group "${input.name}"`,
+    })
+    revalidatePath('/admin/stats')
+  }
   return result
 }
 
@@ -73,36 +83,73 @@ export async function updateDivisionAction(
   id: string,
   input: UpdateDivisionInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireTeamModuleAccess('stats')
+  const actor = await requireTeamModuleAccess('stats')
   const result = await updateDivision(id, input)
-  if (result.ok) revalidatePath('/admin/stats')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.division.update',
+      resourceType: 'statDivision',
+      resourceId: id,
+      summary: `Updated stat group ${id}`,
+      metadata: input as Record<string, unknown>,
+    })
+    revalidatePath('/admin/stats')
+  }
   return result
 }
 
 export async function archiveDivisionAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireTeamModuleAccess('stats')
+  const actor = await requireTeamModuleAccess('stats')
   const result = await archiveDivision(id)
-  if (result.ok) revalidatePath('/admin/stats')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.division.archive',
+      resourceType: 'statDivision',
+      resourceId: id,
+      summary: `Archived stat group ${id}`,
+    })
+    revalidatePath('/admin/stats')
+  }
   return result
 }
 
 export async function deleteDivisionAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireTeamModuleAccess('stats')
+  const actor = await requireTeamModuleAccess('stats')
   const result = await deleteDivision(id)
-  if (result.ok) revalidatePath('/admin/stats')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.division.delete',
+      resourceType: 'statDivision',
+      resourceId: id,
+      summary: `Deleted stat group ${id}`,
+    })
+    revalidatePath('/admin/stats')
+  }
   return result
 }
 
 export async function createMetricAction(
   input: CreateMetricInput,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  await requireTeamModuleAccess('stats')
+  const actor = await requireTeamModuleAccess('stats')
   const result = await createMetric(input)
-  if (result.ok) revalidatePath('/admin/stats')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.metric.create',
+      resourceType: 'statMetric',
+      resourceId: result.id,
+      summary: `Created metric "${input.name}"`,
+    })
+    revalidatePath('/admin/stats')
+  }
   return result
 }
 
@@ -110,27 +157,55 @@ export async function updateMetricAction(
   id: string,
   input: UpdateMetricInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireTeamModuleAccess('stats')
+  const actor = await requireTeamModuleAccess('stats')
   const result = await updateMetric(id, input)
-  if (result.ok) revalidatePath('/admin/stats')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.metric.update',
+      resourceType: 'statMetric',
+      resourceId: id,
+      summary: `Updated metric ${id}`,
+      metadata: input as Record<string, unknown>,
+    })
+    revalidatePath('/admin/stats')
+  }
   return result
 }
 
 export async function archiveMetricAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireTeamModuleAccess('stats')
+  const actor = await requireTeamModuleAccess('stats')
   const result = await archiveMetric(id)
-  if (result.ok) revalidatePath('/admin/stats')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.metric.archive',
+      resourceType: 'statMetric',
+      resourceId: id,
+      summary: `Archived metric ${id}`,
+    })
+    revalidatePath('/admin/stats')
+  }
   return result
 }
 
 export async function deleteMetricAction(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireTeamModuleAccess('stats')
+  const actor = await requireTeamModuleAccess('stats')
   const result = await deleteMetric(id)
-  if (result.ok) revalidatePath('/admin/stats')
+  if (result.ok) {
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.metric.delete',
+      resourceType: 'statMetric',
+      resourceId: id,
+      summary: `Deleted metric ${id}`,
+    })
+    revalidatePath('/admin/stats')
+  }
   return result
 }
 

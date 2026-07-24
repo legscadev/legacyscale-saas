@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   employeeService,
   MemberEmailConflictError,
@@ -31,10 +32,17 @@ export async function searchLinkableUsersAction(query: string) {
 }
 
 export async function createEmployeeAction(input: CreateEmployeeInput) {
-  await requireTeamModuleAccess('onboarding')
+  const actor = await requireTeamModuleAccess('onboarding')
   const parsed = createEmployeeSchema.parse(input)
   try {
     const employee = await employeeService.create(parsed)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'employee.create',
+      resourceType: 'employee',
+      resourceId: employee.id,
+      summary: `Added employee "${employee.name}" (${employee.roleTitle})`,
+    })
     revalidatePath('/admin/onboarding')
     return employee
   } catch (err) {
@@ -52,9 +60,17 @@ export async function updateEmployeeAction(
   id: string,
   input: UpdateEmployeeInput,
 ) {
-  await requireTeamModuleAccess('onboarding')
+  const actor = await requireTeamModuleAccess('onboarding')
   const parsed = updateEmployeeSchema.parse(input)
   const employee = await employeeService.update(id, parsed)
+  await writeAuditLog({
+    actorId: actor.id,
+    action: 'employee.update',
+    resourceType: 'employee',
+    resourceId: id,
+    summary: `Updated employee "${employee.name}"`,
+    metadata: parsed as Record<string, unknown>,
+  })
   revalidatePath('/admin/onboarding')
   revalidatePath(`/admin/onboarding/${id}`)
   return employee
@@ -64,12 +80,23 @@ export async function offboardEmployeeAction(
   id: string,
   input: OffboardEmployeeInput,
 ) {
-  await requireTeamModuleAccess('onboarding')
+  const actor = await requireTeamModuleAccess('onboarding')
   const parsed = offboardEmployeeSchema.parse(input)
   // The refine on `offboardingDate` guarantees non-null after parse.
   const employee = await employeeService.offboard(id, {
     offboardingDate: parsed.offboardingDate!,
     notes: parsed.notes ?? undefined,
+  })
+  await writeAuditLog({
+    actorId: actor.id,
+    action: 'employee.offboard',
+    resourceType: 'employee',
+    resourceId: id,
+    summary: `Offboarded ${employee.name}`,
+    metadata: {
+      offboardingDate: parsed.offboardingDate,
+      notes: parsed.notes ?? null,
+    },
   })
   revalidatePath('/admin/onboarding')
   revalidatePath(`/admin/onboarding/${id}`)
@@ -77,16 +104,30 @@ export async function offboardEmployeeAction(
 }
 
 export async function reactivateEmployeeAction(id: string) {
-  await requireTeamModuleAccess('onboarding')
+  const actor = await requireTeamModuleAccess('onboarding')
   const employee = await employeeService.reactivate(id)
+  await writeAuditLog({
+    actorId: actor.id,
+    action: 'employee.reactivate',
+    resourceType: 'employee',
+    resourceId: id,
+    summary: `Reactivated ${employee.name}`,
+  })
   revalidatePath('/admin/onboarding')
   revalidatePath(`/admin/onboarding/${id}`)
   return employee
 }
 
 export async function deleteEmployeeAction(id: string) {
-  await requireTeamModuleAccess('onboarding')
+  const actor = await requireTeamModuleAccess('onboarding')
   await employeeService.delete(id)
+  await writeAuditLog({
+    actorId: actor.id,
+    action: 'employee.delete',
+    resourceType: 'employee',
+    resourceId: id,
+    summary: `Deleted employee record ${id}`,
+  })
   revalidatePath('/admin/onboarding')
 }
 

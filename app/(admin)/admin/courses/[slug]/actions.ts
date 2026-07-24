@@ -5,6 +5,7 @@ import { Prisma, type LessonStatus, type LessonType } from '@prisma/client'
 import { z } from 'zod'
 
 import { requireAdmin } from '@/lib/auth/get-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   chapterService,
   type ChapterListItem,
@@ -91,7 +92,7 @@ export async function createChapterAction(
   courseId: string,
   title = 'New chapter',
 ): Promise<CreateChapterResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   const parsed = createChapterSchema.safeParse({ courseId, title })
   if (!parsed.success) {
@@ -100,6 +101,13 @@ export async function createChapterAction(
 
   try {
     const chapter = await chapterService.create(parsed.data)
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'chapter.create',
+      resourceType: 'chapter',
+      resourceId: chapter.id,
+      summary: `Added chapter "${chapter.title}" to course ${courseId}`,
+    })
     revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, chapter }
   } catch (err) {
@@ -116,7 +124,7 @@ export async function updateChapterAction(
   chapterId: string,
   input: { title?: string; orderIndex?: number },
 ): Promise<UpdateChapterResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   const parsed = updateChapterSchema.safeParse(input)
   if (!parsed.success) {
@@ -125,6 +133,17 @@ export async function updateChapterAction(
 
   try {
     const chapter = await chapterService.update(chapterId, parsed.data)
+    // Skip logging pure reorder pings (orderIndex-only updates fire
+    // during drag). Only title renames are worth an audit row.
+    if (parsed.data.title !== undefined) {
+      await writeAuditLog({
+        actorId: admin.id,
+        action: 'chapter.update',
+        resourceType: 'chapter',
+        resourceId: chapterId,
+        summary: `Renamed chapter to "${chapter.title}"`,
+      })
+    }
     revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, chapter }
   } catch (err) {
@@ -147,9 +166,16 @@ export async function deleteChapterAction(
   chapterId: string,
   _courseId: string,
 ): Promise<BaseResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
   try {
     await chapterService.delete(chapterId)
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'chapter.delete',
+      resourceType: 'chapter',
+      resourceId: chapterId,
+      summary: `Deleted chapter ${chapterId}`,
+    })
     revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {
@@ -198,7 +224,7 @@ export async function createLessonAction(
   chapterId: string,
   type: LessonType,
 ): Promise<CreateLessonResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   const typeParsed = lessonTypeSchema.safeParse(type)
   if (!typeParsed.success) {
@@ -220,6 +246,13 @@ export async function createLessonAction(
       chapterId: parsed.data.chapterId,
       type: parsed.data.type,
     })
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'lesson.create',
+      resourceType: 'lesson',
+      resourceId: lesson.id,
+      summary: `Added ${type} lesson to chapter ${chapterId}`,
+    })
     revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, lesson }
   } catch (err) {
@@ -233,7 +266,7 @@ export async function updateLessonAction(
   lessonId: string,
   input: { title?: string; orderIndex?: number },
 ): Promise<UpdateLessonResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
 
   // Only the fields supported by the inline rename / reorder flow are
   // accepted here; the rich lesson editor (Phase D/E) will own the
@@ -247,6 +280,15 @@ export async function updateLessonAction(
 
   try {
     const lesson = await lessonService.update(lessonId, parsed.data)
+    if (parsed.data.title !== undefined) {
+      await writeAuditLog({
+        actorId: admin.id,
+        action: 'lesson.update',
+        resourceType: 'lesson',
+        resourceId: lessonId,
+        summary: `Renamed lesson to "${lesson.title}"`,
+      })
+    }
     revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true, lesson }
   } catch (err) {
@@ -265,9 +307,16 @@ export async function deleteLessonAction(
   courseId: string,
   lessonId: string,
 ): Promise<BaseResult> {
-  await requireAdmin()
+  const admin = await requireAdmin()
   try {
     await lessonService.delete(lessonId)
+    await writeAuditLog({
+      actorId: admin.id,
+      action: 'lesson.delete',
+      resourceType: 'lesson',
+      resourceId: lessonId,
+      summary: `Deleted lesson ${lessonId}`,
+    })
     revalidatePath('/admin/courses/[slug]', 'page')
     return { ok: true }
   } catch (err) {

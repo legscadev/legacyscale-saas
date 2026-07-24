@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 
 import { requireAdmin } from '@/lib/auth/get-user'
 import { syncRoleToAuthMetadata } from '@/lib/auth/sync-user'
+import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -120,6 +121,42 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           500,
         )
       }
+    }
+
+    // One audit-log row per PATCH — the summary rolls up whichever
+    // fields actually changed. Password resets get their own line
+    // because they're the highest-impact action.
+    const parts: string[] = []
+    if (name !== undefined) parts.push(`name → ${name}`)
+    if (role !== undefined) parts.push(`role → ${role}`)
+    if (isActive !== undefined) parts.push(`active → ${isActive}`)
+    if (membershipId !== undefined) {
+      parts.push(`membership → ${user.membership?.name ?? 'none'}`)
+    }
+    if (archive === true) parts.push('archived')
+    if (archive === false) parts.push('restored')
+    if (parts.length > 0) {
+      await writeAuditLog({
+        actorId: admin.id,
+        action: archive === true
+          ? 'member.archive'
+          : archive === false
+            ? 'member.restore'
+            : 'member.update',
+        resourceType: 'user',
+        resourceId: user.id,
+        summary: `${user.name ?? user.email}: ${parts.join(', ')}`,
+        metadata: { fields: parts },
+      })
+    }
+    if (password !== undefined) {
+      await writeAuditLog({
+        actorId: admin.id,
+        action: 'member.password_reset',
+        resourceType: 'user',
+        resourceId: user.id,
+        summary: `Reset password for ${user.email}`,
+      })
     }
 
     return successResponse({
