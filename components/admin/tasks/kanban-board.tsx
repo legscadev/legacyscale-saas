@@ -330,31 +330,6 @@ export function KanbanBoard({
     }
   }
 
-  // Translate vertical mouse-wheel into horizontal scroll on the
-  // board strip — desktop users without a horizontal-swipe input
-  // otherwise can't pan without grabbing the scrollbar. Only fires
-  // for actual mouse wheels; touchpad two-finger scrolling is left
-  // alone so the page + board pan naturally.
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
-    const el = scrollRef.current
-    if (!el) return
-    // Skip: no delta, browser already handles shift+wheel as
-    // horizontal, touchpad already sending horizontal delta, or
-    // there's nothing to horizontally scroll.
-    if (e.deltaY === 0 || e.shiftKey || e.deltaX !== 0) return
-    if (el.scrollWidth <= el.clientWidth) return
-    // Touchpad heuristic: two-finger swipes deliver pixel-precise
-    // (deltaMode=0) deltas in small chunks (~2–40 px). Mouse
-    // wheels either use line/page mode (deltaMode > 0) or fire
-    // chunky deltas of ~100+ per notch. If it looks like touchpad,
-    // leave it alone — the user meant to scroll the page.
-    const looksLikeTouchpad = e.deltaMode === 0 && Math.abs(e.deltaY) < 50
-    if (looksLikeTouchpad) return
-    el.scrollLeft += e.deltaY
-    e.preventDefault()
-  }
-
   if (columns.length === 0) {
     return (
       <EmptyState
@@ -374,11 +349,7 @@ export function KanbanBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div
-        ref={scrollRef}
-        onWheel={handleWheel}
-        className="-mx-2 overflow-x-auto pb-2"
-      >
+      <div className="-mx-2 overflow-x-auto pb-2">
         <div className="flex min-w-full gap-3 px-2">
           {columns.map((col) => (
             <KanbanColumn
