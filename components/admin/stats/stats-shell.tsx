@@ -359,61 +359,66 @@ export function StatsShell({
 
               {/* Date range — filters every card's chart + latest
                   value to the selected window. Empty inputs = no
-                  bound; the quick presets set both sides at once. */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Date range:</span>
-                <Input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  aria-label="From date"
-                  className="h-8 w-auto"
-                />
-                <span className="text-muted-foreground">→</span>
-                <Input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  aria-label="To date"
-                  className="h-8 w-auto"
-                />
-                <div className="flex items-center gap-1">
-                  <DateRangeChip
-                    label="Today"
-                    active={activePreset === 'today'}
-                    onClick={applyToday}
+                  bound; the quick presets set both sides at once.
+                  Hidden in Table view: the table has its own month
+                  picker and reading a data-point date range doesn't
+                  compose with a month-grid layout. */}
+              {view === 'cards' ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Date range:</span>
+                  <Input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    aria-label="From date"
+                    className="h-8 w-auto"
                   />
-                  <DateRangeChip
-                    label="7d"
-                    active={activePreset === '7d'}
-                    onClick={() => applyRangePreset(7)}
+                  <span className="text-muted-foreground">→</span>
+                  <Input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    aria-label="To date"
+                    className="h-8 w-auto"
                   />
-                  <DateRangeChip
-                    label="30d"
-                    active={activePreset === '30d'}
-                    onClick={() => applyRangePreset(30)}
-                  />
-                  <DateRangeChip
-                    label="90d"
-                    active={activePreset === '90d'}
-                    onClick={() => applyRangePreset(90)}
-                  />
-                  <DateRangeChip
-                    label="YTD"
-                    active={activePreset === 'ytd'}
-                    onClick={() => applyYtdPreset()}
-                  />
-                  {fromDate || toDate ? (
+                  <div className="flex items-center gap-1">
                     <DateRangeChip
-                      label="Clear"
-                      onClick={() => {
-                        setFromDate('')
-                        setToDate('')
-                      }}
+                      label="Today"
+                      active={activePreset === 'today'}
+                      onClick={applyToday}
                     />
-                  ) : null}
+                    <DateRangeChip
+                      label="7d"
+                      active={activePreset === '7d'}
+                      onClick={() => applyRangePreset(7)}
+                    />
+                    <DateRangeChip
+                      label="30d"
+                      active={activePreset === '30d'}
+                      onClick={() => applyRangePreset(30)}
+                    />
+                    <DateRangeChip
+                      label="90d"
+                      active={activePreset === '90d'}
+                      onClick={() => applyRangePreset(90)}
+                    />
+                    <DateRangeChip
+                      label="YTD"
+                      active={activePreset === 'ytd'}
+                      onClick={() => applyYtdPreset()}
+                    />
+                    {fromDate || toDate ? (
+                      <DateRangeChip
+                        label="Clear"
+                        onClick={() => {
+                          setFromDate('')
+                          setToDate('')
+                        }}
+                      />
+                    ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
 
             {/* Group section header — only when a specific group
