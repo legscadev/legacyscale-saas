@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { BarChart3, Check, LayoutGrid, MoreVertical, Pencil, Plus, Search, Table as TableIcon, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -160,22 +160,29 @@ export function StatsShell({
 
   function selectGroup(id: string) {
     setSelectedGroupId(id)
-    // Keep the URL in sync so refreshes + deep-links land on the
-    // same view. `?division=…` stays; "all" strips it.
-    const params = new URLSearchParams(searchParams?.toString() ?? '')
-    if (id === ALL_GROUPS) params.delete('division')
-    else params.set('division', id)
+    // Filter state stays in React only — no URL sync. Group + assignee
+    // Employee ids in the address bar were noisy and leaked internal
+    // uuids; view mode (?view=table) is still tracked because it
+    // meaningfully changes the page layout.
+  }
+
+  // Old bookmarks still shipped ?division= / ?assignee= — the initial
+  // state above still consumes them so a stale link doesn't blank the
+  // filter, but strip them from the URL on mount so the address bar
+  // stays clean after landing.
+  useEffect(() => {
+    const raw = searchParams?.toString() ?? ''
+    if (!raw.includes('division=') && !raw.includes('assignee=')) return
+    const params = new URLSearchParams(raw)
+    params.delete('division')
+    params.delete('assignee')
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname)
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function setAssignees(ids: string[]) {
     setSelectedAssigneeIds(ids)
-    const params = new URLSearchParams(searchParams?.toString() ?? '')
-    if (ids.length === 0) params.delete('assignee')
-    else params.set('assignee', ids.join(','))
-    const qs = params.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
   // ─── DERIVED ────────────────────────────────────────────────
