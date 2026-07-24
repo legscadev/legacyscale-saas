@@ -94,7 +94,7 @@ export function getCourseColumns(
                 ) : null}
               </div>
               {c.description ? (
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="max-w-md truncate text-xs text-muted-foreground">
                   {htmlToPlainText(c.description)}
                 </p>
               ) : null}
