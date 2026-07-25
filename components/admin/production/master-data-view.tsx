@@ -6,6 +6,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -135,10 +139,27 @@ function MasterTable({ aggregates }: { aggregates: MonthlyAggregateRow[] }) {
 }
 
 function MasterCharts({ aggregates }: { aggregates: MonthlyAggregateRow[] }) {
+  // Chart-friendly derived shape. `showUpRate` is the demos-conducted /
+  // appointments-set ratio (0 when no appointments to avoid a
+  // divide-by-zero); `salesTarget` may be null when no target row
+  // exists for that (year, month).
   const chartData = aggregates.map((row) => ({
     month: `${MONTH_SHORT[row.month - 1]} ${String(row.year).slice(2)}`,
     phoneCalls: row.phoneCalls,
     dms: row.dms,
+    cellConnects: row.cellConnects,
+    appointmentsSet: row.appointmentsSet,
+    demosConducted: row.demosConducted,
+    introUnits: row.introUnits,
+    basisUnits: row.basisUnits,
+    majorUnits: row.majorUnits,
+    sales: row.sales,
+    collections: row.collections,
+    salesTarget: row.salesTarget,
+    showUpRate:
+      row.appointmentsSet > 0
+        ? Math.round((row.demosConducted / row.appointmentsSet) * 100)
+        : 0,
   }))
 
   return (
@@ -155,7 +176,7 @@ function MasterCharts({ aggregates }: { aggregates: MonthlyAggregateRow[] }) {
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Bar dataKey="phoneCalls" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="phoneCalls" name="Phone Calls" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -173,8 +194,139 @@ function MasterCharts({ aggregates }: { aggregates: MonthlyAggregateRow[] }) {
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Bar dataKey="dms" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="dms" name="DMs" fill="hsl(var(--chart-2))" radius={[4, 4, 0, 0]} />
             </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sales vs Collections</CardTitle>
+          <CardDescription>Revenue booked vs cash actually received.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
+              <Tooltip formatter={(v) => CURRENCY.format(Number(v))} />
+              <Legend />
+              <Bar dataKey="sales" name="Sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="collections" name="Collections" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity Funnel</CardTitle>
+          <CardDescription>
+            Calls → Connects → Appointments → Demos. Watch for the drop-off.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="phoneCalls" name="Phone Calls" fill="hsl(var(--primary))" />
+              <Bar dataKey="cellConnects" name="Cell Connects" fill="hsl(var(--chart-2))" />
+              <Bar dataKey="appointmentsSet" name="Appts Set" fill="hsl(var(--chart-3))" />
+              <Bar dataKey="demosConducted" name="Demos" fill="hsl(var(--chart-4))" />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Units Mix</CardTitle>
+          <CardDescription>Intro / Basis / Major units sold per month.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="introUnits" name="Intro" stackId="units" fill="hsl(var(--chart-2))" />
+              <Bar dataKey="basisUnits" name="Basis" stackId="units" fill="hsl(var(--chart-3))" />
+              <Bar dataKey="majorUnits" name="Major" stackId="units" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Show-up Rate</CardTitle>
+          <CardDescription>
+            Demos conducted as a % of appointments set.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis
+                tick={{ fontSize: 12 }}
+                domain={[0, 100]}
+                tickFormatter={(v) => `${v}%`}
+              />
+              <Tooltip formatter={(v) => `${v}%`} />
+              <Line
+                type="monotone"
+                dataKey="showUpRate"
+                name="Show-up %"
+                stroke="hsl(var(--primary))"
+                strokeWidth={2}
+                dot={{ r: 3 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle>Target vs Actual Sales</CardTitle>
+          <CardDescription>
+            Monthly sales against the target set for that month.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
+              <Tooltip formatter={(v) => CURRENCY.format(Number(v))} />
+              <Legend />
+              <Bar
+                dataKey="sales"
+                name="Actual"
+                fill="hsl(var(--primary))"
+                radius={[4, 4, 0, 0]}
+              />
+              <Line
+                type="monotone"
+                dataKey="salesTarget"
+                name="Target"
+                stroke="hsl(var(--chart-4))"
+                strokeWidth={2}
+                dot={{ r: 4 }}
+                connectNulls
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>

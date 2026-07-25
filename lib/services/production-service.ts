@@ -503,12 +503,17 @@ export interface MonthlyAggregateRow {
   majorUnits: number
   sales: number
   collections: number
+  /** Monthly sales target from ProductionTarget for this
+   *  (user, year, month), or null when none was set. Feeds the
+   *  Target-vs-Actual chart on the Master Data tab. */
+  salesTarget: number | null
 }
 
 /**
  * Roll up daily entries into monthly totals for the given user
  * across the last `months` months (inclusive of the current month).
- * Feeds the "Master Data" tab table + charts.
+ * Also joins in each month's monetary target so the Target-vs-Actual
+ * chart on the Master Data tab can render without a second fetch.
  */
 export async function listMonthlyAggregates(
   userId: string,
@@ -518,10 +523,19 @@ export async function listMonthlyAggregates(
   const start = new Date(
     Date.UTC(now.getFullYear(), now.getMonth() - (months - 1), 1),
   )
-  const rows = await prisma.productionEntry.findMany({
-    where: { userId, date: { gte: start } },
-    orderBy: { date: 'asc' },
-  })
+  const [entries, targets] = await Promise.all([
+    prisma.productionEntry.findMany({
+      where: { userId, date: { gte: start } },
+      orderBy: { date: 'asc' },
+    }),
+    prisma.productionTarget.findMany({
+      where: {
+        userId,
+        OR: buildTargetWindow(now, months),
+      },
+      select: { year: true, month: true, sales: true },
+    }),
+  ])
 
   const buckets = new Map<string, MonthlyAggregateRow>()
   for (let i = 0; i < months; i++) {
@@ -529,7 +543,7 @@ export async function listMonthlyAggregates(
     const key = `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`
     buckets.set(key, emptyAggregate(d.getUTCFullYear(), d.getUTCMonth() + 1))
   }
-  for (const r of rows) {
+  for (const r of entries) {
     const key = `${r.date.getUTCFullYear()}-${r.date.getUTCMonth() + 1}`
     const bucket = buckets.get(key)
     if (!bucket) continue
@@ -544,9 +558,29 @@ export async function listMonthlyAggregates(
     bucket.sales += Number(r.sales?.toString() ?? '0')
     bucket.collections += Number(r.collections?.toString() ?? '0')
   }
+  for (const t of targets) {
+    const bucket = buckets.get(`${t.year}-${t.month}`)
+    if (!bucket) continue
+    bucket.salesTarget = decimalToNumber(t.sales)
+  }
   return Array.from(buckets.values()).sort((a, b) =>
     a.year === b.year ? a.month - b.month : a.year - b.year,
   )
+}
+
+/** Build an OR clause covering (year, month) pairs for the last
+ *  `months` calendar months relative to `now`. Prisma has no
+ *  composite-in helper, so we hand-roll the union. */
+function buildTargetWindow(
+  now: Date,
+  months: number,
+): { year: number; month: number }[] {
+  const out: { year: number; month: number }[] = []
+  for (let i = 0; i < months; i++) {
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, 1))
+    out.push({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 })
+  }
+  return out
 }
 
 function emptyAggregate(year: number, month: number): MonthlyAggregateRow {
@@ -563,6 +597,7 @@ function emptyAggregate(year: number, month: number): MonthlyAggregateRow {
     majorUnits: 0,
     sales: 0,
     collections: 0,
+    salesTarget: null,
   }
 }
 
