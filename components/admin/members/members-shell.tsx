@@ -198,6 +198,9 @@ export function MembersShell({
 
   const editAllowedRoles =
     lockedRoles ?? (defaultRole ? [defaultRole] : undefined)
+  // Roles column only meaningful for staff (Team page). Student
+  // lens hides it — students don't hold custom roles today.
+  const showRolesColumn = defaultRole !== 'MEMBER'
   const columns = useMemo(
     () =>
       getMemberColumns(
@@ -206,8 +209,16 @@ export function MembersShell({
         data.sparklines,
         memberships,
         editAllowedRoles,
+        showRolesColumn,
       ),
-    [currentUserId, refetch, data.sparklines, memberships, editAllowedRoles],
+    [
+      currentUserId,
+      refetch,
+      data.sparklines,
+      memberships,
+      editAllowedRoles,
+      showRolesColumn,
+    ],
   )
 
   const selectedIds = Object.keys(rowSelection)

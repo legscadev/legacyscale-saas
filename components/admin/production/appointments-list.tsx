@@ -42,6 +42,10 @@ interface AppointmentsListProps {
   currentUserIsAdmin: boolean
   appointments: AppointmentRow[]
   loading: boolean
+  /** True in the "All users" aggregate view. Hides the Log +
+   *  edit affordances since we're browsing everyone's rows
+   *  without a specific target user to attribute writes to. */
+  readOnly?: boolean
   onChange: (rows: AppointmentRow[]) => void
 }
 
@@ -86,6 +90,7 @@ export function AppointmentsList({
   currentUserIsAdmin,
   appointments,
   loading,
+  readOnly = false,
   onChange,
 }: AppointmentsListProps) {
   const [editor, setEditor] = useState<EditorState>({ open: false, editing: null })
@@ -135,10 +140,12 @@ export function AppointmentsList({
             Prospects booked + outcome + revenue collected.
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Log Appointment
-        </Button>
+        {readOnly ? null : (
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Log Appointment
+          </Button>
+        )}
       </div>
 
       <div className={cn('rounded-lg border overflow-x-auto', loading && 'opacity-60')}>
@@ -192,14 +199,16 @@ export function AppointmentsList({
                     {formatMoney(a.monthlyPayment)}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => openEdit(a)}
-                      aria-label="Edit appointment"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    {readOnly ? null : (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => openEdit(a)}
+                        aria-label="Edit appointment"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

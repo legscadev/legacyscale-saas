@@ -24,7 +24,12 @@ import {
 } from '@/components/ui/select'
 import { PasswordInput } from '@/components/auth/password-input'
 import { nameSchema, passwordSchema } from '@/lib/validations/common'
-import { userRoleSchema } from '@/lib/validations/user'
+import {
+  fetchAvailableRolesAction,
+  fetchUserRolesAction,
+  setUserRolesAction,
+} from '@/app/(admin)/admin/team/actions'
+import type { RoleSummary } from '@/lib/services/role-service'
 import type { MembershipOption } from './members-shell'
 
 type UserRole = 'ADMIN' | 'TEAM' | 'MEMBER'
@@ -55,12 +60,15 @@ interface MemberEditDialogProps {
   allowedRoles?: UserRole[]
 }
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  MEMBER: 'Student',
-  TEAM: 'Internal Team',
-  ADMIN: 'Admin',
+/** Excluded from the picker — per-user shims from the old
+ *  TeamModuleGrant table shouldn't clutter the dropdown. */
+function isPickable(role: RoleSummary): boolean {
+  return !role.slug.startsWith('legacy-')
 }
-const ROLE_ORDER: UserRole[] = ['MEMBER', 'TEAM', 'ADMIN']
+
+function tierForRoleSlug(slug: string): UserRole {
+  return slug === 'admin' ? 'ADMIN' : 'TEAM'
+}
 
 function RequiredMark() {
   return (
@@ -79,20 +87,19 @@ export function MemberEditDialog({
   onSaved,
   allowedRoles,
 }: MemberEditDialogProps) {
-  // Filter the role list to the page's lens but always include the
-  // member's current role so it can't disappear from its own edit
-  // dialog.
-  const roleOptions = ROLE_ORDER.filter((r) =>
-    allowedRoles
-      ? allowedRoles.includes(r) || r === member.role
-      : true,
-  )
-  const showRoleField = roleOptions.length > 1
+  // Team lens (allowedRoles = [ADMIN, TEAM] or absent) shows the
+  // role picker; single-tier lens (Students → [MEMBER]) hides it.
+  const showRoleField =
+    !allowedRoles || allowedRoles.filter((r) => r !== 'MEMBER').length > 0
+
   const [name, setName] = useState(member.name ?? '')
   const [role, setRole] = useState<UserRole>(member.role)
   const [membershipId, setMembershipId] = useState<string | null>(
     member.membershipId,
   )
+  const [availableRoles, setAvailableRoles] = useState<RoleSummary[]>([])
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('')
+  const [rolesLoading, setRolesLoading] = useState(false)
   const [showPasswordFields, setShowPasswordFields] = useState(false)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -114,6 +121,41 @@ export function MemberEditDialog({
     }
   }, [open, member.id, member.name, member.role, member.membershipId])
 
+  // Fetch pickable custom roles + the member's current assignment
+  // when the dialog opens. Only when we're in a lens that shows the
+  // role picker.
+  useEffect(() => {
+    if (!open || !showRoleField) return
+    setRolesLoading(true)
+    void Promise.all([
+      fetchAvailableRolesAction(),
+      fetchUserRolesAction(member.id),
+    ]).then(([rolesRes, currentRes]) => {
+      setRolesLoading(false)
+      if (!rolesRes.ok) return
+      const pickable = rolesRes.data.filter(isPickable)
+      setAvailableRoles(pickable)
+
+      // Preselect: first current role assignment if any, else a
+      // sensible default derived from the member's tier.
+      let preselect = ''
+      if (currentRes.ok && currentRes.data.length > 0) {
+        const currentPickable = currentRes.data.find((a) =>
+          pickable.some((p) => p.id === a.roleId),
+        )
+        if (currentPickable) preselect = currentPickable.roleId
+      }
+      if (!preselect) {
+        const fallback =
+          member.role === 'ADMIN'
+            ? pickable.find((r) => r.slug === 'admin')
+            : pickable.find((r) => r.slug === 'internal-team') ?? pickable[0]
+        if (fallback) preselect = fallback.id
+      }
+      setSelectedRoleId(preselect)
+    })
+  }, [open, showRoleField, member.id, member.role])
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
@@ -125,9 +167,17 @@ export function MemberEditDialog({
     if (!parsedName.success) {
       errors.name = parsedName.error.issues.map((i) => i.message)
     }
-    const parsedRole = userRoleSchema.safeParse(role)
-    if (!parsedRole.success) {
-      errors.role = parsedRole.error.issues.map((i) => i.message)
+
+    // When the role picker is shown, derive tier from the selected
+    // custom role's slug. Otherwise keep the current tier.
+    let derivedRole: UserRole = role
+    if (showRoleField) {
+      if (!selectedRoleId) {
+        errors.role = ['Pick a role']
+      } else {
+        const picked = availableRoles.find((r) => r.id === selectedRoleId)
+        if (picked) derivedRole = tierForRoleSlug(picked.slug)
+      }
     }
 
     // Password block — only validated when the section is expanded.
@@ -156,11 +206,16 @@ export function MemberEditDialog({
       membershipId?: string | null
     } = {}
     if (parsedName.data !== member.name) body.name = parsedName.data
-    if (canChangeRole && role !== member.role) body.role = role
+    if (canChangeRole && derivedRole !== member.role) body.role = derivedRole
     if (parsedPassword !== undefined) body.password = parsedPassword
     if (membershipId !== member.membershipId) body.membershipId = membershipId
 
-    if (Object.keys(body).length === 0) {
+    // Role assignment is a separate call — always run it when the
+    // picker was shown so a role change without other edits still
+    // takes effect.
+    const shouldAssignRole = showRoleField && !!selectedRoleId
+
+    if (Object.keys(body).length === 0 && !shouldAssignRole) {
       // Nothing changed — just close.
       onOpenChange(false)
       return
@@ -168,25 +223,47 @@ export function MemberEditDialog({
 
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/admin/students/${member.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const json = await res.json()
-      if (!res.ok || !json.success) {
-        const details = json.error?.details
-        if (details && typeof details === 'object') {
-          setFieldErrors(details)
-        } else {
-          setError(json.error?.message ?? 'Failed to update member')
+      // If there are basic fields to update, hit the PATCH first.
+      // A pure role reassignment (empty body) skips this.
+      let updatedEmail = member.email
+      if (Object.keys(body).length > 0) {
+        const res = await fetch(`/api/admin/students/${member.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const json = await res.json()
+        if (!res.ok || !json.success) {
+          const details = json.error?.details
+          if (details && typeof details === 'object') {
+            setFieldErrors(details)
+          } else {
+            setError(json.error?.message ?? 'Failed to update member')
+          }
+          return
         }
-        return
+        updatedEmail = json.data.member.email
       }
+
+      // Assign the picked custom role. Only meaningful when the
+      // resulting tier is TEAM/ADMIN — MEMBER tier users don't
+      // hold custom roles today.
+      if (shouldAssignRole && derivedRole !== 'MEMBER') {
+        const assignRes = await setUserRolesAction({
+          targetUserId: member.id,
+          roleIds: [selectedRoleId],
+        })
+        if (!assignRes.ok) {
+          toast.error(
+            assignRes.error ?? 'Member updated but could not assign role',
+          )
+        }
+      }
+
       toast.success(
         body.password !== undefined
-          ? `Updated ${json.data.member.email} (password reset)`
-          : `Updated ${json.data.member.email}`,
+          ? `Updated ${updatedEmail} (password reset)`
+          : `Updated ${updatedEmail}`,
       )
       onSaved()
       onOpenChange(false)
@@ -250,21 +327,31 @@ export function MemberEditDialog({
 
           {showRoleField ? (
             <div className="space-y-2">
-              <Label htmlFor="edit-role">UserRole</Label>
+              <Label htmlFor="edit-role">Role</Label>
               <Select
-                value={role}
-                onValueChange={(v) => setRole((v as UserRole) ?? member.role)}
-                disabled={!canChangeRole}
+                value={selectedRoleId}
+                onValueChange={(v) => v && setSelectedRoleId(v)}
+                disabled={
+                  !canChangeRole || rolesLoading || availableRoles.length === 0
+                }
               >
                 <SelectTrigger className="w-full" id="edit-role">
                   <SelectValue>
-                    {(v: string) => ROLE_LABELS[v as UserRole] ?? ROLE_LABELS.MEMBER}
+                    {(v: string) =>
+                      availableRoles.find((r) => r.id === v)?.name ??
+                      (rolesLoading ? 'Loading roles…' : 'Pick a role')
+                    }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {roleOptions.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {ROLE_LABELS[r]}
+                  {availableRoles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                      {r.slug === 'admin' ? (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          Full access
+                        </span>
+                      ) : null}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -272,6 +359,11 @@ export function MemberEditDialog({
               {!canChangeRole && (
                 <p className="text-xs text-muted-foreground">
                   You can&apos;t change your own role.
+                </p>
+              )}
+              {fieldErrors.role?.[0] && (
+                <p className="text-xs text-destructive" role="alert">
+                  {fieldErrors.role[0]}
                 </p>
               )}
             </div>

@@ -102,8 +102,11 @@ export function getMemberColumns(
   sparklines: Record<string, number[]> = {},
   memberships: MembershipOption[] = [],
   allowedRoles?: ('ADMIN' | 'TEAM' | 'MEMBER')[],
+  /** Whether to include the custom-roles column. Team page → yes,
+   *  Students page → no (students don't hold custom roles). */
+  showRoles = true,
 ): ColumnDef<MemberListItem>[] {
-  return [
+  const cols: ColumnDef<MemberListItem>[] = [
     {
       id: 'select',
       header: ({ table }) => (
@@ -183,13 +186,6 @@ export function getMemberColumns(
           </div>
         )
       },
-    },
-    {
-      accessorKey: 'role',
-      header: 'Tier',
-      cell: ({ row }) => <StatusBadge status={row.original.role} />,
-      enableSorting: false,
-      meta: { label: 'Tier' },
     },
     {
       id: 'roles',
@@ -345,4 +341,5 @@ export function getMemberColumns(
       meta: { className: 'pr-4 w-14', stopRowClick: true },
     },
   ]
+  return showRoles ? cols : cols.filter((c) => c.id !== 'roles')
 }

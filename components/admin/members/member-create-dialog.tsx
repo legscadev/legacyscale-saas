@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Mail, User, UserPlus2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -23,6 +23,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
+import {
+  fetchAvailableRolesAction,
+  setUserRolesAction,
+} from '@/app/(admin)/admin/team/actions'
+import type { RoleSummary } from '@/lib/services/role-service'
 import type { MembershipOption } from './members-shell'
 
 type UserRole = 'ADMIN' | 'TEAM' | 'MEMBER'
@@ -41,22 +46,26 @@ interface MemberCreateDialogProps {
   onCreated: () => void
   /** Restrict the role picker to a subset (e.g. Team page uses
    *  [ADMIN, TEAM]). When the array collapses to a single role the
-   *  picker is hidden entirely. Defaults to every role. */
+   *  role picker is hidden entirely and the tier is fixed. */
   allowedRoles?: UserRole[]
-  /** Which role to pre-select. Defaults to the first entry in
-   *  allowedRoles, or MEMBER. */
+  /** Which tier to pre-select when the role picker is hidden.
+   *  Only used in single-role lenses (e.g. Students → MEMBER). */
   defaultRole?: UserRole
   /** Singular noun shown in the dialog title — defaults to
    *  "student". Team page overrides to "team member". */
   entityLabel?: string
 }
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  MEMBER: 'Student',
-  TEAM: 'Internal Team',
-  ADMIN: 'Admin',
+/** Excluded from the picker — these are per-user shims migrated
+ *  from the old TeamModuleGrant table and shouldn't clutter the
+ *  create/edit dropdown. */
+function isPickable(role: RoleSummary): boolean {
+  return !role.slug.startsWith('legacy-')
 }
-const ROLE_ORDER: UserRole[] = ['MEMBER', 'TEAM', 'ADMIN']
+
+function tierForRoleSlug(slug: string): UserRole {
+  return slug === 'admin' ? 'ADMIN' : 'TEAM'
+}
 
 function RequiredMark() {
   return (
@@ -75,27 +84,43 @@ export function MemberCreateDialog({
   defaultRole,
   entityLabel = 'student',
 }: MemberCreateDialogProps) {
-  const roleOptions = ROLE_ORDER.filter((r) =>
-    allowedRoles ? allowedRoles.includes(r) : true,
-  )
-  const initialRole: UserRole =
-    defaultRole && roleOptions.includes(defaultRole)
-      ? defaultRole
-      : (roleOptions[0] ?? 'MEMBER')
-  const showRoleField = roleOptions.length > 1
+  // Team lens shows the role picker (ADMIN + TEAM + optionally
+  // MEMBER). Student lens (allowedRoles=[MEMBER]) hides it —
+  // students don't get custom roles at creation.
+  const showRoleField = !allowedRoles || allowedRoles.length > 1
+  const fixedTier: UserRole =
+    defaultRole ?? (allowedRoles && allowedRoles.length === 1 ? allowedRoles[0]! : 'MEMBER')
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<UserRole>(initialRole)
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('')
+  const [availableRoles, setAvailableRoles] = useState<RoleSummary[]>([])
+  const [rolesLoading, setRolesLoading] = useState(false)
   const [membershipId, setMembershipId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
+  useEffect(() => {
+    if (!open || !showRoleField) return
+    setRolesLoading(true)
+    fetchAvailableRolesAction().then((res) => {
+      setRolesLoading(false)
+      if (!res.ok) return
+      const pickable = res.data.filter(isPickable)
+      setAvailableRoles(pickable)
+      // Preselect the first non-admin role as a sensible default
+      // (avoids granting Admin tier by accident).
+      const preferred =
+        pickable.find((r) => r.slug === 'internal-team') ?? pickable[0]
+      if (preferred) setSelectedRoleId(preferred.id)
+    })
+  }, [open, showRoleField])
+
   const reset = () => {
     setName('')
     setEmail('')
-    setRole(initialRole)
+    setSelectedRoleId(availableRoles[0]?.id ?? '')
     setMembershipId(null)
     setError(null)
     setFieldErrors({})
@@ -107,19 +132,31 @@ export function MemberCreateDialog({
     onOpenChange(next)
   }
 
+  const derivedTier: UserRole = showRoleField
+    ? (availableRoles.find((r) => r.id === selectedRoleId)
+        ? tierForRoleSlug(
+            availableRoles.find((r) => r.id === selectedRoleId)!.slug,
+          )
+        : 'TEAM')
+    : fixedTier
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
     setFieldErrors({})
 
-    // Category only applies to MEMBER role — admins/team bypass the gate.
-    const payloadMembershipId = role === 'MEMBER' ? membershipId : null
+    if (showRoleField && !selectedRoleId) {
+      setFieldErrors({ role: ['Pick a role'] })
+      return
+    }
 
-    // Client-side Zod validation — same schema the API uses.
+    // Membership only applies to MEMBER tier.
+    const payloadMembershipId = derivedTier === 'MEMBER' ? membershipId : null
+
     const parsed = adminCreateMemberSchema.safeParse({
       name,
       email,
-      role,
+      role: derivedTier,
       membershipId: payloadMembershipId,
     })
     if (!parsed.success) {
@@ -157,6 +194,22 @@ export function MemberCreateDialog({
         }
         return
       }
+
+      // Assign the picked custom role. Only meaningful for TEAM
+      // tier (MEMBER users don't hold roles today; ADMIN bypasses
+      // the gate but still gets the assignment for consistency).
+      if (showRoleField && selectedRoleId && derivedTier !== 'MEMBER') {
+        const assignRes = await setUserRolesAction({
+          targetUserId: json.data.member.id,
+          roleIds: [selectedRoleId],
+        })
+        if (!assignRes.ok) {
+          toast.error(
+            assignRes.error ?? 'Member created but could not assign role',
+          )
+        }
+      }
+
       toast.success(`Invite sent to ${json.data.member.email}`, {
         description: 'They have 7 days to set their password.',
       })
@@ -237,32 +290,52 @@ export function MemberCreateDialog({
 
           {showRoleField ? (
             <div className="space-y-2">
-              <Label htmlFor="member-role">UserRole</Label>
+              <Label htmlFor="member-role">
+                Role
+                <RequiredMark />
+              </Label>
               <Select
-                value={role}
-                onValueChange={(v) => setRole((v as UserRole) ?? initialRole)}
+                value={selectedRoleId}
+                onValueChange={(v) => v && setSelectedRoleId(v)}
+                disabled={rolesLoading || availableRoles.length === 0}
               >
                 <SelectTrigger className="w-full" id="member-role">
                   <SelectValue>
-                    {(v: string) => ROLE_LABELS[v as UserRole] ?? ROLE_LABELS.MEMBER}
+                    {(v: string) =>
+                      availableRoles.find((r) => r.id === v)?.name ??
+                      (rolesLoading ? 'Loading roles…' : 'Pick a role')
+                    }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {roleOptions.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {ROLE_LABELS[r]}
+                  {availableRoles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                      {r.slug === 'admin' ? (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          Full access
+                        </span>
+                      ) : null}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Determines which modules the user can reach. Manage roles
+                on the <a href="/admin/roles" className="underline">Roles</a> page.
+              </p>
+              {fieldErrors.role?.[0] && (
+                <p className="text-xs text-destructive" role="alert">
+                  {fieldErrors.role[0]}
+                </p>
+              )}
             </div>
           ) : (
-            // Single-role lens (e.g. /admin/students) — role is
-            // decided by the page context; don't ask the admin.
-            <input type="hidden" name="role" value={role} />
+            // Single-tier lens (e.g. /admin/students) — no picker.
+            <input type="hidden" name="role" value={fixedTier} />
           )}
 
-          {role === 'MEMBER' ? (
+          {derivedTier === 'MEMBER' ? (
             <div className="space-y-2">
               <Label htmlFor="member-membership">Membership</Label>
               <Select
