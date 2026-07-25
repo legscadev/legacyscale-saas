@@ -185,13 +185,6 @@ export function getMemberColumns(
       },
     },
     {
-      accessorKey: 'role',
-      header: 'Tier',
-      cell: ({ row }) => <StatusBadge status={row.original.role} />,
-      enableSorting: false,
-      meta: { label: 'Tier' },
-    },
-    {
       id: 'roles',
       accessorFn: (row) => row.roleAssignments.length,
       header: 'Roles',
