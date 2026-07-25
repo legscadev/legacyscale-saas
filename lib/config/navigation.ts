@@ -96,9 +96,10 @@ export const adminNav: NavSection[] = [
     label: 'System',
     items: [
       { label: 'Activity log', href: '/admin/activity', icon: ClipboardList, moduleKey: 'activity' },
-      // Roles is intentionally NOT moduleKey-gated: revoking access
-      // would strand an admin from restoring it.
-      { label: 'Roles', href: '/admin/roles', icon: ShieldPlus },
+      // Role management is delegable — holders can grant any other
+      // module to any user, so treat this as a high-trust permission.
+      // ADMIN tier still bypasses the check.
+      { label: 'Roles', href: '/admin/roles', icon: ShieldPlus, moduleKey: 'roles' },
       { label: 'Settings', href: '/admin/settings', icon: Settings, moduleKey: 'settings' },
     ],
   },

@@ -24,6 +24,7 @@ import {
   Network,
   PhoneCall,
   Settings,
+  ShieldPlus,
   Tag,
   TrendingUp,
   UserPlus,
@@ -52,6 +53,7 @@ export type TeamModuleKey =
   | 'production'
   // System section
   | 'activity'
+  | 'roles'
   | 'settings'
 
 /** Sidebar section the module lives under. Purely presentational —
@@ -208,6 +210,15 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
     href: '/admin/activity',
     icon: ClipboardList,
     description: 'Cross-domain audit trail of edits, moves, additions, and deletions.',
+  },
+  {
+    key: 'roles',
+    section: 'System',
+    label: 'Roles',
+    href: '/admin/roles',
+    icon: ShieldPlus,
+    description:
+      'Manage custom roles + assign module permissions. High-trust — holders can grant any other module to any user.',
   },
   {
     key: 'settings',

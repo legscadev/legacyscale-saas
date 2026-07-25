@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   roleService,
@@ -29,7 +29,7 @@ function toErr(err: unknown, fallback: string): Err {
 }
 
 export async function fetchRolesAction(): Promise<Result<RoleSummary[]>> {
-  await requireAdmin()
+  await requireTeamModuleAccess('roles')
   try {
     return { ok: true, data: await roleService.listRoles() }
   } catch (err) {
@@ -42,7 +42,7 @@ export async function createRoleAction(input: {
   description?: string
   moduleKeys: TeamModuleKey[]
 }): Promise<Result<RoleSummary>> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('roles')
   try {
     const data = await roleService.createRole({
       name: input.name,
@@ -71,7 +71,7 @@ export async function updateRoleAction(
     moduleKeys?: TeamModuleKey[]
   },
 ): Promise<Result<RoleSummary>> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('roles')
   try {
     const data = await roleService.updateRole(id, input)
     await writeAuditLog({
@@ -91,7 +91,7 @@ export async function updateRoleAction(
 export async function deleteRoleAction(
   id: string,
 ): Promise<Result> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess('roles')
   try {
     await roleService.deleteRole(id)
     await writeAuditLog({

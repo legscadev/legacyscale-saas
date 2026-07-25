@@ -1,4 +1,4 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { RolesShell } from '@/components/admin/roles/roles-shell'
 import { roleService } from '@/lib/services/role-service'
 import { TEAM_MODULES } from '@/lib/config/team-modules'
@@ -6,7 +6,7 @@ import { TEAM_MODULES } from '@/lib/config/team-modules'
 export const dynamic = 'force-dynamic'
 
 export default async function AdminRolesPage() {
-  await requireAdmin()
+  await requireTeamModuleAccess('roles')
   const roles = await roleService.listRoles()
 
   return (
