@@ -291,6 +291,12 @@ model User {
   teamModuleGrantsIssued  TeamModuleGrant[] @relation("TeamModuleGrantGrantedBy")
   teamModuleGrantsRevoked TeamModuleGrant[] @relation("TeamModuleGrantRevokedBy")
 
+  // Production sheet — setter/closer daily numbers + appointment log.
+  productionEntries       ProductionEntry[]
+  productionTargets       ProductionTarget[]
+  appointmentsSet         AppointmentSet[]  @relation("AppointmentSetSetter")
+  appointmentsClosed      AppointmentSet[]  @relation("AppointmentSetCloser")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -2097,4 +2103,127 @@ model TeamModuleGrant {
   @@index([companyId, userId, revokedAt])
   @@index([companyId, moduleKey])
   @@map("team_module_grants")
+}
+
+// ============================================
+// PRODUCTION SHEET
+// ============================================
+//
+// Setter/closer daily production log. Modeled after the sales-team
+// Google Sheet that inspired this module: each user records daily
+// counts + notes; appointments they set (and closers who close
+// them) each get an AppointmentSet row; monthly targets drive the
+// "run rate" projection on the entry sheet.
+//
+// Team-private by design: each user only queries their own rows.
+// ADMIN role bypasses via a user picker in the shell.
+
+/// One row per (user, calendar day). Every metric column is
+/// nullable so a fresh row can save with just a phone-calls number
+/// and fill in the rest later. Monetary columns are Decimal for
+/// exact currency math; counters are Int.
+model ProductionEntry {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  /// Calendar day the row belongs to. `@db.Date` strips the time
+  /// component — the (user, day) unique index below relies on that
+  /// so an afternoon edit doesn't create a second row.
+  date              DateTime @db.Date
+  phoneCalls        Int?     @map("phone_calls")
+  dms               Int?
+  cellConnects      Int?     @map("cell_connects")
+  appointmentsSet   Int?     @map("appointments_set")
+  demosConducted    Int?     @map("demos_conducted")
+  introUnits        Int?     @map("intro_units")
+  basisUnits        Int?     @map("basis_units")
+  majorUnits        Int?     @map("major_units")
+  sales             Decimal? @db.Decimal(12, 2)
+  collections       Decimal? @db.Decimal(12, 2)
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([userId, date, companyId])
+  @@index([companyId, userId, date])
+  @@map("production_entries")
+}
+
+/// Monthly production targets per user. Drives the "Monthly
+/// Targets / Remaining / Days Left / Run Rate" summary row at the
+/// bottom of the daily-entry sheet.
+model ProductionTarget {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  /// (year, month) uniquely identifies a target block per user.
+  /// month is 1..12 (not 0-indexed).
+  year            Int
+  month           Int
+  phoneCalls      Int?     @map("phone_calls")
+  dms             Int?
+  cellConnects    Int?     @map("cell_connects")
+  appointmentsSet Int?     @map("appointments_set")
+  demosConducted  Int?     @map("demos_conducted")
+  introUnits      Int?     @map("intro_units")
+  basisUnits      Int?     @map("basis_units")
+  majorUnits      Int?     @map("major_units")
+  sales           Decimal? @db.Decimal(12, 2)
+  collections     Decimal? @db.Decimal(12, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([userId, year, month, companyId])
+  @@index([companyId, userId, year, month])
+  @@map("production_targets")
+}
+
+enum AppointmentStatus {
+  PENDING
+  SHOWED
+  NO_SHOW
+  CLOSED
+  LOST
+}
+
+/// A prospect appointment: the setter who booked it + (once
+/// assigned) the closer, plus the outcome. `setById` is required
+/// (someone had to log the row); `closerId` is nullable while the
+/// deal is still in flight.
+model AppointmentSet {
+  id                 String            @id @default(uuid())
+  setById            String            @map("set_by_id")
+  closerId           String?           @map("closer_id")
+  prospectName       String            @map("prospect_name")
+  prospectPhone      String?           @map("prospect_phone")
+  /// Day the appointment was created / logged.
+  setAt              DateTime          @default(now()) @map("set_at") @db.Date
+  /// Scheduled appointment date/time — may sit in the past once the
+  /// call has happened.
+  appointmentAt      DateTime?         @map("appointment_at")
+  status             AppointmentStatus @default(PENDING)
+  revenueCollected   Decimal?          @db.Decimal(12, 2) @map("revenue_collected")
+  immediateAmount    Decimal?          @db.Decimal(12, 2) @map("immediate_amount")
+  monthlyPayment     Decimal?          @db.Decimal(12, 2) @map("monthly_payment")
+  /// Free-form "funnel" flag from the original spreadsheet — "Y" /
+  /// "N" indicating whether the prospect came through the paid
+  /// funnel vs. an organic channel.
+  funnel             Boolean?
+  notes              String?
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  setBy  User  @relation("AppointmentSetSetter", fields: [setById], references: [id], onDelete: Cascade)
+  closer User? @relation("AppointmentSetCloser", fields: [closerId], references: [id], onDelete: SetNull)
+
+  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, setById, setAt])
+  @@index([companyId, closerId, appointmentAt])
+  @@index([companyId, status])
+  @@map("appointment_sets")
 }

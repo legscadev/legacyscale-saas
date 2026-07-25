@@ -12,6 +12,7 @@ import {
   type LucideIcon,
   Megaphone,
   Network,
+  PhoneCall,
   Settings,
   ShieldCheck,
   Tag,
@@ -86,6 +87,7 @@ export const adminNav: NavSection[] = [
       { label: 'Statistics', href: '/admin/stats', icon: BarChart3, moduleKey: 'stats' },
       { label: 'Organization Board', href: '/admin/org-board', icon: Network, moduleKey: 'org-board' },
       { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus, moduleKey: 'onboarding' },
+      { label: 'Production', href: '/admin/production-sheets', icon: PhoneCall, moduleKey: 'production' },
     ],
   },
   {
@@ -150,6 +152,7 @@ export const memberNav: NavSection[] = [
       { label: 'Statistics', href: '/team/stats', icon: BarChart3, visibleTo: ['TEAM'], moduleKey: 'stats' },
       { label: 'Organization Board', href: '/team/org-board', icon: Network, visibleTo: ['TEAM'], moduleKey: 'org-board' },
       { label: 'Onboarding', href: '/team/onboarding', icon: UserPlus, visibleTo: ['TEAM'], moduleKey: 'onboarding' },
+      { label: 'Production', href: '/team/production-sheets', icon: PhoneCall, visibleTo: ['TEAM'], moduleKey: 'production' },
     ],
   },
   {

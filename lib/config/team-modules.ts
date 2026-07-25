@@ -19,6 +19,7 @@ import {
   CheckSquare,
   GraduationCap,
   Network,
+  PhoneCall,
   UserPlus,
   Users,
 } from 'lucide-react'
@@ -33,6 +34,7 @@ export type TeamModuleKey =
   | 'stats'
   | 'org-board'
   | 'onboarding'
+  | 'production'
 
 export interface TeamModuleDef {
   key: TeamModuleKey
@@ -105,6 +107,14 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
     href: '/admin/onboarding',
     icon: UserPlus,
     description: 'Track new-hire onboarding progress and checklists.',
+  },
+  {
+    key: 'production',
+    label: 'Production',
+    href: '/admin/production-sheets',
+    icon: PhoneCall,
+    description:
+      'Setter/closer daily production sheet — calls, DMs, appointments, sales, and appointments log.',
   },
 ] as const
 
