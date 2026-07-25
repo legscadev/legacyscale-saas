@@ -30,7 +30,7 @@ test.describe('Admin flow', () => {
     ).toBeVisible()
 
     // Members list smoke
-    await page.goto('/admin/members')
+    await page.goto('/admin/students')
     await expect(
       page.getByRole('heading', { name: 'Members', level: 1 }),
     ).toBeVisible()
@@ -115,7 +115,7 @@ test.describe('Admin flow', () => {
    * nudge would fire a Resend email to a live member address.
    */
   test('admin members page → send nudge dialog opens', async ({ page }) => {
-    await page.goto('/admin/members')
+    await page.goto('/admin/students')
     await expect(
       page.getByRole('heading', { name: 'Members', level: 1 }),
     ).toBeVisible()

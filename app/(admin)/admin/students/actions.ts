@@ -38,7 +38,7 @@ export interface MembersData {
 export async function fetchMembers(
   state: MembersQueryState,
 ): Promise<MembersData> {
-  await requireTeamModuleAccess("members")
+  await requireTeamModuleAccess("students")
 
   // Scope the KPI strip to the same population the table shows.
   // Single-role picks (from the toolbar) narrow further; the

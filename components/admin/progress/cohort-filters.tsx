@@ -16,7 +16,7 @@ import {
 
 const ROLE_OPTIONS = [
   { value: 'ALL', label: 'All' },
-  { value: 'MEMBER', label: 'Members' },
+  { value: 'MEMBER', label: 'Students' },
   { value: 'TEAM', label: 'Team' },
 ] as const
 

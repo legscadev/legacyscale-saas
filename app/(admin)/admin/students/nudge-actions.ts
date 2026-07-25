@@ -16,7 +16,7 @@ export interface NudgeCoursePickerOption {
 export async function listEnrolledCoursesForNudge(
   memberId: string,
 ): Promise<NudgeCoursePickerOption[]> {
-  await requireTeamModuleAccess("members")
+  await requireTeamModuleAccess("students")
   const rows = await prisma.enrollment.findMany({
     where: {
       userId: memberId,
@@ -40,7 +40,7 @@ export async function sendNudgeAction(
   | { ok: true; emailed: boolean }
   | { ok: false; error: string }
 > {
-  const admin = await requireTeamModuleAccess("members")
+  const admin = await requireTeamModuleAccess("students")
   const result = await createNudge(admin.id, {
     userId: memberId,
     courseId,

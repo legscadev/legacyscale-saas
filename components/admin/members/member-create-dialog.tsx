@@ -49,7 +49,7 @@ interface MemberCreateDialogProps {
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  MEMBER: 'Member',
+  MEMBER: 'Student',
   TEAM: 'Internal Team',
   ADMIN: 'Admin',
 }
@@ -138,7 +138,7 @@ export function MemberCreateDialog({
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/admin/members', {
+      const res = await fetch('/api/admin/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsed.data),
@@ -253,7 +253,7 @@ export function MemberCreateDialog({
               </Select>
             </div>
           ) : (
-            // Single-role lens (e.g. /admin/members) — role is
+            // Single-role lens (e.g. /admin/students) — role is
             // decided by the page context; don't ask the admin.
             <input type="hidden" name="role" value={role} />
           )}

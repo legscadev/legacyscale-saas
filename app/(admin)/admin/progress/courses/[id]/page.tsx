@@ -283,7 +283,7 @@ export default async function AdminProgressCohortPage({
                 stays visible while scrolling through long cohorts. */}
             <div className="sticky top-0 z-10 flex items-center gap-4 border-b bg-muted/40 px-5 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
               <div className="size-9 shrink-0" />
-              <div className="min-w-0 flex-1">Member</div>
+              <div className="min-w-0 flex-1">Student</div>
               <div className="hidden w-40 shrink-0 md:block">Progress</div>
               <div className="hidden w-28 shrink-0 text-right sm:block">
                 Status

@@ -129,7 +129,7 @@ export function getMemberColumns(
     {
       accessorKey: 'name',
       enableHiding: false,
-      header: ({ column }) => <SortHeader column={column}>Member</SortHeader>,
+      header: ({ column }) => <SortHeader column={column}>Name</SortHeader>,
       cell: ({ row }) => {
         const m = row.original
         return (

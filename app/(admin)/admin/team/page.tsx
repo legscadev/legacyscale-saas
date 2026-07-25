@@ -1,7 +1,7 @@
 import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { membershipService } from '@/lib/services/membership-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
-import { fetchMembers } from '../members/actions'
+import { fetchMembers } from '../students/actions'
 
 export default async function AdminTeamPage() {
   const admin = await requireTeamModuleAccess("team")

@@ -147,7 +147,7 @@ export function CertificatesShell({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Member</TableHead>
+              <TableHead>Student</TableHead>
               <TableHead>Module</TableHead>
               <TableHead>Course</TableHead>
               <TableHead>Cert #</TableHead>

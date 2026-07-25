@@ -40,7 +40,7 @@ export type TeamModuleKey =
   | 'certificates'
   | 'progress'
   // Community section
-  | 'members'
+  | 'students'
   | 'announcements'
   // Internal section
   | 'team'
@@ -121,12 +121,12 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
   },
   // Community ────────────────────────────
   {
-    key: 'members',
+    key: 'students',
     section: 'Community',
-    label: 'Members',
-    href: '/admin/members',
+    label: 'Students',
+    href: '/admin/students',
     icon: Users,
-    description: 'Manage member accounts, invites, and access.',
+    description: 'Manage student accounts, invites, and access.',
   },
   {
     key: 'announcements',

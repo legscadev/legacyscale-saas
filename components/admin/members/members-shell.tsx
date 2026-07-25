@@ -27,7 +27,7 @@ import {
   fetchMembers,
   type MembersData,
   type MembersQueryState,
-} from '@/app/(admin)/admin/members/actions'
+} from '@/app/(admin)/admin/students/actions'
 import type {
   MemberSortField,
   SortDirection,
@@ -61,7 +61,7 @@ interface MembersShellProps {
    *  which needs to show ADMIN + TEAM together). When set, the
    *  toolbar role dropdown is hidden. */
   lockedRoles?: ('ADMIN' | 'TEAM' | 'MEMBER')[]
-  /** Override the page header. Defaults to "Members". */
+  /** Override the page header. Defaults to "Students". */
   pageTitle?: string
   pageDescription?: string
 }
@@ -214,7 +214,7 @@ export function MembersShell({
   return (
     <div className="space-y-6" data-pending={isLoading}>
       <PageHeader
-        title={pageTitle ?? 'Members'}
+        title={pageTitle ?? 'Students'}
         description={
           pageDescription ??
           `Manage ${data.counts.all.toLocaleString()} ${

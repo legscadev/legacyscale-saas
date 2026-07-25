@@ -56,7 +56,7 @@ interface MemberEditDialogProps {
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  MEMBER: 'Member',
+  MEMBER: 'Student',
   TEAM: 'Internal Team',
   ADMIN: 'Admin',
 }
@@ -168,7 +168,7 @@ export function MemberEditDialog({
 
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/admin/members/${member.id}`, {
+      const res = await fetch(`/api/admin/students/${member.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -276,7 +276,7 @@ export function MemberEditDialog({
               )}
             </div>
           ) : (
-            // Locked lens (e.g. /admin/members) — role stays what it
+            // Locked lens (e.g. /admin/students) — role stays what it
             // already is; the picker isn't rendered.
             <input type="hidden" name="role" value={role} />
           )}

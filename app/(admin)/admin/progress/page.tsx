@@ -170,7 +170,7 @@ export default async function AdminProgressOverviewPage({
           <>
             <div className="flex items-center gap-4 border-b bg-muted/40 px-5 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               <div className="w-20 shrink-0">Signal</div>
-              <div className="flex-1">Member</div>
+              <div className="flex-1">Student</div>
               <div className="hidden flex-1 sm:block">Course</div>
               <div className="hidden w-40 shrink-0 text-right md:block">
                 Detail

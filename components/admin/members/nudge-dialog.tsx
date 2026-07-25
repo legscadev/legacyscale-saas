@@ -25,7 +25,7 @@ import {
   listEnrolledCoursesForNudge,
   sendNudgeAction,
   type NudgeCoursePickerOption,
-} from '@/app/(admin)/admin/members/nudge-actions'
+} from '@/app/(admin)/admin/students/nudge-actions'
 
 const NO_COURSE = '__none__'
 const MAX_MESSAGE_LEN = 1000

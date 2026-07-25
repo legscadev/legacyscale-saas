@@ -95,7 +95,7 @@ export default async function AdminProgressMembersPage({
 
   const cells: StatStripCell[] = [
     {
-      label: 'Members',
+      label: 'Students',
       value: result.total,
       icon: Users,
       description: search || role !== 'ALL' ? 'Filtered' : 'With enrollments',
@@ -156,7 +156,7 @@ export default async function AdminProgressMembersPage({
           <>
             <div className="sticky top-0 z-10 flex items-center gap-4 border-b bg-muted/40 px-5 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
               <div className="size-9 shrink-0" />
-              <div className="min-w-0 flex-1">Member</div>
+              <div className="min-w-0 flex-1">Student</div>
               <div className="hidden w-40 shrink-0 md:block">Avg progress</div>
               <div className="hidden w-24 shrink-0 text-right md:block">
                 Completed

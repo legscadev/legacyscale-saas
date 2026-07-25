@@ -27,7 +27,7 @@ const ROLES = [
   { value: 'all', label: 'Any role' },
   { value: 'ADMIN', label: 'Admin' },
   { value: 'TEAM', label: 'Team' },
-  { value: 'MEMBER', label: 'Member' },
+  { value: 'MEMBER', label: 'Student' },
 ]
 
 const STATUSES = [

@@ -71,7 +71,7 @@ export const adminNav: NavSection[] = [
   {
     label: 'Community',
     items: [
-      { label: 'Members', href: '/admin/members', icon: Users, moduleKey: 'members' },
+      { label: 'Students', href: '/admin/students', icon: Users, moduleKey: 'students' },
       { label: 'Announcements', href: '/admin/announcements', icon: Megaphone, moduleKey: 'announcements' },
     ],
   },

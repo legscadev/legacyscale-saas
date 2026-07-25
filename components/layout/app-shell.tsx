@@ -133,7 +133,7 @@ function AppShellInner({
       ? 'Super Admin'
       : role === 'admin'
         ? 'Admin Console'
-        : 'Member'
+        : 'Student'
   const homeHref =
     role === 'super'
       ? '/super'

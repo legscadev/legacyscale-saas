@@ -96,7 +96,7 @@ export function BulkActionBar({
     try {
       const results = await Promise.allSettled(
         targets.map((id) =>
-          fetch(`/api/admin/members/${id}`, {
+          fetch(`/api/admin/students/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -268,7 +268,7 @@ export function BulkActionBar({
               <SelectContent>
                 <SelectItem value="ADMIN">Admin</SelectItem>
                 <SelectItem value="TEAM">Team</SelectItem>
-                <SelectItem value="MEMBER">Member</SelectItem>
+                <SelectItem value="MEMBER">Student</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -389,7 +389,7 @@ export function BulkActionBar({
 function roleLabel(role: UserRole) {
   if (role === 'ADMIN') return 'Admin'
   if (role === 'TEAM') return 'Team'
-  return 'Member'
+  return 'Student'
 }
 
 function toCsv(rows: MemberListItem[]) {

@@ -108,16 +108,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const { error: pwErr } =
           await supabase.auth.admin.updateUserById(user.authId, { password })
         if (pwErr) {
-          console.error('Member password reset failed:', pwErr.message)
+          console.error('Student password reset failed:', pwErr.message)
           return errorResponse(
-            `Member fields updated, but password change failed: ${pwErr.message}`,
+            `Student fields updated, but password change failed: ${pwErr.message}`,
             500,
           )
         }
       } catch (err) {
-        console.error('Member password reset threw:', err)
+        console.error('Student password reset threw:', err)
         return errorResponse(
-          'Member fields updated, but password change threw an error.',
+          'Student fields updated, but password change threw an error.',
           500,
         )
       }
@@ -176,9 +176,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === 'P2025'
     ) {
-      return notFoundResponse('Member')
+      return notFoundResponse('Student')
     }
-    console.error('Member update failed:', err)
+    console.error('Student update failed:', err)
     return serverErrorResponse()
   }
 }

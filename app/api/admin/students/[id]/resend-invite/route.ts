@@ -61,7 +61,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === 'P2025'
     ) {
-      return notFoundResponse('Member')
+      return notFoundResponse('Student')
     }
     console.error('Resend invite failed:', err)
     return serverErrorResponse()

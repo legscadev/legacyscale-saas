@@ -1,13 +1,13 @@
-import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
+import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { membershipService } from '@/lib/services/membership-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
 import { fetchMembers } from './actions'
 
-export default async function AdminMembersPage() {
-  const admin = await requireTeamModuleAccess("members")
-  // Members lives under Community in the sidebar → default to
-  // students only. Ruby can still switch the role filter in the
-  // toolbar to see staff if she needs to.
+export default async function AdminStudentsPage() {
+  const admin = await requireTeamModuleAccess('students')
+  // Students lives under Community in the sidebar → default to
+  // students only (User.role = MEMBER). Admins can flip the role
+  // filter in the toolbar to see staff if needed.
   const [initialData, membershipsRaw] = await Promise.all([
     fetchMembers({
       search: '',
@@ -28,6 +28,8 @@ export default async function AdminMembersPage() {
       initialData={initialData}
       memberships={memberships}
       defaultRole="MEMBER"
+      pageTitle="Students"
+      pageDescription="Learners enrolled in your courses — enrollments, invites, and access."
     />
   )
 }
