@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { brandingInputSchema, type BrandingInput } from '@/lib/branding/schema'
 import { prisma } from '@/lib/prisma'
@@ -85,7 +85,7 @@ const BOOLEAN_KEYS = ['darkModeDefault'] as const
 export async function uploadBrandingAssetAction(
   formData: FormData,
 ): Promise<BrandingUploadResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company) return { ok: false, error: 'No active company.' }
 
@@ -147,7 +147,7 @@ export async function uploadBrandingAssetAction(
  * BrandingCard a way out.
  */
 export async function clearBrandingAction(): Promise<BrandingSaveResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company) return { ok: false, error: 'No active company.' }
   try {
@@ -176,7 +176,7 @@ export async function clearBrandingAction(): Promise<BrandingSaveResult> {
  * is malformed — the form then falls back to placeholders.
  */
 export async function getCurrentBrandingAction(): Promise<BrandingInput | null> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company?.brand) return null
   const parsed = brandingInputSchema.safeParse(company.brand)
@@ -192,7 +192,7 @@ export async function getCurrentBrandingAction(): Promise<BrandingInput | null> 
 export async function updateBrandingAction(
   formData: FormData,
 ): Promise<BrandingSaveResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company) {
     return {

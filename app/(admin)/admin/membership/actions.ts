@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   membershipService,
@@ -18,7 +18,7 @@ export interface MembershipsData {
 }
 
 export async function fetchMemberships(): Promise<MembershipsData> {
-  await requireAdmin()
+  await requireTeamModuleAccess("membership")
   const items = await membershipService.list()
   return { items }
 }
@@ -43,7 +43,7 @@ function fieldErrorsFromZod(issues: ReadonlyArray<{ path: PropertyKey[]; message
 export async function createMembershipAction(
   formData: FormData,
 ): Promise<MembershipMutationResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("membership")
 
   const parsed = createMembershipSchema.safeParse({
     name: (formData.get('name') as string) ?? '',
@@ -76,7 +76,7 @@ export async function updateMembershipAction(
   id: string,
   formData: FormData,
 ): Promise<MembershipMutationResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("membership")
 
   const input: Record<string, unknown> = {}
   if (formData.has('name')) input.name = formData.get('name')
@@ -113,7 +113,7 @@ export async function updateMembershipAction(
 export async function deleteMembershipAction(
   id: string,
 ): Promise<MembershipMutationResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("membership")
   try {
     const existing = await membershipService.getById(id)
     await membershipService.delete(id)

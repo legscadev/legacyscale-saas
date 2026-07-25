@@ -25,7 +25,7 @@ export interface ShellUser {
 function roleLabel(role: ShellUser['role']): string {
   if (role === 'ADMIN') return 'Administrator'
   if (role === 'TEAM') return 'Team'
-  return 'Member'
+  return 'Student'
 }
 
 interface UserMenuProps {

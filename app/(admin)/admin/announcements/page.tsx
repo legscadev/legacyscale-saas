@@ -1,9 +1,9 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { AnnouncementsShell } from '@/components/admin/announcements/announcements-shell'
 import { fetchAnnouncements } from './actions'
 
 export default async function AdminAnnouncementsPage() {
-  await requireAdmin()
+  await requireTeamModuleAccess("announcements")
   const initialData = await fetchAnnouncements({
     search: '',
     status: null,

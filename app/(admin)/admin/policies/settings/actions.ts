@@ -6,7 +6,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import {
   policyCategoryAdminService,
   type PolicyCategoryListItem,
@@ -54,7 +54,7 @@ export interface PolicySettingsPayload {
 export async function fetchPolicySettingsAction(): Promise<
   Result<PolicySettingsPayload>
 > {
-  await requireAdmin()
+  await requireTeamModuleAccess("policies")
   try {
     const categories = await policyCategoryAdminService.list()
     return { ok: true, data: { categories } }
@@ -66,7 +66,7 @@ export async function fetchPolicySettingsAction(): Promise<
 export async function upsertPolicyCategoryAction(
   input: Record<string, unknown>,
 ): Promise<Result<PolicyCategoryListItem>> {
-  await requireAdmin()
+  await requireTeamModuleAccess("policies")
   const parsed = upsertPolicyCategorySchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -83,7 +83,7 @@ export async function upsertPolicyCategoryAction(
 export async function deletePolicyCategoryAction(
   id: string,
 ): Promise<Result> {
-  await requireAdmin()
+  await requireTeamModuleAccess("policies")
   try {
     await policyCategoryAdminService.delete(id)
     revalidateAll()

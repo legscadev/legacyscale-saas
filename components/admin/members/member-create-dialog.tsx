@@ -25,7 +25,7 @@ import {
 import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
 import type { MembershipOption } from './members-shell'
 
-type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
+type UserRole = 'ADMIN' | 'TEAM' | 'MEMBER'
 type FieldErrors = Partial<
   Record<'name' | 'email' | 'role' | 'membershipId', string[]>
 >
@@ -42,18 +42,21 @@ interface MemberCreateDialogProps {
   /** Restrict the role picker to a subset (e.g. Team page uses
    *  [ADMIN, TEAM]). When the array collapses to a single role the
    *  picker is hidden entirely. Defaults to every role. */
-  allowedRoles?: Role[]
+  allowedRoles?: UserRole[]
   /** Which role to pre-select. Defaults to the first entry in
    *  allowedRoles, or MEMBER. */
-  defaultRole?: Role
+  defaultRole?: UserRole
+  /** Singular noun shown in the dialog title — defaults to
+   *  "student". Team page overrides to "team member". */
+  entityLabel?: string
 }
 
-const ROLE_LABELS: Record<Role, string> = {
-  MEMBER: 'Member',
+const ROLE_LABELS: Record<UserRole, string> = {
+  MEMBER: 'Student',
   TEAM: 'Internal Team',
   ADMIN: 'Admin',
 }
-const ROLE_ORDER: Role[] = ['MEMBER', 'TEAM', 'ADMIN']
+const ROLE_ORDER: UserRole[] = ['MEMBER', 'TEAM', 'ADMIN']
 
 function RequiredMark() {
   return (
@@ -70,11 +73,12 @@ export function MemberCreateDialog({
   onCreated,
   allowedRoles,
   defaultRole,
+  entityLabel = 'student',
 }: MemberCreateDialogProps) {
   const roleOptions = ROLE_ORDER.filter((r) =>
     allowedRoles ? allowedRoles.includes(r) : true,
   )
-  const initialRole: Role =
+  const initialRole: UserRole =
     defaultRole && roleOptions.includes(defaultRole)
       ? defaultRole
       : (roleOptions[0] ?? 'MEMBER')
@@ -82,7 +86,7 @@ export function MemberCreateDialog({
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<Role>(initialRole)
+  const [role, setRole] = useState<UserRole>(initialRole)
   const [membershipId, setMembershipId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -138,7 +142,7 @@ export function MemberCreateDialog({
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/admin/members', {
+      const res = await fetch('/api/admin/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsed.data),
@@ -171,7 +175,7 @@ export function MemberCreateDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <DialogHeader>
-            <DialogTitle>Add member</DialogTitle>
+            <DialogTitle>Add {entityLabel}</DialogTitle>
             <DialogDescription>
               We&apos;ll email them a link to set their password. The link
               is valid for 7 days.
@@ -233,14 +237,14 @@ export function MemberCreateDialog({
 
           {showRoleField ? (
             <div className="space-y-2">
-              <Label htmlFor="member-role">Role</Label>
+              <Label htmlFor="member-role">UserRole</Label>
               <Select
                 value={role}
-                onValueChange={(v) => setRole((v as Role) ?? initialRole)}
+                onValueChange={(v) => setRole((v as UserRole) ?? initialRole)}
               >
                 <SelectTrigger className="w-full" id="member-role">
                   <SelectValue>
-                    {(v: string) => ROLE_LABELS[v as Role] ?? ROLE_LABELS.MEMBER}
+                    {(v: string) => ROLE_LABELS[v as UserRole] ?? ROLE_LABELS.MEMBER}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -253,7 +257,7 @@ export function MemberCreateDialog({
               </Select>
             </div>
           ) : (
-            // Single-role lens (e.g. /admin/members) — role is
+            // Single-role lens (e.g. /admin/students) — role is
             // decided by the page context; don't ask the admin.
             <input type="hidden" name="role" value={role} />
           )}

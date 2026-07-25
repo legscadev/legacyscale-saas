@@ -38,7 +38,7 @@ const STATUS_MAP: Record<string, { label: string; tone: Tone }> = {
   // User
   ADMIN: { label: 'Admin', tone: 'info' },
   TEAM: { label: 'Team', tone: 'violet' },
-  MEMBER: { label: 'Member', tone: 'neutral' },
+  MEMBER: { label: 'Student', tone: 'neutral' },
   PAUSED: { label: 'Paused', tone: 'danger' },
 }
 

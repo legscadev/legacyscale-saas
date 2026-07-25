@@ -15,7 +15,7 @@ interface ProgressTab {
 
 const TABS: ProgressTab[] = [
   { label: 'Overview', href: '/admin/progress', exact: true },
-  { label: 'Members', href: '/admin/progress/members' },
+  { label: 'Students', href: '/admin/progress/members' },
   { label: 'Courses', href: '/admin/progress/courses' },
 ]
 

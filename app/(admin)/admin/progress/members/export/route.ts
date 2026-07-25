@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 
 /**
@@ -10,7 +10,7 @@ import { adminProgressService } from '@/lib/services/admin-progress-service'
  * truncation marker is appended by the service layer.
  */
 export async function GET(request: NextRequest) {
-  await requireAdmin()
+  await requireTeamModuleAccess("progress")
 
   const sp = request.nextUrl.searchParams
   const search = sp.get('search') ?? ''

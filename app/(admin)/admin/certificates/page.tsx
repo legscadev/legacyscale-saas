@@ -1,4 +1,4 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { CertificatesShell } from '@/components/admin/certificates/certificates-shell'
 import {
   fetchCertificates,
@@ -9,7 +9,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 export default async function AdminCertificatesPage() {
-  await requireAdmin()
+  await requireTeamModuleAccess("certificates")
   const [initialRows, members, courses] = await Promise.all([
     fetchCertificates({ status: 'all' }),
     listMembersForCertPicker(),

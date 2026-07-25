@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Role } from '@prisma/client'
+import type { UserRole } from '@prisma/client'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -24,7 +24,7 @@ interface Comment {
     name: string | null
     email: string
     avatarUrl: string | null
-    role: Role
+    role: UserRole
   }
 }
 
@@ -32,7 +32,7 @@ interface CommentsSectionProps {
   announcementId: string
   comments: Comment[]
   viewerUserId: string
-  viewerRole: Role
+  viewerRole: UserRole
 }
 
 const COMMENT_MAX = 2000

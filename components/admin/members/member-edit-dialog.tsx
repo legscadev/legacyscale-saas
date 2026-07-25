@@ -27,7 +27,7 @@ import { nameSchema, passwordSchema } from '@/lib/validations/common'
 import { userRoleSchema } from '@/lib/validations/user'
 import type { MembershipOption } from './members-shell'
 
-type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
+type UserRole = 'ADMIN' | 'TEAM' | 'MEMBER'
 type FieldErrors = Partial<
   Record<'name' | 'role' | 'password' | 'confirm' | 'membershipId', string[]>
 >
@@ -43,7 +43,7 @@ interface MemberEditDialogProps {
     id: string
     name: string | null
     email: string
-    role: Role
+    role: UserRole
     membershipId: string | null
   }
   memberships: MembershipOption[]
@@ -52,15 +52,15 @@ interface MemberEditDialogProps {
   onSaved: () => void
   /** Restrict the picker to a subset of roles. Falls back to every
    *  role for legacy call sites. */
-  allowedRoles?: Role[]
+  allowedRoles?: UserRole[]
 }
 
-const ROLE_LABELS: Record<Role, string> = {
-  MEMBER: 'Member',
+const ROLE_LABELS: Record<UserRole, string> = {
+  MEMBER: 'Student',
   TEAM: 'Internal Team',
   ADMIN: 'Admin',
 }
-const ROLE_ORDER: Role[] = ['MEMBER', 'TEAM', 'ADMIN']
+const ROLE_ORDER: UserRole[] = ['MEMBER', 'TEAM', 'ADMIN']
 
 function RequiredMark() {
   return (
@@ -89,7 +89,7 @@ export function MemberEditDialog({
   )
   const showRoleField = roleOptions.length > 1
   const [name, setName] = useState(member.name ?? '')
-  const [role, setRole] = useState<Role>(member.role)
+  const [role, setRole] = useState<UserRole>(member.role)
   const [membershipId, setMembershipId] = useState<string | null>(
     member.membershipId,
   )
@@ -151,7 +151,7 @@ export function MemberEditDialog({
     // Only send fields that actually changed.
     const body: {
       name?: string
-      role?: Role
+      role?: UserRole
       password?: string
       membershipId?: string | null
     } = {}
@@ -168,7 +168,7 @@ export function MemberEditDialog({
 
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/admin/members/${member.id}`, {
+      const res = await fetch(`/api/admin/students/${member.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -250,15 +250,15 @@ export function MemberEditDialog({
 
           {showRoleField ? (
             <div className="space-y-2">
-              <Label htmlFor="edit-role">Role</Label>
+              <Label htmlFor="edit-role">UserRole</Label>
               <Select
                 value={role}
-                onValueChange={(v) => setRole((v as Role) ?? member.role)}
+                onValueChange={(v) => setRole((v as UserRole) ?? member.role)}
                 disabled={!canChangeRole}
               >
                 <SelectTrigger className="w-full" id="edit-role">
                   <SelectValue>
-                    {(v: string) => ROLE_LABELS[v as Role] ?? ROLE_LABELS.MEMBER}
+                    {(v: string) => ROLE_LABELS[v as UserRole] ?? ROLE_LABELS.MEMBER}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -276,7 +276,7 @@ export function MemberEditDialog({
               )}
             </div>
           ) : (
-            // Locked lens (e.g. /admin/members) — role stays what it
+            // Locked lens (e.g. /admin/students) — role stays what it
             // already is; the picker isn't rendered.
             <input type="hidden" name="role" value={role} />
           )}

@@ -4,7 +4,7 @@
  * Kept intentionally UI-focused (no DB-only fields like authId/deletedAt).
  */
 
-export type Role = "ADMIN" | "MEMBER"
+export type UserRole = "ADMIN" | "MEMBER"
 export type CourseStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED"
 export type LessonType = "VIDEO" | "QUIZ" | "RESOURCE"
 export type LessonStatus = "DRAFT" | "PROCESSING" | "READY"
@@ -22,7 +22,7 @@ export interface User {
   email: string
   name: string
   avatarUrl?: string
-  role: Role
+  role: UserRole
   isActive: boolean
   emailVerified: boolean
   lastLoginAt?: string

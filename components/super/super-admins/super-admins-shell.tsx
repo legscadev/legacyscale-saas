@@ -278,7 +278,7 @@ export function SuperAdminsShell({ initialRows }: SuperAdminsShellProps) {
                 <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
                   This email isn&apos;t registered yet.{' '}
                   <Link
-                    href="/admin/members"
+                    href="/admin/students"
                     className="underline underline-offset-2"
                   >
                     Invite them as a member first

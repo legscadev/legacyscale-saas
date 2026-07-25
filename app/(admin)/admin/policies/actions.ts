@@ -10,7 +10,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin, requireTeamOrAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess, requireTeamOrAdmin  } from "@/lib/auth/get-user"
 import { prisma } from '@/lib/prisma'
 import {
   policyActivityService,
@@ -246,7 +246,7 @@ export async function fetchPolicyWorkspaceAction(
 export async function createPolicyAction(
   input: CreatePolicyInput,
 ): Promise<MutationResult<PolicyDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   const parsed = createPolicySchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -264,7 +264,7 @@ export async function updatePolicyAction(
   id: string,
   input: UpdatePolicyInput,
 ): Promise<MutationResult<PolicyDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   const parsed = updatePolicySchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -281,7 +281,7 @@ export async function updatePolicyAction(
 export async function publishPolicyAction(
   policyId: string,
 ): Promise<MutationResult<PolicyDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   const parsed = publishPolicySchema.safeParse({ policyId })
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -298,7 +298,7 @@ export async function publishPolicyAction(
 export async function archivePolicyAction(
   policyId: string,
 ): Promise<MutationResult<PolicyDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   try {
     const data = await policyService.archive(policyId, user.id)
     revalidateAll()
@@ -311,7 +311,7 @@ export async function archivePolicyAction(
 export async function restorePolicyAction(
   policyId: string,
 ): Promise<MutationResult<PolicyDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   try {
     const data = await policyService.restore(policyId, user.id)
     revalidateAll()
@@ -324,7 +324,7 @@ export async function restorePolicyAction(
 export async function deletePolicyAction(
   policyId: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   try {
     await policyService.softDelete(policyId, user.id)
     revalidateAll()
@@ -338,7 +338,7 @@ export async function revertPolicyAction(input: {
   policyId: string
   revisionId: string
 }): Promise<MutationResult<PolicyDetail>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   const parsed = revertPolicySchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -363,7 +363,7 @@ export async function revertPolicyAction(input: {
 export async function uploadPolicyAttachmentAction(
   formData: FormData,
 ): Promise<MutationResult<PolicyAttachmentRow>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   const policyId = String(formData.get('policyId') ?? '')
   const file = formData.get('file')
   if (!policyId) return { ok: false, error: 'Missing policyId' }
@@ -389,7 +389,7 @@ export async function addPolicyLinkAttachmentAction(input: {
   name: string
   url: string
 }): Promise<MutationResult<PolicyAttachmentRow>> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   const parsed = addPolicyLinkAttachmentSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
@@ -417,7 +417,7 @@ export async function addPolicyLinkAttachmentAction(input: {
 export async function deletePolicyAttachmentAction(
   attachmentId: string,
 ): Promise<MutationResult> {
-  const user = await requireAdmin()
+  const user = await requireTeamModuleAccess("policies")
   try {
     await policyAttachmentService.delete(attachmentId, user.id)
     revalidateAll()

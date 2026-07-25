@@ -1,6 +1,6 @@
 import type { CourseAudience } from '@prisma/client'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { PageHeader } from '@/components/shared'
 import { CourseForm } from '@/components/admin/courses/course-form'
 import { membershipService } from '@/lib/services/membership-service'
@@ -13,7 +13,7 @@ interface NewCoursePageProps {
 }
 
 export default async function NewCoursePage({ searchParams }: NewCoursePageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const params = await searchParams
   const requested = params.audience?.toUpperCase() as CourseAudience | undefined

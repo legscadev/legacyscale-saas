@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { membershipService } from '@/lib/services/membership-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
-import { fetchMembers } from '@/app/(admin)/admin/members/actions'
+import { fetchMembers } from '@/app/(admin)/admin/students/actions'
 
 // /team is the staff roster — the natural landing page for the
 // TEAM namespace. ADMIN gets bounced to /admin/team where they

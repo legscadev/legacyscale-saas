@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import type { CourseAudience, CourseStatus } from '@prisma/client'
 import { z } from 'zod'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   courseService,
@@ -92,7 +92,7 @@ export interface CoursesData {
 export async function fetchCourses(
   state: CoursesQueryState,
 ): Promise<CoursesData> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const [counts, result] = await Promise.all([
     courseService.counts(state.audiences ?? undefined),
@@ -148,7 +148,7 @@ export interface PrepareCourseImageUploadResult {
 export async function prepareCourseImageUploadAction(
   input: unknown,
 ): Promise<PrepareCourseImageUploadResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = prepareCourseImageUploadSchema.safeParse(input)
   if (!parsed.success) {
@@ -217,7 +217,7 @@ export interface CreateCourseResult {
 export async function createCourseAction(
   formData: FormData,
 ): Promise<CreateCourseResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
 
   const courseId = formData.get('courseId')
   if (typeof courseId !== 'string' || !UUID_RE.test(courseId)) {
@@ -383,7 +383,7 @@ export async function updateCourseAction(
   courseId: string,
   formData: FormData,
 ): Promise<UpdateCourseResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
 
   // Only forward fields the form actually sent. Partial saves (e.g.
   // the builder sidebar's debounced description-only update) must not
@@ -493,7 +493,7 @@ export interface SimpleResult {
 export async function softDeleteCourseAction(
   courseId: string,
 ): Promise<SimpleResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
   try {
     await courseService.softDelete(courseId)
     await writeAuditLog({

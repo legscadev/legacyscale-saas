@@ -1,4 +1,4 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { ActivityShell } from '@/components/admin/activity/activity-shell'
 import {
   fetchActivityActorsAction,
@@ -8,7 +8,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 export default async function AdminActivityPage() {
-  await requireAdmin()
+  await requireTeamModuleAccess("activity")
   const [initialFeed, actors] = await Promise.all([
     fetchActivityFeedAction({ page: 1, limit: 50 }),
     fetchActivityActorsAction(),

@@ -7,7 +7,7 @@ import { requireActiveUser } from '@/lib/auth'
 import { getBranding, toClientBranding } from '@/lib/branding/get-branding'
 import { announcementService } from '@/lib/services/announcement-service'
 import { listActiveNudgesForUser } from '@/lib/services/nudge-service'
-import { teamAccessService } from '@/lib/services/team-access-service'
+import { roleService } from '@/lib/services/role-service'
 import {
   getActiveCompany,
   listCompaniesForUser,
@@ -73,17 +73,17 @@ export default async function UserLayout({
   const activeForTheme = await getActiveCompany()
   const themeLocked = Boolean(activeForTheme?.brand)
 
-  // Per-user Internal-module grants. Only meaningful for TEAM
-  // users — ADMIN sees everything, MEMBER holds no grants. Passed
-  // to AppShell so the sidebar + command palette hide ungranted
-  // Internal items.
+  // Effective module permissions from the user's role assignments.
+  // Only meaningful for TEAM users — ADMIN sees everything, MEMBER
+  // holds no roles. Passed to AppShell so the sidebar + command
+  // palette hide ungranted Internal items.
   let grantedModules: string[] = []
   if (user.role === 'TEAM') {
     try {
-      const grants = await teamAccessService.listActiveGrants(user.id)
-      grantedModules = grants.map((g) => g.moduleKey)
+      const keys = await roleService.grantedKeys(user.id)
+      grantedModules = [...keys]
     } catch (err) {
-      console.error('listActiveGrants (user layout) failed:', err)
+      console.error('roleService.grantedKeys (user layout) failed:', err)
     }
   }
 

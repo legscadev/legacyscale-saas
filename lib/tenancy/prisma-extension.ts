@@ -68,14 +68,20 @@ const SCOPED_MODELS = new Set<string>([
   'TaskActivityLog',
   'TaskNotification',
   'AuditLog',
+  // Production sheet (Phase 1)
+  'ProductionEntry',
+  'ProductionTarget',
+  'AppointmentSet',
   // Policies (Phase 1)
   'Policy',
   'PolicyCategory',
   'PolicyRevision',
   'PolicyAttachment',
   'PolicyActivityLog',
-  // Team access grants
-  'TeamModuleGrant',
+  // Custom roles (per-company permission layer)
+  'Role',
+  'RolePermission',
+  'UserRoleAssignment',
   'LoginEvent',
 ])
 

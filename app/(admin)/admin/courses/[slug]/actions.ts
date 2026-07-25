@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { Prisma, type LessonStatus, type LessonType } from '@prisma/client'
 import { z } from 'zod'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   chapterService,
@@ -92,7 +92,7 @@ export async function createChapterAction(
   courseId: string,
   title = 'New chapter',
 ): Promise<CreateChapterResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
 
   const parsed = createChapterSchema.safeParse({ courseId, title })
   if (!parsed.success) {
@@ -124,7 +124,7 @@ export async function updateChapterAction(
   chapterId: string,
   input: { title?: string; orderIndex?: number },
 ): Promise<UpdateChapterResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
 
   const parsed = updateChapterSchema.safeParse(input)
   if (!parsed.success) {
@@ -166,7 +166,7 @@ export async function deleteChapterAction(
   chapterId: string,
   _courseId: string,
 ): Promise<BaseResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
   try {
     await chapterService.delete(chapterId)
     await writeAuditLog({
@@ -198,7 +198,7 @@ export async function reorderChaptersAction(
   courseId: string,
   orderedIds: string[],
 ): Promise<BaseResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = reorderSchema.safeParse({ courseId, orderedIds })
   if (!parsed.success) {
@@ -224,7 +224,7 @@ export async function createLessonAction(
   chapterId: string,
   type: LessonType,
 ): Promise<CreateLessonResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
 
   const typeParsed = lessonTypeSchema.safeParse(type)
   if (!typeParsed.success) {
@@ -266,7 +266,7 @@ export async function updateLessonAction(
   lessonId: string,
   input: { title?: string; orderIndex?: number },
 ): Promise<UpdateLessonResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
 
   // Only the fields supported by the inline rename / reorder flow are
   // accepted here; the rich lesson editor (Phase D/E) will own the
@@ -307,7 +307,7 @@ export async function deleteLessonAction(
   courseId: string,
   lessonId: string,
 ): Promise<BaseResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("courses")
   try {
     await lessonService.delete(lessonId)
     await writeAuditLog({
@@ -336,7 +336,7 @@ export async function reorderLessonsAction(
   chapterId: string,
   orderedIds: string[],
 ): Promise<BaseResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = reorderLessonsSchema.safeParse({
     courseId,
@@ -414,7 +414,7 @@ export async function saveCourseStructureAction(
   courseId: string,
   payload: { chapters: unknown },
 ): Promise<SaveStructureResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = syncStructureSchema.safeParse(payload)
   if (!parsed.success) {
@@ -496,7 +496,7 @@ export interface PrepareResourceUploadResult extends BaseResult {
 export async function prepareResourceUploadAction(
   input: unknown,
 ): Promise<PrepareResourceUploadResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = prepareResourceUploadSchema.safeParse(input)
   if (!parsed.success) {
@@ -549,7 +549,7 @@ export async function commitResourceUploadAction(
   courseId: string,
   input: unknown,
 ): Promise<CommitResourceUploadResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = commitResourceUploadSchema.safeParse(input)
   if (!parsed.success) {
@@ -601,7 +601,7 @@ export async function removeLessonResourceAction(
   courseId: string,
   resourceId: string,
 ): Promise<BaseResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   try {
     const resource = await prisma.lessonResource.findUnique({
@@ -655,7 +655,7 @@ export interface LessonStatusResult extends BaseResult {
 export async function getLessonStatusAction(
   lessonId: string,
 ): Promise<LessonStatusResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const lesson = await prisma.lesson.findUnique({
     where: { id: lessonId },
@@ -680,7 +680,7 @@ const RESOURCE_DOWNLOAD_EXPIRY_SECONDS = 60
 export async function getResourceDownloadUrlAction(
   resourceId: string,
 ): Promise<ResourceDownloadUrlResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const resource = await prisma.lessonResource.findUnique({
     where: { id: resourceId },
@@ -721,7 +721,7 @@ export async function createModuleAction(
   courseId: string,
   input: { title?: string; description?: string } = {},
 ): Promise<CreateModuleResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = createModuleSchema.safeParse({
     courseId,
@@ -750,7 +750,7 @@ export async function updateModuleAction(
   moduleId: string,
   input: { title?: string; description?: string | null },
 ): Promise<UpdateModuleResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = updateModuleSchema.safeParse(input)
   if (!parsed.success) {
@@ -776,7 +776,7 @@ export async function updateModuleAction(
 export async function deleteModuleAction(
   moduleId: string,
 ): Promise<BaseResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   // Look up the courseId before delete so we can revalidate even
   // though the row is about to disappear.

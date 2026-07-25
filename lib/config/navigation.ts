@@ -12,8 +12,10 @@ import {
   type LucideIcon,
   Megaphone,
   Network,
+  PhoneCall,
   Settings,
   ShieldCheck,
+  ShieldPlus,
   Tag,
   TrendingUp,
   User,
@@ -55,21 +57,22 @@ export const adminNav: NavSection[] = [
   {
     label: 'Learning',
     items: [
-      { label: 'Courses', href: '/admin/courses', icon: GraduationCap },
-      { label: 'Membership', href: '/admin/membership', icon: Tag },
-      { label: 'Certificates', href: '/admin/certificates', icon: Award },
+      { label: 'Courses', href: '/admin/courses', icon: GraduationCap, moduleKey: 'courses' },
+      { label: 'Membership', href: '/admin/membership', icon: Tag, moduleKey: 'membership' },
+      { label: 'Certificates', href: '/admin/certificates', icon: Award, moduleKey: 'certificates' },
       {
         label: 'Progress Tracker',
         href: '/admin/progress',
         icon: TrendingUp,
+        moduleKey: 'progress',
       },
     ],
   },
   {
     label: 'Community',
     items: [
-      { label: 'Members', href: '/admin/members', icon: Users },
-      { label: 'Announcements', href: '/admin/announcements', icon: Megaphone },
+      { label: 'Students', href: '/admin/students', icon: Users, moduleKey: 'students' },
+      { label: 'Announcements', href: '/admin/announcements', icon: Megaphone, moduleKey: 'announcements' },
     ],
   },
   {
@@ -86,13 +89,18 @@ export const adminNav: NavSection[] = [
       { label: 'Statistics', href: '/admin/stats', icon: BarChart3, moduleKey: 'stats' },
       { label: 'Organization Board', href: '/admin/org-board', icon: Network, moduleKey: 'org-board' },
       { label: 'Onboarding', href: '/admin/onboarding', icon: UserPlus, moduleKey: 'onboarding' },
+      { label: 'Production Sheets', href: '/admin/production-sheets', icon: PhoneCall, moduleKey: 'production' },
     ],
   },
   {
     label: 'System',
     items: [
-      { label: 'Activity log', href: '/admin/activity', icon: ClipboardList },
-      { label: 'Settings', href: '/admin/settings', icon: Settings },
+      { label: 'Activity log', href: '/admin/activity', icon: ClipboardList, moduleKey: 'activity' },
+      // Role management is delegable — holders can grant any other
+      // module to any user, so treat this as a high-trust permission.
+      // ADMIN tier still bypasses the check.
+      { label: 'Roles', href: '/admin/roles', icon: ShieldPlus, moduleKey: 'roles' },
+      { label: 'Settings', href: '/admin/settings', icon: Settings, moduleKey: 'settings' },
     ],
   },
 ]
@@ -150,6 +158,7 @@ export const memberNav: NavSection[] = [
       { label: 'Statistics', href: '/team/stats', icon: BarChart3, visibleTo: ['TEAM'], moduleKey: 'stats' },
       { label: 'Organization Board', href: '/team/org-board', icon: Network, visibleTo: ['TEAM'], moduleKey: 'org-board' },
       { label: 'Onboarding', href: '/team/onboarding', icon: UserPlus, visibleTo: ['TEAM'], moduleKey: 'onboarding' },
+      { label: 'Production Sheets', href: '/team/production-sheets', icon: PhoneCall, visibleTo: ['TEAM'], moduleKey: 'production' },
     ],
   },
   {

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { orgBoardService } from '@/lib/services/org-board-service'
 import { OrgNodeDrilldown } from '@/components/admin/org-board/org-node-drilldown'
 
@@ -13,7 +13,7 @@ interface PageProps {
 }
 
 export default async function OrgBoardNodePage({ params }: PageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("org-board")
   const { id } = await params
 
   const result = await orgBoardService.getNodeWithSubtree(id)

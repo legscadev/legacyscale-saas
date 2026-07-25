@@ -57,7 +57,7 @@ function buildCells(counts: MemberCounts, lens: MembersLens): StatStripCell[] {
   if (lens === 'members') {
     return [
       {
-        label: 'Total members',
+        label: 'Total students',
         value: counts.all.toLocaleString(),
         description: 'Students on the platform',
         icon: Users,

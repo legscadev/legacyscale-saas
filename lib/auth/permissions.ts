@@ -1,4 +1,4 @@
-import type { CourseAudience, Role } from '@prisma/client'
+import type { CourseAudience, UserRole } from '@prisma/client'
 
 /**
  * Course audiences a given role is allowed to discover via the member
@@ -9,7 +9,7 @@ import type { CourseAudience, Role } from '@prisma/client'
  * Used by member-course-service to gate listCatalog / getById /
  * ensureEnrollment / etc.
  */
-export function visibleAudiencesFor(role: Role): CourseAudience[] {
+export function visibleAudiencesFor(role: UserRole): CourseAudience[] {
   if (role === 'ADMIN' || role === 'TEAM') {
     return ['MEMBERS', 'INTERNAL', 'BOTH']
   }

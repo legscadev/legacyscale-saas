@@ -1,4 +1,4 @@
-import { Prisma, type Role } from '@prisma/client'
+import { Prisma, type UserRole } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { getRequestCompanyId, memberTenantScope } from '@/lib/tenancy/request-company'
@@ -10,11 +10,11 @@ export type SortDirection = 'asc' | 'desc'
 interface ListMembersOptions {
   search?: string
   /** Single role filter — mutually exclusive with `roles`. */
-  role?: Role | null
+  role?: UserRole | null
   /** Multi-role filter — used by the Team page to lump ADMIN + TEAM
    *  under one view. If both `role` and `roles` are set, `role`
    *  wins (single-role is the more specific of the two). */
-  roles?: Role[] | null
+  roles?: UserRole[] | null
   status?: MemberStatusFilter | null
   sort?: MemberSortField
   direction?: SortDirection
@@ -114,6 +114,21 @@ async function listMembers(options: ListMembersOptions) {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
+        // Custom-role assignments in the active company. Rendered
+        // as badges on the team/members table so admins can see
+        // each staff member's roles at a glance.
+        roleAssignments: {
+          select: {
+            role: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                isSystem: true,
+              },
+            },
+          },
+        },
       },
     }),
     prisma.user.count({ where }),
@@ -132,7 +147,7 @@ async function listMembers(options: ListMembersOptions) {
  *  `roles` is provided (e.g. Team page passes [ADMIN, TEAM]) the
  *  totals scope to just that population so the strip matches the
  *  table under it. Undefined = every user. */
-async function getCounts(roles?: Role[]) {
+async function getCounts(roles?: UserRole[]) {
   const tenantFilter = await memberTenantScope()
   const scopedActive: Prisma.UserWhereInput = {
     deletedAt: null,

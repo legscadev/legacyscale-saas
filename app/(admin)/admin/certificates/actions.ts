@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { prisma } from '@/lib/prisma'
 import { memberTenantScope } from '@/lib/tenancy/request-company'
@@ -24,21 +24,21 @@ export type { AdminCertificateRow } from '@/lib/services/admin-certificate-servi
 export async function fetchCertificates(
   filters: AdminCertificateFilters,
 ): Promise<AdminCertificateRow[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess("certificates")
   return listAllCertificates(filters)
 }
 
 export async function downloadCertificateAction(
   issuanceId: string,
 ): Promise<{ ok: true; url: string; filename: string } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess("certificates")
   return getAdminCertificateDownload(issuanceId)
 }
 
 export async function emailCertificateAction(
   issuanceId: string,
 ): Promise<{ ok: true; messageId?: string } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess("certificates")
   const result = await emailCertificateToMember(issuanceId)
   return result
 }
@@ -47,7 +47,7 @@ export async function revokeCertificateAction(
   issuanceId: string,
   reason: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("certificates")
   const result = await revokeCertificate(admin.id, issuanceId, reason)
   if (result.ok) {
     await writeAuditLog({
@@ -66,7 +66,7 @@ export async function revokeCertificateAction(
 export async function reinstateCertificateAction(
   issuanceId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("certificates")
   const result = await reinstateCertificate(issuanceId)
   if (result.ok) {
     await writeAuditLog({
@@ -85,7 +85,7 @@ export async function issueCertificateAction(
   userId: string,
   moduleId: string,
 ): Promise<{ ok: true; issuanceId: string } | { ok: false; error: string }> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("certificates")
   const result = await manuallyIssueCertificate(admin.id, { userId, moduleId })
   if (result.ok) {
     await writeAuditLog({
@@ -109,7 +109,7 @@ export async function issueCertificatesBulkAction(
     | { ok: true; issuedCount: number; results: BulkIssueOutcome[] }
     | { ok: false; error: string }
   > {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("certificates")
   const result = await manuallyIssueBulkCertificates(admin.id, userId, moduleIds)
   if (result.ok && result.issuedCount > 0) {
     await writeAuditLog({
@@ -153,7 +153,7 @@ export interface ModulePickerRow {
 }
 
 export async function listMembersForCertPicker(): Promise<MemberPickerOption[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess("certificates")
   // Every active, non-deleted user regardless of role — admins +
   // team members also take courses and sometimes need certificates
   // hand-issued for support reasons.
@@ -175,7 +175,7 @@ export async function listMembersForCertPicker(): Promise<MemberPickerOption[]> 
  * still respects certificateEnabled for the automatic path.
  */
 export async function listCoursesForCertPicker(): Promise<CoursePickerOption[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess("certificates")
   const rows = await prisma.course.findMany({
     where: { deletedAt: null },
     orderBy: [{ orderIndex: 'asc' }, { title: 'asc' }],
@@ -198,7 +198,7 @@ export async function listModulesByCourseForCertPicker(
   courseId: string,
   memberId?: string,
 ): Promise<ModulePickerRow[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess("certificates")
   const modules = await prisma.module.findMany({
     where: { courseId, deletedAt: null },
     orderBy: { orderIndex: 'asc' },

@@ -18,9 +18,9 @@ import {
   type StatStripCell,
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { getInitials, relativeTime } from '@/lib/format'
-import type { Role } from '@prisma/client'
+import type { UserRole } from '@prisma/client'
 
 import {
   adminProgressService,
@@ -47,7 +47,7 @@ interface HighlightRow {
     name: string | null
     email: string
     avatarUrl: string | null
-    role: Role
+    role: UserRole
   }
   courseTitle: string | null
   signal: string
@@ -64,7 +64,7 @@ const TYPE_PILL: Record<HighlightType, string> = {
 export default async function AdminProgressOverviewPage({
   searchParams,
 }: PageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("progress")
   const params = await searchParams
   const range = parseRange(params.range)
   const window = rangeLabel(range)
@@ -170,7 +170,7 @@ export default async function AdminProgressOverviewPage({
           <>
             <div className="flex items-center gap-4 border-b bg-muted/40 px-5 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               <div className="w-20 shrink-0">Signal</div>
-              <div className="flex-1">Member</div>
+              <div className="flex-1">Student</div>
               <div className="hidden flex-1 sm:block">Course</div>
               <div className="hidden w-40 shrink-0 text-right md:block">
                 Detail

@@ -5,7 +5,7 @@ import { promises as dns } from 'node:dns'
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import {
   getPlatformApexDomain,
   managedSubdomainFor,
@@ -65,7 +65,7 @@ const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/
  *  verificationToken only for un-verified custom domains so the UI
  *  can show DNS instructions. */
 export async function listDomainsAction(): Promise<DomainRow[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company) return []
   const rows = await prisma.domain.findMany({
@@ -102,7 +102,7 @@ export async function listDomainsAction(): Promise<DomainRow[]> {
 export async function claimManagedSubdomainAction(
   formData: FormData,
 ): Promise<DomainSaveResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company) {
     return {
@@ -187,7 +187,7 @@ export async function claimManagedSubdomainAction(
 export async function startCustomDomainAction(
   formData: FormData,
 ): Promise<DomainSaveResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company) return { ok: false, error: 'No active company.' }
 
@@ -272,7 +272,7 @@ export interface VerifyResult {
 export async function verifyCustomDomainAction(
   domainId: string,
 ): Promise<VerifyResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company) return { ok: false, error: 'No active company.' }
 
@@ -397,7 +397,7 @@ export async function verifyCustomDomainAction(
 export async function removeDomainAction(
   domainId: string,
 ): Promise<DomainSaveResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const company = await getActiveCompany()
   if (!company) return { ok: false, error: 'No active company.' }
 
@@ -425,6 +425,6 @@ export async function removeDomainAction(
  *  the ".apex" preview next to the slug input. Server-only value
  *  passed as a plain string. */
 export async function getPlatformApexAction(): Promise<string> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   return getPlatformApexDomain()
 }

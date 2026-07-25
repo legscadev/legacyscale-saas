@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { membershipService } from '@/lib/services/membership-service'
 import { courseService } from '@/lib/services/course-service'
 import { PageHeader } from '@/components/shared'
@@ -13,7 +13,7 @@ interface EditCoursePageProps {
 }
 
 export default async function EditCoursePage({ params }: EditCoursePageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
   const { slug } = await params
 
   const [course, memberships] = await Promise.all([

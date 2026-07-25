@@ -92,7 +92,7 @@ const TEMPLATE_ROWS: Row[] = [
 const PEOPLE_ROWS: Row[] = [
   {
     key: 'members',
-    label: 'Members',
+    label: 'Students',
     description:
       'Adds every MEMBER-role user from the source tenant to this tenant. Real people gain access on next login.',
     destructive: true,

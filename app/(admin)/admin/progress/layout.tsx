@@ -1,4 +1,4 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { PageHeader } from '@/components/shared'
 import { ProgressTabs } from '@/components/admin/progress/progress-tabs'
 
@@ -7,7 +7,7 @@ export default async function AdminProgressLayout({
 }: {
   children: React.ReactNode
 }) {
-  await requireAdmin()
+  await requireTeamModuleAccess("progress")
 
   return (
     <div className="space-y-6">

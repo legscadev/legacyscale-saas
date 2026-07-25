@@ -27,7 +27,7 @@ import {
   fetchMembers,
   type MembersData,
   type MembersQueryState,
-} from '@/app/(admin)/admin/members/actions'
+} from '@/app/(admin)/admin/students/actions'
 import type {
   MemberSortField,
   SortDirection,
@@ -61,9 +61,13 @@ interface MembersShellProps {
    *  which needs to show ADMIN + TEAM together). When set, the
    *  toolbar role dropdown is hidden. */
   lockedRoles?: ('ADMIN' | 'TEAM' | 'MEMBER')[]
-  /** Override the page header. Defaults to "Members". */
+  /** Override the page header. Defaults to "Students". */
   pageTitle?: string
   pageDescription?: string
+  /** Singular noun for the entity being managed — used by the
+   *  "Add {entity}" button + create dialog title. Defaults to
+   *  "student"; /admin/team overrides to "team member". */
+  entityLabel?: string
 }
 
 export function MembersShell({
@@ -74,6 +78,7 @@ export function MembersShell({
   lockedRoles,
   pageTitle,
   pageDescription,
+  entityLabel = 'student',
 }: MembersShellProps) {
   const [query, setQuery] = useState<MembersQueryState>({
     ...DEFAULT_QUERY_STATE,
@@ -214,7 +219,7 @@ export function MembersShell({
   return (
     <div className="space-y-6" data-pending={isLoading}>
       <PageHeader
-        title={pageTitle ?? 'Members'}
+        title={pageTitle ?? 'Students'}
         description={
           pageDescription ??
           `Manage ${data.counts.all.toLocaleString()} ${
@@ -224,7 +229,7 @@ export function MembersShell({
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            Add member
+            Add {entityLabel}
           </Button>
         }
       />
@@ -315,6 +320,7 @@ export function MembersShell({
           (defaultRole ? [defaultRole] : undefined)
         }
         defaultRole={defaultRole}
+        entityLabel={entityLabel}
       />
     </div>
   )

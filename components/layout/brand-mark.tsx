@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { DEFAULT_BRANDING } from '@/lib/branding/defaults'
 
 interface BrandMarkProps {
-  /** Sublabel under the wordmark, e.g. "Admin Console" or "Member". */
+  /** Sublabel under the wordmark, e.g. "Admin Console" or "Student". */
   context?: string
   /** Icon-only variant — used by the collapsed sidebar. */
   compact?: boolean

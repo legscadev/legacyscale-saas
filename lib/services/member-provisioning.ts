@@ -1,4 +1,4 @@
-import type { CompanyRole, Role } from '@prisma/client'
+import type { CompanyRole, UserRole } from '@prisma/client'
 
 import { syncUserToDatabase } from '@/lib/auth/sync-user'
 import { issueInvite } from '@/lib/invites'
@@ -10,7 +10,7 @@ import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 export interface ProvisionMemberInput {
   name: string
   email: string
-  role: Role
+  role: UserRole
   /**
    * Optional category tier. Only meaningful for the MEMBER role; the
    * caller (or this helper) normalises it to null for ADMIN/TEAM.
@@ -22,7 +22,7 @@ export interface ProvisionedMember {
   id: string
   email: string
   name: string | null
-  role: Role
+  role: UserRole
 }
 
 /**
@@ -48,10 +48,10 @@ function generateInternalPassword(): string {
   return Buffer.from(bytes).toString('base64')
 }
 
-/** Maps the legacy per-user Role enum onto the new CompanyRole
+/** Maps the legacy per-user UserRole enum onto the new CompanyRole
  *  enum. ADMIN → OWNER retains the same "runs the tenant"
  *  semantics; MEMBER + TEAM map straight across. */
-function mapRoleToCompanyRole(role: Role): CompanyRole {
+function mapRoleToCompanyRole(role: UserRole): CompanyRole {
   switch (role) {
     case 'ADMIN':
       return 'OWNER'

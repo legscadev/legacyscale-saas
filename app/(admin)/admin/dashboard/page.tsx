@@ -61,7 +61,7 @@ export default async function AdminDashboardPage() {
   // Users are a global table, so the Prisma tenancy extension does
   // NOT auto-scope them. Every user.count / user.findMany on this
   // dashboard has to opt in via memberTenantScope() — otherwise the
-  // "Members" card reads the platform-wide count and "Newest members"
+  // "Students" card reads the platform-wide count and "Newest members"
   // leaks other tenants' users into the sidebar panel.
   const tenantScope = await memberTenantScope()
 
@@ -171,7 +171,7 @@ export default async function AdminDashboardPage() {
 
   const cells: StatStripCell[] = [
     {
-      label: 'Members',
+      label: 'Students',
       value: membersTotal,
       icon: Users,
       description: `${membersActive} active`,
@@ -206,7 +206,7 @@ export default async function AdminDashboardPage() {
       {
         count: pendingEnrollments,
         label: `${plural(pendingEnrollments, 'enrollment', 'enrollments')} awaiting activation`,
-        href: '/admin/members',
+        href: '/admin/students',
         icon: Clock,
         tone: 'warning',
       },
@@ -406,7 +406,7 @@ export default async function AdminDashboardPage() {
               <Button
                 variant="outline"
                 className="justify-start"
-                render={<Link href="/admin/members" />}
+                render={<Link href="/admin/students" />}
               >
                 <UserPlus />
                 Invite a member
@@ -495,7 +495,7 @@ export default async function AdminDashboardPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                render={<Link href="/admin/members" />}
+                render={<Link href="/admin/students" />}
               >
                 All
               </Button>

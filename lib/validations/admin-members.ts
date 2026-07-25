@@ -17,7 +17,7 @@ export const adminCreateMemberSchema = z.object({
 })
 
 /**
- * Body shape for PATCH /api/admin/members/[id]. All fields are
+ * Body shape for PATCH /api/admin/students/[id]. All fields are
  * optional so callers can update any subset (status toggle, edit
  * details, etc.) through the same endpoint. Email is intentionally
  * absent — that needs supabase.auth.admin.updateUserById and a

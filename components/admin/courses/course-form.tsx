@@ -512,7 +512,7 @@ export function CourseForm({
               current={audience}
               disabled={submitting}
               onSelect={setAudience}
-              title="Members"
+              title="Students"
               body="Shown in the member catalog only."
             />
             <AudienceOption

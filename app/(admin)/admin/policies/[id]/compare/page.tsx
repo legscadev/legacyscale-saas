@@ -9,7 +9,7 @@ import {
   CURRENT_SENTINEL,
   buildSnapshot,
 } from '@/components/admin/policies/policy-compare-shared'
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import type { PolicyRevisionDetail } from '@/lib/services/policy-service'
 
 export const dynamic = 'force-dynamic'
@@ -41,7 +41,7 @@ export default async function PolicyComparePage({
   params,
   searchParams,
 }: PolicyComparePageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("policies")
   const { id } = await params
   const raw = await searchParams
   const scalar = (v: string | string[] | undefined) =>

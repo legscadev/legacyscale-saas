@@ -207,7 +207,7 @@ export function IssueCertificateDialog({
               combined "search + dropdown" pattern flickers. A single
               always-visible list is simpler and works reliably. */}
           <div className="space-y-2">
-            <Label htmlFor="issue-cert-member-search">Member</Label>
+            <Label htmlFor="issue-cert-member-search">Student</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -243,7 +243,7 @@ export function IssueCertificateDialog({
             ) : (
               <ul
                 role="listbox"
-                aria-label="Members"
+                aria-label="Students"
                 className="max-h-40 overflow-y-auto rounded-md border"
               >
                 {filteredMembers.length === 0 ? (
@@ -423,7 +423,7 @@ export function IssueCertificateDialog({
 function roleLabel(role: 'ADMIN' | 'TEAM' | 'MEMBER'): string {
   if (role === 'ADMIN') return 'Admin'
   if (role === 'TEAM') return 'Team'
-  return 'Member'
+  return 'Student'
 }
 
 function roleTone(role: 'ADMIN' | 'TEAM' | 'MEMBER'): string {

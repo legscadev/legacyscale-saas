@@ -1,6 +1,6 @@
 import { cache } from 'react'
 import { after } from 'next/server'
-import type { CourseAudience, Prisma, Role } from '@prisma/client'
+import type { CourseAudience, Prisma, UserRole } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { postCompletionToDiscord } from '@/lib/discord'
@@ -27,7 +27,7 @@ const SIGNED_URL_TTL_SEC = 60 * 5 // 5 minutes — plenty for a click-to-downloa
 // member shouldn't see, and folds in the current user's enrollment
 // + progress so the UI doesn't need a second roundtrip.
 //
-// Audience visibility now depends on the user's Role: MEMBER sees
+// Audience visibility now depends on the user's UserRole: MEMBER sees
 // MEMBERS+BOTH; TEAM and ADMIN also see INTERNAL. Methods that filter
 // by audience accept the role explicitly OR look it up.
 
@@ -41,7 +41,7 @@ const resolveMemberAccess = cache(
       where: { id: userId },
       select: { role: true, membershipId: true },
     })
-    const role = user?.role ?? ('MEMBER' as Role)
+    const role = user?.role ?? ('MEMBER' as UserRole)
     const visibleAudiences = visibleAudiencesFor(role)
 
     // ADMIN + TEAM bypass the member-tier category filter and see

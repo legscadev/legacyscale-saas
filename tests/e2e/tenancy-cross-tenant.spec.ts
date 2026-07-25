@@ -55,7 +55,7 @@ test.describe('Cross-tenant isolation', () => {
 
     // The members table must NOT surface the Tenant-B member — the
     // memberTenantScope() filter in member-service is the enforcer.
-    await page.goto('/admin/members')
+    await page.goto('/admin/students')
     await expect(page.getByText(foreignEmail!, { exact: false })).toHaveCount(0)
   })
 

@@ -203,7 +203,7 @@ export function TopBar({
                     size="sm"
                     aria-label={
                       role === 'admin'
-                        ? 'View as member'
+                        ? 'View as student'
                         : 'Back to admin view'
                     }
                     render={
@@ -214,14 +214,14 @@ export function TopBar({
                   >
                     <ArrowLeftRight className="size-4" />
                     <span className="hidden sm:inline">
-                      {role === 'admin' ? 'View as member' : 'Back to admin'}
+                      {role === 'admin' ? 'View as student' : 'Back to admin'}
                     </span>
                   </Button>
                 }
               />
               <TooltipContent side="bottom">
                 {role === 'admin'
-                  ? 'Open the app the way a member sees it'
+                  ? 'Open the app the way a student sees it'
                   : 'Return to the admin surface'}
               </TooltipContent>
             </Tooltip>

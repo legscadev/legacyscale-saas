@@ -31,7 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { AccessGridDialog } from '@/components/admin/team/access-grid-dialog'
+import { RoleAssignmentDialog } from '@/components/admin/team/role-assignment-dialog'
 
 import { MemberEditDialog } from './member-edit-dialog'
 import { NudgeDialog } from './nudge-dialog'
@@ -79,7 +79,7 @@ export function MemberActionsMenu({
   const resendInvite = async () => {
     setResending(true)
     try {
-      const res = await fetch(`/api/admin/members/${memberId}/resend-invite`, {
+      const res = await fetch(`/api/admin/students/${memberId}/resend-invite`, {
         method: 'POST',
       })
       const json = await res.json()
@@ -101,7 +101,7 @@ export function MemberActionsMenu({
   const restore = async () => {
     setRestoring(true)
     try {
-      const res = await fetch(`/api/admin/members/${memberId}`, {
+      const res = await fetch(`/api/admin/students/${memberId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archive: false }),
@@ -126,7 +126,7 @@ export function MemberActionsMenu({
   const archive = async () => {
     setArchiving(true)
     try {
-      const res = await fetch(`/api/admin/members/${memberId}`, {
+      const res = await fetch(`/api/admin/students/${memberId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archive: true }),
@@ -152,7 +152,7 @@ export function MemberActionsMenu({
   const setActive = async (nextIsActive: boolean) => {
     setPending(true)
     try {
-      const res = await fetch(`/api/admin/members/${memberId}`, {
+      const res = await fetch(`/api/admin/students/${memberId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: nextIsActive }),
@@ -342,7 +342,7 @@ export function MemberActionsMenu({
         memberName={memberName}
       />
 
-      <AccessGridDialog
+      <RoleAssignmentDialog
         open={managingAccess}
         onOpenChange={setManagingAccess}
         target={

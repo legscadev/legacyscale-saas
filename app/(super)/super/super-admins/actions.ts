@@ -33,7 +33,7 @@ export interface GrantSuperAdminResult {
   ok: boolean
   /** Set when the failure was specifically "we don't know this
    *  email" — the client uses this to render a friendlier hint
-   *  with a link to /admin/members. */
+   *  with a link to /admin/students. */
   unknownEmail?: boolean
   error?: string
 }

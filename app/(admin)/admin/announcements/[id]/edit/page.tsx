@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { announcementService } from '@/lib/services/announcement-service'
 import { isDiscordWebhookConfigured } from '@/lib/services/app-setting-service'
 import { PageHeader } from '@/components/shared'
@@ -14,7 +14,7 @@ interface EditAnnouncementPageProps {
 export default async function EditAnnouncementPage({
   params,
 }: EditAnnouncementPageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("announcements")
   const { id } = await params
 
   const announcement = await announcementService.getById(id)

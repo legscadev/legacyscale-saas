@@ -240,7 +240,7 @@ export async function getCertificatePdfBytes(
   const memberName =
     issuance.user.name?.trim() ||
     issuance.user.email.split('@')[0] ||
-    'Member'
+    'Student'
   const bytes = await renderCertificatePdf({
     memberName,
     moduleTitle: issuance.module.title,
@@ -280,7 +280,7 @@ export async function getCertificateDownload(
   const memberName =
     issuance.user.name?.trim() ||
     issuance.user.email.split('@')[0] ||
-    'Member'
+    'Student'
 
   return ensureAndSignPdf({
     issuanceId: issuance.id,
