@@ -3,6 +3,13 @@
 // bundle into the browser (the service layer imports `prisma` which
 // transitively loads `pg` / `node:async_hooks`).
 
+/** Sentinel picked from the user-picker dropdown to request an
+ *  aggregated view across every production user. Reserved value —
+ *  never collides with a real UUID. Admin-only. Kept here so both
+ *  the "use server" actions file and the client shell can import
+ *  it without violating the "only async exports" rule. */
+export const ALL_USERS = '__all__'
+
 /** All numeric metric columns on ProductionEntry / ProductionTarget,
  *  in the same order they appear on the daily-entry sheet. */
 export const METRIC_KEYS = [

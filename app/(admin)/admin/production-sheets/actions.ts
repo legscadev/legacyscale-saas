@@ -7,9 +7,12 @@ import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
   deleteAppointment,
   getMonthlyTargets,
+  getMonthlyTargetsAll,
   listAppointments,
   listEntriesForMonth,
+  listEntriesForMonthAll,
   listMonthlyAggregates,
+  listMonthlyAggregatesAll,
   listProductionUsers,
   upsertAppointment,
   upsertEntry,
@@ -24,6 +27,7 @@ import {
   type UpsertEntryInput,
   type UpsertTargetsInput,
 } from '@/lib/services/production-service'
+import { ALL_USERS } from '@/lib/production/metrics'
 
 export type {
   AppointmentRow,
@@ -54,6 +58,15 @@ function assertOwnOrAdmin(actor: { id: string; role: string }, targetUserId: str
   }
 }
 
+/** Admin-only: reject the ALL_USERS sentinel unless the actor is
+ *  ADMIN tier. Aggregates leak cross-user data so TEAM tier can
+ *  never opt in. */
+function assertAdminForAll(actor: { role: string }) {
+  if (actor.role !== 'ADMIN') {
+    throw new Error('forbidden: aggregate view is admin-only')
+  }
+}
+
 // ─── READ ─────────────────────────────────────────────────────
 
 export async function fetchEntries(
@@ -62,6 +75,10 @@ export async function fetchEntries(
   month: number,
 ): Promise<DailyEntry[]> {
   const actor = await requireAccess()
+  if (userId === ALL_USERS) {
+    assertAdminForAll(actor)
+    return listEntriesForMonthAll(year, month)
+  }
   assertOwnOrAdmin(actor, userId)
   return listEntriesForMonth(userId, year, month)
 }
@@ -72,6 +89,10 @@ export async function fetchTargets(
   month: number,
 ): Promise<MonthlyTargets> {
   const actor = await requireAccess()
+  if (userId === ALL_USERS) {
+    assertAdminForAll(actor)
+    return getMonthlyTargetsAll(year, month)
+  }
   assertOwnOrAdmin(actor, userId)
   return getMonthlyTargets(userId, year, month)
 }
@@ -80,6 +101,12 @@ export async function fetchAppointments(
   options: ListAppointmentsOptions & { userId: string },
 ): Promise<AppointmentRow[]> {
   const actor = await requireAccess()
+  if (options.userId === ALL_USERS) {
+    assertAdminForAll(actor)
+    // Drop the userId filter so listAppointments returns every row.
+    const { userId: _all, ...rest } = options
+    return listAppointments(rest)
+  }
   assertOwnOrAdmin(actor, options.userId)
   return listAppointments(options)
 }
@@ -89,6 +116,10 @@ export async function fetchMonthlyAggregates(
   months?: number,
 ): Promise<MonthlyAggregateRow[]> {
   const actor = await requireAccess()
+  if (userId === ALL_USERS) {
+    assertAdminForAll(actor)
+    return listMonthlyAggregatesAll(months)
+  }
   assertOwnOrAdmin(actor, userId)
   return listMonthlyAggregates(userId, months)
 }

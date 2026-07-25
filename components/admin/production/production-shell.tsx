@@ -24,6 +24,7 @@ import {
   type MonthlyTargets,
   type ProductionUserOption,
 } from '@/app/(admin)/admin/production-sheets/actions'
+import { ALL_USERS } from '@/lib/production/metrics'
 
 import { AppointmentsList } from './appointments-list'
 import { DailyEntryGrid } from './daily-entry-grid'
@@ -105,6 +106,7 @@ export function ProductionShell(props: ProductionShellProps) {
     () => users.find((u) => u.id === targetUserId),
     [users, targetUserId],
   )
+  const isAllView = targetUserId === ALL_USERS
 
   const stepMonth = (delta: number) => {
     let m = month + delta
@@ -144,11 +146,19 @@ export function ProductionShell(props: ProductionShellProps) {
             <SelectTrigger className="w-[240px]">
               <SelectValue>
                 {(v: string) =>
-                  users.find((u) => u.id === v)?.name ?? 'Select user'
+                  v === ALL_USERS
+                    ? 'All users (aggregate)'
+                    : users.find((u) => u.id === v)?.name ?? 'Select user'
                 }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={ALL_USERS}>
+                <span className="font-medium">All users</span>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  Sum across the team
+                </span>
+              </SelectItem>
               {users.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
                   {u.name}
@@ -232,6 +242,7 @@ export function ProductionShell(props: ProductionShellProps) {
             entries={entries}
             targets={targets}
             loading={loading}
+            readOnly={isAllView}
             onEntriesChange={setEntries}
             onTargetsChange={setTargets}
           />
@@ -241,11 +252,14 @@ export function ProductionShell(props: ProductionShellProps) {
           <AppointmentsList
             actorId={currentUserId}
             targetUserId={targetUserId}
-            targetUserName={targetUser?.name ?? 'This user'}
+            targetUserName={
+              isAllView ? 'All users' : targetUser?.name ?? 'This user'
+            }
             users={users}
             currentUserIsAdmin={currentUserIsAdmin}
             appointments={appointments}
             loading={loading}
+            readOnly={isAllView}
             onChange={setAppointments}
           />
         </TabsContent>

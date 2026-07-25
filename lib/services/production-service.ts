@@ -130,6 +130,60 @@ export async function listEntriesForMonth(
   )
 }
 
+/**
+ * Sum every user's entries in the given (year, month), grouped by
+ * day. Feeds the admin "All users" view of the daily-entry grid —
+ * shows total production across the whole team per day. The grid is
+ * rendered read-only in this mode; the id is null on every row.
+ */
+export async function listEntriesForMonthAll(
+  year: number,
+  month: number,
+): Promise<DailyEntry[]> {
+  const start = new Date(Date.UTC(year, month - 1, 1))
+  const end = new Date(Date.UTC(year, month, 1))
+  const rows = await prisma.productionEntry.findMany({
+    where: { date: { gte: start, lt: end } },
+    orderBy: { date: 'asc' },
+  })
+  const byDate = new Map<string, DailyEntry>()
+  for (const iso of monthDates(year, month)) {
+    byDate.set(iso, {
+      id: null,
+      userId: '__all__',
+      date: iso,
+      phoneCalls: 0,
+      dms: 0,
+      cellConnects: 0,
+      appointmentsSet: 0,
+      demosConducted: 0,
+      introUnits: 0,
+      basisUnits: 0,
+      majorUnits: 0,
+      sales: 0,
+      collections: 0,
+      notes: null,
+    })
+  }
+  for (const r of rows) {
+    const key = toIsoDate(r.date)
+    const bucket = byDate.get(key)
+    if (!bucket) continue
+    bucket.phoneCalls = (bucket.phoneCalls ?? 0) + (r.phoneCalls ?? 0)
+    bucket.dms = (bucket.dms ?? 0) + (r.dms ?? 0)
+    bucket.cellConnects = (bucket.cellConnects ?? 0) + (r.cellConnects ?? 0)
+    bucket.appointmentsSet = (bucket.appointmentsSet ?? 0) + (r.appointmentsSet ?? 0)
+    bucket.demosConducted = (bucket.demosConducted ?? 0) + (r.demosConducted ?? 0)
+    bucket.introUnits = (bucket.introUnits ?? 0) + (r.introUnits ?? 0)
+    bucket.basisUnits = (bucket.basisUnits ?? 0) + (r.basisUnits ?? 0)
+    bucket.majorUnits = (bucket.majorUnits ?? 0) + (r.majorUnits ?? 0)
+    bucket.sales = (bucket.sales ?? 0) + Number(r.sales?.toString() ?? '0')
+    bucket.collections =
+      (bucket.collections ?? 0) + Number(r.collections?.toString() ?? '0')
+  }
+  return Array.from(byDate.values())
+}
+
 export interface UpsertEntryInput {
   userId: string
   date: string /** yyyy-mm-dd */
@@ -281,6 +335,50 @@ export async function getMonthlyTargets(
     where: { userId, year, month },
   })
   return mapTarget(row, userId, year, month)
+}
+
+/**
+ * Sum every user's monthly targets for (year, month). Feeds the
+ * admin "All users" targets row — represents the aggregate team
+ * quota. The returned id is null; the row can't be edited in All
+ * mode (individual targets must be set per user).
+ */
+export async function getMonthlyTargetsAll(
+  year: number,
+  month: number,
+): Promise<MonthlyTargets> {
+  const rows = await prisma.productionTarget.findMany({
+    where: { year, month },
+  })
+  const sum: MonthlyTargets = {
+    id: null,
+    userId: '__all__',
+    year,
+    month,
+    phoneCalls: 0,
+    dms: 0,
+    cellConnects: 0,
+    appointmentsSet: 0,
+    demosConducted: 0,
+    introUnits: 0,
+    basisUnits: 0,
+    majorUnits: 0,
+    sales: 0,
+    collections: 0,
+  }
+  for (const r of rows) {
+    sum.phoneCalls = (sum.phoneCalls ?? 0) + (r.phoneCalls ?? 0)
+    sum.dms = (sum.dms ?? 0) + (r.dms ?? 0)
+    sum.cellConnects = (sum.cellConnects ?? 0) + (r.cellConnects ?? 0)
+    sum.appointmentsSet = (sum.appointmentsSet ?? 0) + (r.appointmentsSet ?? 0)
+    sum.demosConducted = (sum.demosConducted ?? 0) + (r.demosConducted ?? 0)
+    sum.introUnits = (sum.introUnits ?? 0) + (r.introUnits ?? 0)
+    sum.basisUnits = (sum.basisUnits ?? 0) + (r.basisUnits ?? 0)
+    sum.majorUnits = (sum.majorUnits ?? 0) + (r.majorUnits ?? 0)
+    sum.sales = (sum.sales ?? 0) + Number(r.sales?.toString() ?? '0')
+    sum.collections = (sum.collections ?? 0) + Number(r.collections?.toString() ?? '0')
+  }
+  return sum
 }
 
 export interface UpsertTargetsInput {
@@ -562,6 +660,61 @@ export async function listMonthlyAggregates(
     const bucket = buckets.get(`${t.year}-${t.month}`)
     if (!bucket) continue
     bucket.salesTarget = decimalToNumber(t.sales)
+  }
+  return Array.from(buckets.values()).sort((a, b) =>
+    a.year === b.year ? a.month - b.month : a.year - b.year,
+  )
+}
+
+/**
+ * Same shape as listMonthlyAggregates but sums every user's rows —
+ * used by the admin "All users" Master Data view. Sales target =
+ * sum of every user's monthly target for that month.
+ */
+export async function listMonthlyAggregatesAll(
+  months = 12,
+): Promise<MonthlyAggregateRow[]> {
+  const now = new Date()
+  const start = new Date(
+    Date.UTC(now.getFullYear(), now.getMonth() - (months - 1), 1),
+  )
+  const [entries, targets] = await Promise.all([
+    prisma.productionEntry.findMany({
+      where: { date: { gte: start } },
+      orderBy: { date: 'asc' },
+    }),
+    prisma.productionTarget.findMany({
+      where: { OR: buildTargetWindow(now, months) },
+      select: { year: true, month: true, sales: true },
+    }),
+  ])
+
+  const buckets = new Map<string, MonthlyAggregateRow>()
+  for (let i = 0; i < months; i++) {
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, 1))
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`
+    buckets.set(key, emptyAggregate(d.getUTCFullYear(), d.getUTCMonth() + 1))
+  }
+  for (const r of entries) {
+    const key = `${r.date.getUTCFullYear()}-${r.date.getUTCMonth() + 1}`
+    const bucket = buckets.get(key)
+    if (!bucket) continue
+    bucket.phoneCalls += r.phoneCalls ?? 0
+    bucket.dms += r.dms ?? 0
+    bucket.cellConnects += r.cellConnects ?? 0
+    bucket.appointmentsSet += r.appointmentsSet ?? 0
+    bucket.demosConducted += r.demosConducted ?? 0
+    bucket.introUnits += r.introUnits ?? 0
+    bucket.basisUnits += r.basisUnits ?? 0
+    bucket.majorUnits += r.majorUnits ?? 0
+    bucket.sales += Number(r.sales?.toString() ?? '0')
+    bucket.collections += Number(r.collections?.toString() ?? '0')
+  }
+  for (const t of targets) {
+    const bucket = buckets.get(`${t.year}-${t.month}`)
+    if (!bucket) continue
+    const add = decimalToNumber(t.sales) ?? 0
+    bucket.salesTarget = (bucket.salesTarget ?? 0) + add
   }
   return Array.from(buckets.values()).sort((a, b) =>
     a.year === b.year ? a.month - b.month : a.year - b.year,

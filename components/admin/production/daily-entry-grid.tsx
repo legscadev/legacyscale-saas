@@ -29,6 +29,10 @@ interface DailyEntryGridProps {
   entries: DailyEntry[]
   targets: MonthlyTargets
   loading: boolean
+  /** True when the grid is showing an aggregate (e.g. "All users").
+   *  Renders read-only — inputs become static text so admins can't
+   *  accidentally try to write to a summed row. */
+  readOnly?: boolean
   onEntriesChange: (entries: DailyEntry[]) => void
   onTargetsChange: (targets: MonthlyTargets) => void
 }
@@ -69,6 +73,7 @@ export function DailyEntryGrid({
   entries,
   targets,
   loading,
+  readOnly = false,
   onEntriesChange,
   onTargetsChange,
 }: DailyEntryGridProps) {
@@ -211,13 +216,26 @@ export function DailyEntryGrid({
                   </TableCell>
                   {METRIC_KEYS.map((k) => {
                     const cellId = `${entry.date}:${k}`
+                    const value = entry[k]
+                    if (readOnly) {
+                      return (
+                        <TableCell
+                          key={k}
+                          className="text-right tabular-nums text-muted-foreground"
+                        >
+                          {value === null || value === 0
+                            ? '—'
+                            : formatMetric(k, Number(value))}
+                        </TableCell>
+                      )
+                    }
                     return (
                       <TableCell key={k} className="p-1">
                         <Input
                           type="number"
                           inputMode="decimal"
                           step={CURRENCY_METRICS.has(k) ? '0.01' : '1'}
-                          defaultValue={entry[k] ?? ''}
+                          defaultValue={value ?? ''}
                           onBlur={(e) => commitCell(entry.date, k, e.target.value)}
                           className={cn(
                             'h-8 text-right tabular-nums [field-sizing:content] min-w-16',
@@ -228,12 +246,16 @@ export function DailyEntryGrid({
                     )
                   })}
                   <TableCell className="p-1">
-                    <Input
-                      defaultValue={entry.notes ?? ''}
-                      onBlur={(e) => commitNote(entry.date, e.target.value)}
-                      className="h-8 min-w-40"
-                      placeholder="—"
-                    />
+                    {readOnly ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <Input
+                        defaultValue={entry.notes ?? ''}
+                        onBlur={(e) => commitNote(entry.date, e.target.value)}
+                        className="h-8 min-w-40"
+                        placeholder="—"
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               )
@@ -250,23 +272,38 @@ export function DailyEntryGrid({
               <TableCell />
             </TableRow>
 
-            {/* Targets — editable */}
+            {/* Targets — editable (read-only in aggregate mode) */}
             <TableRow className="bg-muted/20">
               <TableCell className="sticky left-0 z-10 bg-muted font-medium">Target</TableCell>
-              {METRIC_KEYS.map((k) => (
-                <TableCell key={k} className="p-1">
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    step={CURRENCY_METRICS.has(k) ? '0.01' : '1'}
-                    defaultValue={targets[k] ?? ''}
-                    onBlur={(e) => commitTarget(k, e.target.value)}
-                    className="h-8 text-right tabular-nums [field-sizing:content] min-w-16"
-                    placeholder="—"
-                    key={`${targets.id ?? 'new'}:${year}-${month}:${k}`}
-                  />
-                </TableCell>
-              ))}
+              {METRIC_KEYS.map((k) => {
+                if (readOnly) {
+                  const value = targets[k]
+                  return (
+                    <TableCell
+                      key={k}
+                      className="text-right tabular-nums text-muted-foreground"
+                    >
+                      {value === null || value === 0
+                        ? '—'
+                        : formatMetric(k, Number(value))}
+                    </TableCell>
+                  )
+                }
+                return (
+                  <TableCell key={k} className="p-1">
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step={CURRENCY_METRICS.has(k) ? '0.01' : '1'}
+                      defaultValue={targets[k] ?? ''}
+                      onBlur={(e) => commitTarget(k, e.target.value)}
+                      className="h-8 text-right tabular-nums [field-sizing:content] min-w-16"
+                      placeholder="—"
+                      key={`${targets.id ?? 'new'}:${year}-${month}:${k}`}
+                    />
+                  </TableCell>
+                )
+              })}
               <TableCell />
             </TableRow>
 
