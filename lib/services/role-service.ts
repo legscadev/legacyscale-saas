@@ -262,17 +262,28 @@ class RoleService {
     }
   }
 
-  /** Delete a custom role. System roles are refused with a clear
-   *  error — those exist to preserve migrated grants and must not
-   *  disappear. */
+  /** Delete a custom role. Canonical system roles (Admin, Internal
+   *  Team) can never be deleted. Legacy per-user shim roles (slug
+   *  begins with `legacy-`) are deletable once no user holds them
+   *  — their only job was migrating old TeamModuleGrant rows. */
   async deleteRole(id: string): Promise<void> {
     const role = await prisma.role.findFirst({
       where: { id },
-      select: { isSystem: true },
+      select: {
+        isSystem: true,
+        slug: true,
+        _count: { select: { assignments: true } },
+      },
     })
     if (!role) return
-    if (role.isSystem) {
+    const isLegacy = role.slug.startsWith('legacy-')
+    if (role.isSystem && !isLegacy) {
       throw new Error('System roles cannot be deleted (rename them instead).')
+    }
+    if (isLegacy && role._count.assignments > 0) {
+      throw new Error(
+        'Legacy role still has members. Reassign them to another role first.',
+      )
     }
     await prisma.role.delete({ where: { id } })
   }
