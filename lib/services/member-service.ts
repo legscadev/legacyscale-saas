@@ -75,6 +75,7 @@ function buildOrderBy(
 async function listMembers(options: ListMembersOptions) {
   const { page, limit } = options
   const tenantFilter = await memberTenantScope()
+  const activeCompanyId = await getRequestCompanyId()
   const where = buildWhere(options, tenantFilter)
   const orderBy = buildOrderBy(options)
   const skip = (page - 1) * limit
@@ -114,10 +115,13 @@ async function listMembers(options: ListMembersOptions) {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
-        // Custom-role assignments in the active company. Rendered
-        // as badges on the team/members table so admins can see
-        // each staff member's roles at a glance.
+        // Custom-role assignments in the ACTIVE company only.
+        // Nested includes bypass the tenancy extension (only
+        // top-level ops get auto-scoped), so users in multiple
+        // companies would otherwise show every company's badges
+        // stacked in one row.
         roleAssignments: {
+          where: activeCompanyId ? { companyId: activeCompanyId } : undefined,
           select: {
             role: {
               select: {
