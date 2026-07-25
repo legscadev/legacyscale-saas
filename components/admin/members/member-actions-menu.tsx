@@ -217,10 +217,11 @@ export function MemberActionsMenu({
                   Send nudge
                 </DropdownMenuItem>
               )}
-              {/* Per-user Internal-module grants only apply to
-                  TEAM. ADMIN always has full access and MEMBER
-                  holds no grants. */}
-              {memberRole === 'TEAM' && !isArchived && (
+              {/* Role assignments apply to ADMIN + TEAM tiers.
+                  ADMIN bypasses the permission check but keeps the
+                  role tag for visibility. MEMBER (students) don't
+                  hold custom roles. */}
+              {memberRole !== 'MEMBER' && !isArchived && (
                 <DropdownMenuItem onClick={() => setManagingAccess(true)}>
                   <KeySquare />
                   Manage access

@@ -95,8 +95,17 @@ export function RolesShell({ roles: initialRoles, modules }: RolesShellProps) {
   )
 
   const handleDelete = (role: RoleSummary) => {
-    if (role.isSystem) {
+    // Canonical system roles (Admin, Internal Team) are permanent.
+    // Legacy per-user shims are deletable once they hold no members.
+    const isLegacy = role.slug.startsWith('legacy-')
+    if (role.isSystem && !isLegacy) {
       toast.error('System roles cannot be deleted (rename them instead).')
+      return
+    }
+    if (isLegacy && role.memberCount > 0) {
+      toast.error(
+        'Reassign this role’s members first — legacy roles can only be deleted when empty.',
+      )
       return
     }
     const message =
@@ -320,7 +329,14 @@ export function RolesShell({ roles: initialRoles, modules }: RolesShellProps) {
                         size="icon"
                         variant="ghost"
                         onClick={() => handleDelete(role)}
-                        disabled={pending || role.isSystem}
+                        disabled={
+                          pending ||
+                          // Canonical system roles are permanent.
+                          // Legacy shims are deletable when empty.
+                          (role.isSystem && !role.slug.startsWith('legacy-')) ||
+                          (role.slug.startsWith('legacy-') &&
+                            role.memberCount > 0)
+                        }
                         aria-label="Delete role"
                       >
                         <Trash2 className="h-4 w-4" />
