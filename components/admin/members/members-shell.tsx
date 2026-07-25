@@ -64,6 +64,10 @@ interface MembersShellProps {
   /** Override the page header. Defaults to "Students". */
   pageTitle?: string
   pageDescription?: string
+  /** Singular noun for the entity being managed — used by the
+   *  "Add {entity}" button + create dialog title. Defaults to
+   *  "student"; /admin/team overrides to "team member". */
+  entityLabel?: string
 }
 
 export function MembersShell({
@@ -74,6 +78,7 @@ export function MembersShell({
   lockedRoles,
   pageTitle,
   pageDescription,
+  entityLabel = 'student',
 }: MembersShellProps) {
   const [query, setQuery] = useState<MembersQueryState>({
     ...DEFAULT_QUERY_STATE,
@@ -224,7 +229,7 @@ export function MembersShell({
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            Add member
+            Add {entityLabel}
           </Button>
         }
       />
@@ -315,6 +320,7 @@ export function MembersShell({
           (defaultRole ? [defaultRole] : undefined)
         }
         defaultRole={defaultRole}
+        entityLabel={entityLabel}
       />
     </div>
   )

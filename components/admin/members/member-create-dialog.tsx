@@ -46,6 +46,9 @@ interface MemberCreateDialogProps {
   /** Which role to pre-select. Defaults to the first entry in
    *  allowedRoles, or MEMBER. */
   defaultRole?: UserRole
+  /** Singular noun shown in the dialog title — defaults to
+   *  "student". Team page overrides to "team member". */
+  entityLabel?: string
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -70,6 +73,7 @@ export function MemberCreateDialog({
   onCreated,
   allowedRoles,
   defaultRole,
+  entityLabel = 'student',
 }: MemberCreateDialogProps) {
   const roleOptions = ROLE_ORDER.filter((r) =>
     allowedRoles ? allowedRoles.includes(r) : true,
@@ -171,7 +175,7 @@ export function MemberCreateDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <DialogHeader>
-            <DialogTitle>Add member</DialogTitle>
+            <DialogTitle>Add {entityLabel}</DialogTitle>
             <DialogDescription>
               We&apos;ll email them a link to set their password. The link
               is valid for 7 days.

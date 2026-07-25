@@ -31,6 +31,7 @@ export default async function AdminTeamPage() {
       lockedRoles={['ADMIN', 'TEAM']}
       pageTitle="Team"
       pageDescription="Admins, staff, and everyone with a role behind the scenes."
+      entityLabel="team member"
     />
   )
 }
