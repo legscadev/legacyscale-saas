@@ -279,9 +279,10 @@ class RoleService {
 
   /**
    * Replace a user's role set with the given role ids. Anything
-   * not in `roleIds` is unassigned. TEAM tier only — refuses
-   * ADMIN targets (they don't need roles) and MEMBER targets
-   * (they can't hold them).
+   * not in `roleIds` is unassigned. ADMIN + TEAM tiers can hold
+   * role assignments (ADMIN tags are informational — the tier
+   * bypasses the permission check anyway); MEMBER tier is
+   * refused because students don't hold custom roles today.
    */
   async setUserRoles(args: {
     targetUserId: string
@@ -294,7 +295,7 @@ class RoleService {
       where: { id: args.targetUserId, deletedAt: null },
       select: { id: true, role: true },
     })
-    if (!target || target.role !== 'TEAM') {
+    if (!target || target.role === 'MEMBER') {
       throw new RoleTargetError()
     }
 
