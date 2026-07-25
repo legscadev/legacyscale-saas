@@ -196,7 +196,7 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
   {
     key: 'production',
     section: 'Internal',
-    label: 'Production',
+    label: 'Production Sheets',
     href: '/admin/production-sheets',
     icon: PhoneCall,
     description:
