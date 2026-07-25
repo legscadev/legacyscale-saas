@@ -21,6 +21,16 @@ import {
   updateRoleAction,
   type RoleSummary,
 } from '@/app/(admin)/admin/roles/actions'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -63,6 +73,7 @@ interface EditorState {
 export function RolesShell({ roles: initialRoles, modules }: RolesShellProps) {
   const [roles, setRoles] = useState(initialRoles)
   const [editor, setEditor] = useState<EditorState>({ open: false, role: null })
+  const [deleting, setDeleting] = useState<RoleSummary | null>(null)
   // Cell-level pending state so multiple in-flight toggles don't
   // step on each other visually. Keyed as `${roleId}:${moduleKey}`.
   const [savingCells, setSavingCells] = useState<Set<string>>(new Set())
@@ -94,7 +105,7 @@ export function RolesShell({ roles: initialRoles, modules }: RolesShellProps) {
     [sections],
   )
 
-  const handleDelete = (role: RoleSummary) => {
+  const requestDelete = (role: RoleSummary) => {
     // Canonical system roles (Admin, Internal Team) are permanent.
     // Legacy per-user shims are deletable once they hold no members.
     const isLegacy = role.slug.startsWith('legacy-')
@@ -108,20 +119,22 @@ export function RolesShell({ roles: initialRoles, modules }: RolesShellProps) {
       )
       return
     }
-    const message =
-      role.memberCount > 0
-        ? `Delete "${role.name}"? ${role.memberCount} user${role.memberCount === 1 ? ' currently holds' : 's currently hold'} this role and will lose the modules it grants.`
-        : `Delete "${role.name}"?`
-    if (!confirm(message)) return
+    setDeleting(role)
+  }
 
+  const confirmDelete = () => {
+    const role = deleting
+    if (!role) return
     startTransition(async () => {
       const res = await deleteRoleAction(role.id)
       if (!res.ok) {
         toast.error(res.error ?? 'Could not delete role')
+        setDeleting(null)
         return
       }
       setRoles((prev) => prev.filter((r) => r.id !== role.id))
       toast.success('Role deleted')
+      setDeleting(null)
     })
   }
 
@@ -328,7 +341,7 @@ export function RolesShell({ roles: initialRoles, modules }: RolesShellProps) {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => handleDelete(role)}
+                        onClick={() => requestDelete(role)}
                         disabled={
                           pending ||
                           // Canonical system roles are permanent.
@@ -357,6 +370,34 @@ export function RolesShell({ roles: initialRoles, modules }: RolesShellProps) {
           onCancel={close}
         />
       ) : null}
+
+      <AlertDialog
+        open={deleting !== null}
+        onOpenChange={(o) => (!o ? setDeleting(null) : undefined)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete “{deleting?.name}”?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleting && deleting.memberCount > 0
+                ? `${deleting.memberCount} user${deleting.memberCount === 1 ? ' currently holds' : 's currently hold'} this role and will lose the modules it grants.`
+                : 'This role has no members. The role definition will be permanently removed.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={pending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {pending ? 'Deleting…' : 'Delete role'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
