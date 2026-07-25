@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { PoliciesShell } from '@/components/admin/policies/policies-shell'
 
 import { fetchPolicyWorkspaceAction } from './actions'
@@ -37,7 +37,7 @@ interface AdminPoliciesPageProps {
 export default async function AdminPoliciesPage({
   searchParams,
 }: AdminPoliciesPageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("policies")
   const raw = await searchParams
   const filters = parseFiltersFromSearchParams(raw)
 

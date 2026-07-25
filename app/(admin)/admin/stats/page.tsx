@@ -1,4 +1,4 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { StatsShell } from '@/components/admin/stats/stats-shell'
 import {
   fetchAllMetrics,
@@ -28,7 +28,7 @@ function parseAssigneeIds(raw: string | undefined): string[] {
 }
 
 export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("stats")
   const params = await searchParams
 
   // Fetch every division + every metric in one round-trip. The

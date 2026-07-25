@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 
 import { fetchPolicyAction, fetchPolicyRevisionAction } from '@/app/(admin)/admin/policies/actions'
 import { PolicyRevisionView } from '@/components/admin/policies/policy-revision-view'
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +13,7 @@ interface PolicyRevisionPageProps {
 export default async function PolicyRevisionPage({
   params,
 }: PolicyRevisionPageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("policies")
   const { id, revisionId } = await params
 
   const [policyResult, revisionResult] = await Promise.all([

@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/select'
 import type { MemberListItem } from '@/lib/services/member-service'
 
-type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
+type UserRole = 'ADMIN' | 'TEAM' | 'MEMBER'
 type StatusChoice = 'active' | 'suspended'
 
 interface BulkActionBarProps {
@@ -54,7 +54,7 @@ export function BulkActionBar({
   const [dialog, setDialog] = useState<
     'role' | 'status' | 'archive' | null
   >(null)
-  const [role, setRole] = useState<Role>('MEMBER')
+  const [role, setRole] = useState<UserRole>('MEMBER')
   const [status, setStatus] = useState<StatusChoice>('active')
   const [pending, setPending] = useState(false)
 
@@ -260,8 +260,8 @@ export function BulkActionBar({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
-            <Label htmlFor="bulk-role">Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+            <Label htmlFor="bulk-role">UserRole</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
               <SelectTrigger id="bulk-role" className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -386,7 +386,7 @@ export function BulkActionBar({
   )
 }
 
-function roleLabel(role: Role) {
+function roleLabel(role: UserRole) {
   if (role === 'ADMIN') return 'Admin'
   if (role === 'TEAM') return 'Team'
   return 'Member'
@@ -396,7 +396,7 @@ function toCsv(rows: MemberListItem[]) {
   const header = [
     'Name',
     'Email',
-    'Role',
+    'UserRole',
     'Status',
     'Joined',
     'Last active',

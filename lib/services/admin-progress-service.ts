@@ -5,7 +5,7 @@ import type {
   LessonStatus,
   LessonType,
   Prisma,
-  Role,
+  UserRole,
 } from '@prisma/client'
 
 import { requireAdmin } from '@/lib/auth/get-user'
@@ -208,7 +208,7 @@ export interface EngagedMember {
   name: string | null
   email: string
   avatarUrl: string | null
-  role: Role
+  role: UserRole
   /** Lessons completed in the last 30 days. */
   completedLessons: number
   /** Most recent completion timestamp within the queried range. */
@@ -348,7 +348,7 @@ export interface RecentCompletion {
     name: string | null
     email: string
     avatarUrl: string | null
-    role: Role
+    role: UserRole
   }
   course: {
     id: string
@@ -405,7 +405,7 @@ export interface StuckLearner {
     name: string | null
     email: string
     avatarUrl: string | null
-    role: Role
+    role: UserRole
   }
   course: { id: string; title: string }
   progressPercent: number
@@ -579,7 +579,7 @@ export interface MemberListRow {
   name: string | null
   email: string
   avatarUrl: string | null
-  role: Role
+  role: UserRole
   totalEnrollments: number
   completedCourses: number
   avgProgressPercent: number
@@ -635,8 +635,8 @@ async function fetchMembersWithProgress(
 ): Promise<MemberListRow[]> {
   const search = filters.search?.trim() ?? ''
   const role = filters.role ?? 'ALL'
-  const roleFilter: Role[] =
-    role === 'ALL' ? ['MEMBER', 'TEAM'] : [role as Role]
+  const roleFilter: UserRole[] =
+    role === 'ALL' ? ['MEMBER', 'TEAM'] : [role as UserRole]
 
   const users = await prisma.user.findMany({
     where: {
@@ -753,7 +753,7 @@ async function exportMembersCsv(
   const header = [
     'Name',
     'Email',
-    'Role',
+    'UserRole',
     'Total enrollments',
     'Completed courses',
     'Avg progress %',
@@ -807,7 +807,7 @@ export interface MemberProgressDetail {
     name: string | null
     email: string
     avatarUrl: string | null
-    role: Role
+    role: UserRole
     isActive: boolean
     createdAt: Date
     lastLoginAt: Date | null
@@ -1246,7 +1246,7 @@ export interface CohortRow {
     name: string | null
     email: string
     avatarUrl: string | null
-    role: Role
+    role: UserRole
   }
   status: EnrollmentStatus
   source: EnrollmentSource
@@ -1276,8 +1276,8 @@ function buildCohortWhere(
   const search = filters.search?.trim() ?? ''
   const role = filters.role ?? 'ALL'
   const status = filters.status ?? 'ALL'
-  const roleFilter: Role[] =
-    role === 'ALL' ? ['MEMBER', 'TEAM'] : [role as Role]
+  const roleFilter: UserRole[] =
+    role === 'ALL' ? ['MEMBER', 'TEAM'] : [role as UserRole]
 
   const where: Prisma.EnrollmentWhereInput = {
     courseId,
@@ -1422,7 +1422,7 @@ async function exportCourseCohortCsv(
   const header = [
     'Name',
     'Email',
-    'Role',
+    'UserRole',
     'Status',
     'Progress %',
     'Enrolled at',

@@ -158,13 +158,8 @@ export async function requireTeamModuleAccess(
   const user = await requireTeamOrAdmin()
   if (user.role === 'ADMIN') return user
 
-  const { teamAccessService } = await import(
-    '@/lib/services/team-access-service'
-  )
-  const allowed = await teamAccessService.hasModuleAccess(
-    user,
-    moduleKey as never,
-  )
+  const { roleService } = await import('@/lib/services/role-service')
+  const allowed = await roleService.hasModuleAccess(user, moduleKey as never)
   if (!allowed) {
     redirect('/dashboard')
   }

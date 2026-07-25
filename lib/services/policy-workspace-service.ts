@@ -20,7 +20,7 @@ import type { UpsertPolicyCategoryInput } from '@/lib/validations/policy'
  *  systems / onboarding are common enough to seed. Admins can add
  *  their own from the workflow-admin surface. */
 const DEFAULT_CATEGORIES = [
-  { name: 'Role Hats',  color: '#3b82f6' },
+  { name: 'UserRole Hats',  color: '#3b82f6' },
   { name: 'Processes',  color: '#22c55e' },
   { name: 'Systems',    color: '#8b5cf6' },
   { name: 'Onboarding', color: '#f59e0b' },

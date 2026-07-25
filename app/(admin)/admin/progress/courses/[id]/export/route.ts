@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { prisma } from '@/lib/prisma'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 
@@ -14,7 +14,7 @@ interface Context {
  * download always matches what the operator is seeing on screen.
  */
 export async function GET(request: NextRequest, { params }: Context) {
-  await requireAdmin()
+  await requireTeamModuleAccess("progress")
   const { id } = await params
 
   // Sanity-check the course exists so we 404 cleanly instead of

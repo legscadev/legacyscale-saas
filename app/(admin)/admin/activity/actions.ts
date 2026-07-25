@@ -1,6 +1,6 @@
 'use server'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import {
   listActors,
   listFeed,
@@ -35,7 +35,7 @@ export interface FetchFeedInput {
 export async function fetchActivityFeedAction(
   input: FetchFeedInput = {},
 ): Promise<ActivityFeedResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("activity")
   const fromDate = input.fromDate ? new Date(input.fromDate) : null
   const toDate = input.toDate
     ? new Date(`${input.toDate}T23:59:59`)
@@ -57,6 +57,6 @@ export interface ActorOption {
 }
 
 export async function fetchActivityActorsAction(): Promise<ActorOption[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess("activity")
   return listActors()
 }

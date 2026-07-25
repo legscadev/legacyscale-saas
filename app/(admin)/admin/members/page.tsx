@@ -1,10 +1,10 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { membershipService } from '@/lib/services/membership-service'
 import { MembersShell } from '@/components/admin/members/members-shell'
 import { fetchMembers } from './actions'
 
 export default async function AdminMembersPage() {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("members")
   // Members lives under Community in the sidebar → default to
   // students only. Ruby can still switch the role filter in the
   // toolbar to see staff if she needs to.

@@ -186,10 +186,45 @@ export function getMemberColumns(
     },
     {
       accessorKey: 'role',
-      header: 'Role',
+      header: 'Tier',
       cell: ({ row }) => <StatusBadge status={row.original.role} />,
       enableSorting: false,
-      meta: { label: 'Role' },
+      meta: { label: 'Tier' },
+    },
+    {
+      id: 'roles',
+      accessorFn: (row) => row.roleAssignments.length,
+      header: 'Roles',
+      meta: { label: 'Roles' },
+      cell: ({ row }) => {
+        const assignments = row.original.roleAssignments
+        if (assignments.length === 0) {
+          return (
+            <span className="text-xs italic text-muted-foreground">
+              None
+            </span>
+          )
+        }
+        return (
+          <div className="flex flex-wrap gap-1">
+            {assignments.slice(0, 3).map((a) => (
+              <span
+                key={a.role.id}
+                className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium"
+                title={a.role.slug}
+              >
+                {a.role.name}
+              </span>
+            ))}
+            {assignments.length > 3 ? (
+              <span className="text-xs text-muted-foreground">
+                +{assignments.length - 3}
+              </span>
+            ) : null}
+          </div>
+        )
+      },
+      enableSorting: false,
     },
     {
       id: 'membership',

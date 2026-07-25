@@ -1,25 +1,23 @@
 'use server'
 
-// Server actions for the per-user module-access grid on /admin/team.
-// Only ADMIN can grant/revoke. Reads (fetchTeamAccessAction) let the
-// grid dialog pre-check the right boxes; writes are optimistic on
-// the client + rolled back on error.
+// Server actions for the per-user role-assignment dialog on
+// /admin/team. Only ADMIN can assign; reads let the dialog
+// pre-check the right boxes.
 //
-// Deliberately NO revalidatePath here. The /admin/team list doesn't
-// display grants — refetching would re-render the whole page and
-// close the dialog by resetting the MemberActionsMenu component's
-// client state. Fresh grants are picked up naturally the next time
-// the dialog opens (fetchTeamAccessAction) or the target user
-// navigates (their layout re-reads grants on next request).
+// Deliberately NO revalidatePath here. The /admin/team list
+// doesn't display roles — refetching would re-render the whole
+// page and close the dialog. Fresh assignments are picked up the
+// next time the dialog opens or the target user navigates.
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import {
-  teamAccessService,
-  TeamAccessTargetError,
+  roleService,
+  RoleTargetError,
   UnknownModuleError,
-  type ActiveGrant,
-} from '@/lib/services/team-access-service'
+  type AssignedRole,
+  type RoleSummary,
+} from '@/lib/services/role-service'
 
 interface Ok<T = void> {
   ok: true
@@ -32,10 +30,7 @@ interface Err {
 type Result<T = void> = Ok<T> | Err
 
 function toErr(err: unknown, fallback: string): Err {
-  if (
-    err instanceof UnknownModuleError ||
-    err instanceof TeamAccessTargetError
-  ) {
+  if (err instanceof UnknownModuleError || err instanceof RoleTargetError) {
     return { ok: false, error: err.message }
   }
   console.error('[team/actions]', fallback, err)
@@ -43,62 +38,48 @@ function toErr(err: unknown, fallback: string): Err {
   return { ok: false, error: message }
 }
 
-export async function fetchTeamAccessAction(
+export async function fetchUserRolesAction(
   userId: string,
-): Promise<Result<ActiveGrant[]>> {
-  await requireAdmin()
+): Promise<Result<AssignedRole[]>> {
+  await requireTeamModuleAccess("team")
   try {
-    const data = await teamAccessService.listActiveGrants(userId)
+    const data = await roleService.listAssignmentsForUser(userId)
     return { ok: true, data }
   } catch (err) {
-    return toErr(err, 'Could not load access grants')
+    return toErr(err, 'Could not load role assignments')
   }
 }
 
-export async function grantModuleAccessAction(input: {
-  targetUserId: string
-  moduleKey: string
-}): Promise<Result<ActiveGrant>> {
-  const admin = await requireAdmin()
+export async function fetchAvailableRolesAction(): Promise<Result<RoleSummary[]>> {
+  await requireTeamModuleAccess("team")
   try {
-    const data = await teamAccessService.grant({
-      targetUserId: input.targetUserId,
-      moduleKey: input.moduleKey,
-      grantedById: admin.id,
-    })
-    await writeAuditLog({
-      actorId: admin.id,
-      action: 'access.grant',
-      resourceType: 'teamModuleGrant',
-      resourceId: input.targetUserId,
-      summary: `Granted ${input.moduleKey} access to user ${input.targetUserId}`,
-    })
+    const data = await roleService.listRoles()
     return { ok: true, data }
   } catch (err) {
-    return toErr(err, 'Could not grant access')
+    return toErr(err, 'Could not load roles')
   }
 }
 
-export async function revokeModuleAccessAction(input: {
+export async function setUserRolesAction(input: {
   targetUserId: string
-  moduleKey: string
+  roleIds: string[]
 }): Promise<Result> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("team")
   try {
-    await teamAccessService.revoke({
+    await roleService.setUserRoles({
       targetUserId: input.targetUserId,
-      moduleKey: input.moduleKey,
-      revokedById: admin.id,
+      roleIds: input.roleIds,
+      assignedById: admin.id,
     })
     await writeAuditLog({
       actorId: admin.id,
-      action: 'access.revoke',
-      resourceType: 'teamModuleGrant',
+      action: 'access.role.assign',
+      resourceType: 'userRoleAssignment',
       resourceId: input.targetUserId,
-      summary: `Revoked ${input.moduleKey} access from user ${input.targetUserId}`,
+      summary: `Set roles for user ${input.targetUserId} (${input.roleIds.length} role${input.roleIds.length === 1 ? '' : 's'})`,
     })
     return { ok: true, data: undefined }
   } catch (err) {
-    return toErr(err, 'Could not revoke access')
+    return toErr(err, 'Could not update roles')
   }
 }

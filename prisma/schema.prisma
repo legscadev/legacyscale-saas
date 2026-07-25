@@ -16,7 +16,10 @@ datasource db {
 // ENUMS
 // ============================================
 
-enum Role {
+/// Legacy global role (being phased out — see the note on
+/// User.role). Renamed from `Role` when the per-company custom
+/// Role model was introduced so the two don't collide.
+enum UserRole {
   ADMIN
   TEAM
   MEMBER
@@ -186,7 +189,7 @@ model User {
   /// Legacy global role. Being phased out in favour of
   /// CompanyMembership.role once every code path reads the active
   /// company's membership. Kept for Phase 1 so nothing else breaks.
-  role                    Role      @default(MEMBER)
+  role                    UserRole  @default(MEMBER)
   /// Global super-admin flag. Grants the ability to enter any
   /// Company as a super-admin (Keanu at the agency level).
   /// Independent of memberships — the master key.
@@ -284,12 +287,12 @@ model User {
   policyAttachmentsUploaded  PolicyAttachment[]  @relation("PolicyAttachmentUploader")
   policyActivityLogs         PolicyActivityLog[] @relation("PolicyActivityActor")
 
-  // Per-user Internal-module access grants for TEAM staff. Named
-  // relations because one user is both a target of grants and can
-  // grant/revoke on behalf of others.
-  teamModuleGrantsHeld    TeamModuleGrant[] @relation("TeamModuleGrantTarget")
-  teamModuleGrantsIssued  TeamModuleGrant[] @relation("TeamModuleGrantGrantedBy")
-  teamModuleGrantsRevoked TeamModuleGrant[] @relation("TeamModuleGrantRevokedBy")
+  // Custom-role assignments (permission layer on top of the
+  // CompanyMembership tier). One relation because a user is a
+  // target of assignments, another because they can hand out
+  // assignments to other users. Named relations to keep both.
+  roleAssignments        UserRoleAssignment[] @relation("UserRoleAssignmentTarget")
+  roleAssignmentsIssued  UserRoleAssignment[] @relation("UserRoleAssignmentGrantedBy")
 
   // Production sheet — setter/closer daily numbers + appointment log.
   productionEntries       ProductionEntry[]
@@ -2078,31 +2081,84 @@ model PolicyActivityLog {
 // Only one row per (userId, moduleKey) with revokedAt IS NULL is
 // legal at any given moment; enforced app-side by the service.
 
-model TeamModuleGrant {
-  id          String    @id @default(uuid())
-  userId      String    @map("user_id")
-  /// Short slug identifying the gate-able module (see
-  /// lib/config/team-modules.ts for the canonical catalog).
-  /// Deliberately a String, not an enum, so adding a new module
-  /// doesn't need a migration.
-  moduleKey   String    @map("module_key")
+// ============================================
+// CUSTOM ROLES (per-company)
+// ============================================
+//
+// Configurable role catalog per company — replaces the fixed
+// TeamModuleGrant grid with named permission bundles. Admins
+// define roles (e.g. "Setter", "Closer", "Helper") and assign
+// them to users; a user's effective module access is the union
+// of every role they hold.
+//
+// Sits ON TOP of CompanyMembership.role (which stays as the tier
+// enum: OWNER/ADMIN/TEAM/MEMBER). Admin tier still bypasses the
+// permission check entirely; TEAM tier is what the roles gate.
 
-  /// Who granted access. Null when the row was seeded via SQL
-  /// during the backfill migration (see the backfill in 2.2).
-  grantedById String?   @map("granted_by_id")
-  grantedAt   DateTime  @default(now()) @map("granted_at")
-  revokedAt   DateTime? @map("revoked_at")
-  revokedById String?   @map("revoked_by_id")
+/// One customisable role in a company. `isSystem` rows are seeded
+/// by the migration (the built-in "Internal Team" role, plus any
+/// per-user "Legacy" roles carried over from TeamModuleGrant) and
+/// cannot be deleted — their name + description are still
+/// editable so admins can rename them.
+model Role {
+  id          String   @id @default(uuid())
+  companyId   String   @map("company_id")
+  /// Display name shown in the picker and roles list.
+  name        String
+  /// URL-safe unique-per-company handle; used to look up seeded
+  /// system roles (e.g. slug='internal-team') without name drift.
+  slug        String
+  description String?
+  /// True for migration-seeded roles that must survive deletion
+  /// (their assignments hold the only record of what a user could
+  /// previously see). Name/description still editable.
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  user      User  @relation("TeamModuleGrantTarget", fields: [userId], references: [id], onDelete: Cascade)
-  grantedBy User? @relation("TeamModuleGrantGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
-  revokedBy User? @relation("TeamModuleGrantRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  permissions RolePermission[]
+  assignments UserRoleAssignment[]
 
-  companyId String @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+  @@unique([companyId, slug])
+  @@index([companyId])
+  @@map("roles")
+}
 
-  @@index([companyId, userId, revokedAt])
+/// One (role, module) grant. Same moduleKey values as
+/// lib/config/team-modules.ts — deliberately a String, not an
+/// enum, so adding a module doesn't need a migration.
+model RolePermission {
+  id        String @id @default(uuid())
+  roleId    String @map("role_id")
+  moduleKey String @map("module_key")
+  companyId String @map("company_id")
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, moduleKey])
   @@index([companyId, moduleKey])
-  @@map("team_module_grants")
+  @@map("role_permissions")
+}
+
+/// Assignment of a user to a role. Multi-role: a user can hold
+/// several ("Setter" + "Closer" for someone who does both).
+/// Effective permissions are the union.
+model UserRoleAssignment {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  roleId       String   @map("role_id")
+  companyId    String   @map("company_id")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+  assignedById String?  @map("assigned_by_id")
+
+  user       User  @relation("UserRoleAssignmentTarget", fields: [userId], references: [id], onDelete: Cascade)
+  role       Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("UserRoleAssignmentGrantedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, roleId])
+  @@index([companyId, userId])
+  @@index([companyId, roleId])
+  @@map("user_role_assignments")
 }
 
 // ============================================

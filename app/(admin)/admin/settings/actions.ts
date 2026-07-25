@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { testDiscordWebhook } from '@/lib/discord'
 import {
@@ -42,7 +42,7 @@ export interface SimpleResult {
 async function getWebhookSetting(
   key: SettingKey,
 ): Promise<DiscordWebhookSetting> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const dbValue = await getRawSetting(key)
   if (dbValue) {
     return { configured: true, masked: maskWebhookUrl(dbValue) }
@@ -54,7 +54,7 @@ async function updateWebhookSetting(
   key: SettingKey,
   formData: FormData,
 ): Promise<SimpleResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("settings")
   const parsed = updateDiscordWebhookSchema.safeParse({
     webhookUrl: formData.get('webhookUrl'),
   })
@@ -85,7 +85,7 @@ async function updateWebhookSetting(
 async function revealWebhookSetting(
   key: SettingKey,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const raw = (await getRawSetting(key))?.trim()
   if (!raw) return { ok: false, error: 'No webhook URL configured' }
   return { ok: true, url: raw }
@@ -95,7 +95,7 @@ async function testWebhookSetting(
   key: SettingKey,
   formData: FormData,
 ): Promise<SimpleResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("settings")
   const raw = formData.get('webhookUrl')
   const parsed = testDiscordWebhookSchema.safeParse({
     webhookUrl: typeof raw === 'string' && raw.trim() !== '' ? raw : undefined,

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { courseService } from '@/lib/services/course-service'
 import { chapterService } from '@/lib/services/chapter-service'
 import { moduleService } from '@/lib/services/module-service'
@@ -13,7 +13,7 @@ interface CourseDetailPageProps {
 export default async function CourseDetailPage({
   params,
 }: CourseDetailPageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
   const { slug } = await params
 
   const course = await courseService.getBySlug(slug)

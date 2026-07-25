@@ -1,9 +1,9 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { CoursesShell } from '@/components/admin/courses/courses-shell'
 import { fetchCourses } from './actions'
 
 export default async function AdminCoursesPage() {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
   // Courses lens: everything member-facing (MEMBERS + BOTH). Internal-
   // only courses live under /admin/trainings and don't leak into
   // this list.

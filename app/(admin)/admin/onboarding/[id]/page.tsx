@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from '@/lib/auth/get-user'
 import { employeeService, type EmployeeDetail } from '@/lib/services/employee-service'
 import { EmployeeDetailShell } from '@/components/admin/onboarding/employee-detail-shell'
 
@@ -13,7 +13,7 @@ interface PageProps {
 }
 
 export default async function EmployeeDetailPage({ params }: PageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess('0')
   const { id } = await params
 
   let employee: EmployeeDetail

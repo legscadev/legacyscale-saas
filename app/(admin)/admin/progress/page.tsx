@@ -18,9 +18,9 @@ import {
   type StatStripCell,
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { getInitials, relativeTime } from '@/lib/format'
-import type { Role } from '@prisma/client'
+import type { UserRole } from '@prisma/client'
 
 import {
   adminProgressService,
@@ -47,7 +47,7 @@ interface HighlightRow {
     name: string | null
     email: string
     avatarUrl: string | null
-    role: Role
+    role: UserRole
   }
   courseTitle: string | null
   signal: string
@@ -64,7 +64,7 @@ const TYPE_PILL: Record<HighlightType, string> = {
 export default async function AdminProgressOverviewPage({
   searchParams,
 }: PageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("progress")
   const params = await searchParams
   const range = parseRange(params.range)
   const window = rangeLabel(range)

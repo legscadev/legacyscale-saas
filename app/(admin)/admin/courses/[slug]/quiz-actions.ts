@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { quizService, type QuizQuestionItem } from '@/lib/services/quiz-service'
 import {
   createQuestionSchema,
@@ -51,7 +51,7 @@ function fieldErrorsFrom(error: z.ZodError) {
 export async function listQuizQuestionsAction(
   lessonId: string,
 ): Promise<ListQuestionsResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
   try {
     const items = await quizService.list(lessonId)
     return { ok: true, items }
@@ -70,7 +70,7 @@ export async function createQuizQuestionAction(
   lessonId: string,
   input: CreateQuestionInput,
 ): Promise<QuestionResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = createQuestionSchema.safeParse(input)
   if (!parsed.success) {
@@ -104,7 +104,7 @@ export async function updateQuizQuestionAction(
   questionId: string,
   input: UpdateQuestionInput,
 ): Promise<QuestionResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = updateQuestionSchema.safeParse(input)
   if (!parsed.success) {
@@ -135,7 +135,7 @@ export async function deleteQuizQuestionAction(
   courseId: string,
   questionId: string,
 ): Promise<BaseResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
   try {
     await quizService.delete(questionId)
     revalidatePath('/admin/courses/[slug]', 'page')
@@ -155,7 +155,7 @@ export async function reorderQuizQuestionsAction(
   lessonId: string,
   orderedIds: string[],
 ): Promise<BaseResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("courses")
 
   const parsed = reorderQuestionsSchema.safeParse({ orderedIds })
   if (!parsed.success) {

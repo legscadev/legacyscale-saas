@@ -80,7 +80,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       try {
         await syncRoleToAuthMetadata(user.authId, user.role)
       } catch (err) {
-        console.error('Role mirror after update failed:', err)
+        console.error('UserRole mirror after update failed:', err)
       }
     }
 

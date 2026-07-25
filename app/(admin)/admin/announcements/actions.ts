@@ -3,7 +3,7 @@
 import { revalidatePath, updateTag } from 'next/cache'
 import type { AnnouncementStatus } from '@prisma/client'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import {
   announcementService,
   UNREAD_COUNT_CACHE_TAG,
@@ -135,7 +135,7 @@ export interface AnnouncementsData {
 export async function fetchAnnouncements(
   state: AnnouncementsQueryState,
 ): Promise<AnnouncementsData> {
-  await requireAdmin()
+  await requireTeamModuleAccess("announcements")
 
   const [counts, result] = await Promise.all([
     announcementService.counts(),
@@ -172,7 +172,7 @@ export interface CreateAnnouncementResult {
 export async function createAnnouncementAction(
   formData: FormData,
 ): Promise<CreateAnnouncementResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("announcements")
 
   const rawBody = (formData.get('body') as string) ?? ''
   const bodyCheck = validateBodyLength(rawBody)
@@ -244,7 +244,7 @@ export async function updateAnnouncementAction(
   announcementId: string,
   formData: FormData,
 ): Promise<UpdateAnnouncementResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("announcements")
 
   // Only forward fields the form actually sent so partial saves don't
   // get tripped up by validation on untouched fields.
@@ -335,7 +335,7 @@ export interface SimpleResult {
 export async function softDeleteAnnouncementAction(
   announcementId: string,
 ): Promise<SimpleResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("announcements")
   try {
     await announcementService.softDelete(announcementId)
     await announcementService.recordAudit(announcementId, admin.id, 'DELETED')
@@ -352,7 +352,7 @@ export async function softDeleteAnnouncementAction(
 export async function restoreAnnouncementAction(
   announcementId: string,
 ): Promise<SimpleResult> {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("announcements")
   try {
     await announcementService.restore(announcementId)
     await announcementService.recordAudit(announcementId, admin.id, 'RESTORED')
@@ -369,7 +369,7 @@ export async function restoreAnnouncementAction(
 export async function getAnnouncementReadersAction(
   announcementId: string,
 ): Promise<{ ok: true; readers: AnnouncementReader[] } | { ok: false; error: string }> {
-  await requireAdmin()
+  await requireTeamModuleAccess("announcements")
   try {
     const readers = await announcementService.getReaders(announcementId)
     return { ok: true, readers }
@@ -382,7 +382,7 @@ export async function getAnnouncementReadersAction(
 export async function archiveAnnouncementAction(
   announcementId: string,
 ): Promise<SimpleResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("announcements")
   try {
     await announcementService.archive(announcementId)
     revalidateAnnouncements(announcementId)
@@ -396,7 +396,7 @@ export async function archiveAnnouncementAction(
 export async function unarchiveAnnouncementAction(
   announcementId: string,
 ): Promise<SimpleResult> {
-  await requireAdmin()
+  await requireTeamModuleAccess("announcements")
   try {
     await announcementService.unarchive(announcementId)
     revalidateAnnouncements(announcementId)
@@ -409,7 +409,7 @@ export async function unarchiveAnnouncementAction(
 
 // Audit log loader for the admin viewer.
 export async function getAnnouncementAuditLogsAction(announcementId: string) {
-  await requireAdmin()
+  await requireTeamModuleAccess("announcements")
   try {
     const logs = await announcementService.listAuditLogs(announcementId)
     return { ok: true as const, logs }

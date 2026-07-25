@@ -1,9 +1,9 @@
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { MembershipsShell } from '@/components/admin/membership/memberships-shell'
 import { fetchMemberships } from './actions'
 
 export default async function AdminMembershipPage() {
-  await requireAdmin()
+  await requireTeamModuleAccess("membership")
   const initialData = await fetchMemberships()
 
   return <MembershipsShell initialData={initialData} />

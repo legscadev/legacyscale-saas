@@ -627,8 +627,8 @@ export async function listProductionUsers(): Promise<ProductionUserOption[]> {
         { role: 'ADMIN' },
         {
           role: 'TEAM',
-          teamModuleGrantsHeld: {
-            some: { moduleKey: 'production', revokedAt: null },
+          roleAssignments: {
+            some: { role: { permissions: { some: { moduleKey: 'production' } } } },
           },
         },
       ],

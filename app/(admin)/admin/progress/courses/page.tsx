@@ -18,7 +18,7 @@ import {
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
 import { progressTone } from '@/lib/format'
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 import type { CourseStatus } from '@prisma/client'
 
@@ -42,7 +42,7 @@ function parseStatus(raw: string | undefined): 'ALL' | CourseStatus {
 export default async function AdminProgressCoursesPage({
   searchParams,
 }: PageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("progress")
   const params = await searchParams
   const status = parseStatus(params.status)
 

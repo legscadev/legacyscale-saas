@@ -15,6 +15,7 @@ import {
   PhoneCall,
   Settings,
   ShieldCheck,
+  ShieldPlus,
   Tag,
   TrendingUp,
   User,
@@ -56,21 +57,22 @@ export const adminNav: NavSection[] = [
   {
     label: 'Learning',
     items: [
-      { label: 'Courses', href: '/admin/courses', icon: GraduationCap },
-      { label: 'Membership', href: '/admin/membership', icon: Tag },
-      { label: 'Certificates', href: '/admin/certificates', icon: Award },
+      { label: 'Courses', href: '/admin/courses', icon: GraduationCap, moduleKey: 'courses' },
+      { label: 'Membership', href: '/admin/membership', icon: Tag, moduleKey: 'membership' },
+      { label: 'Certificates', href: '/admin/certificates', icon: Award, moduleKey: 'certificates' },
       {
         label: 'Progress Tracker',
         href: '/admin/progress',
         icon: TrendingUp,
+        moduleKey: 'progress',
       },
     ],
   },
   {
     label: 'Community',
     items: [
-      { label: 'Members', href: '/admin/members', icon: Users },
-      { label: 'Announcements', href: '/admin/announcements', icon: Megaphone },
+      { label: 'Members', href: '/admin/members', icon: Users, moduleKey: 'members' },
+      { label: 'Announcements', href: '/admin/announcements', icon: Megaphone, moduleKey: 'announcements' },
     ],
   },
   {
@@ -93,8 +95,11 @@ export const adminNav: NavSection[] = [
   {
     label: 'System',
     items: [
-      { label: 'Activity log', href: '/admin/activity', icon: ClipboardList },
-      { label: 'Settings', href: '/admin/settings', icon: Settings },
+      { label: 'Activity log', href: '/admin/activity', icon: ClipboardList, moduleKey: 'activity' },
+      // Roles is intentionally NOT moduleKey-gated: revoking access
+      // would strand an admin from restoring it.
+      { label: 'Roles', href: '/admin/roles', icon: ShieldPlus },
+      { label: 'Settings', href: '/admin/settings', icon: Settings, moduleKey: 'settings' },
     ],
   },
 ]

@@ -2,9 +2,10 @@ import { cookies } from 'next/headers'
 
 import { AppShell } from '@/components/layout'
 import { SIDEBAR_COOKIE } from '@/components/layout/sidebar-cookie'
-import { requireAdmin } from '@/lib/auth'
+import { requireTeamOrAdmin } from '@/lib/auth'
 import { getBranding, toClientBranding } from '@/lib/branding/get-branding'
 import { announcementService } from '@/lib/services/announcement-service'
+import { roleService } from '@/lib/services/role-service'
 import {
   getActiveCompany,
   listCompaniesForUser,
@@ -16,11 +17,11 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Enforces auth + ADMIN role. TEAM staff live under /team/*
-  // (their granted Internal modules mirror the admin shells);
-  // anyone hitting /admin/* who isn't ADMIN gets bounced to
-  // /dashboard.
-  const user = await requireAdmin()
+  // Layout allows both ADMIN and TEAM tiers in — per-route gates
+  // (requireTeamModuleAccess) decide which specific admin pages a
+  // TEAM user can reach based on their assigned custom roles.
+  // MEMBER tier still gets bounced to /dashboard.
+  const user = await requireTeamOrAdmin()
   const cookieStore = await cookies()
   const defaultCollapsed =
     cookieStore.get(SIDEBAR_COOKIE)?.value === '1'
@@ -58,6 +59,20 @@ export default async function AdminLayout({
     }
   }
 
+  // Effective module permissions from the viewer's role assignments.
+  // Only meaningful for TEAM tier — ADMIN bypasses the sidebar filter
+  // and sees every item. Empty set on failure so a query hiccup
+  // doesn't blank the whole shell.
+  let grantedModules: string[] = []
+  if (user.role === 'TEAM') {
+    try {
+      const keys = await roleService.grantedKeys(user.id)
+      grantedModules = [...keys]
+    } catch (err) {
+      console.error('roleService.grantedKeys (admin layout) failed:', err)
+    }
+  }
+
   // Branding — always resolvable. When tenancy is off (or no
   // company override) this returns the Kondense platform defaults,
   // so the sidebar looks identical to pre-refactor.
@@ -83,6 +98,7 @@ export default async function AdminLayout({
       isSuperAdmin={user.isSuperAdmin}
       branding={branding}
       themeLocked={themeLocked}
+      grantedModules={user.role === 'ADMIN' ? undefined : grantedModules}
     >
       {children}
     </AppShell>

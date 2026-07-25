@@ -31,7 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { AccessGridDialog } from '@/components/admin/team/access-grid-dialog'
+import { RoleAssignmentDialog } from '@/components/admin/team/role-assignment-dialog'
 
 import { MemberEditDialog } from './member-edit-dialog'
 import { NudgeDialog } from './nudge-dialog'
@@ -342,7 +342,7 @@ export function MemberActionsMenu({
         memberName={memberName}
       />
 
-      <AccessGridDialog
+      <RoleAssignmentDialog
         open={managingAccess}
         onOpenChange={setManagingAccess}
         target={

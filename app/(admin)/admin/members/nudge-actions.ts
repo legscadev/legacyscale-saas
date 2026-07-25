@@ -1,6 +1,6 @@
 'use server'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { prisma } from '@/lib/prisma'
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { createNudge } from '@/lib/services/nudge-service'
@@ -16,7 +16,7 @@ export interface NudgeCoursePickerOption {
 export async function listEnrolledCoursesForNudge(
   memberId: string,
 ): Promise<NudgeCoursePickerOption[]> {
-  await requireAdmin()
+  await requireTeamModuleAccess("members")
   const rows = await prisma.enrollment.findMany({
     where: {
       userId: memberId,
@@ -40,7 +40,7 @@ export async function sendNudgeAction(
   | { ok: true; emailed: boolean }
   | { ok: false; error: string }
 > {
-  const admin = await requireAdmin()
+  const admin = await requireTeamModuleAccess("members")
   const result = await createNudge(admin.id, {
     userId: memberId,
     courseId,

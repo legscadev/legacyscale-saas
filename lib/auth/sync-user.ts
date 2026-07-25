@@ -81,7 +81,7 @@ export async function syncRoleToAuthMetadata(
       app_metadata: { role },
     })
   } catch (err) {
-    // Role mirror is a UX optimization, not a security boundary —
+    // UserRole mirror is a UX optimization, not a security boundary —
     // RBAC still enforced by requireAdmin() at the layout.
     console.error('Failed to mirror role to auth metadata:', err)
   }

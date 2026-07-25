@@ -18,7 +18,7 @@ import {
   type StatStripCell,
 } from '@/components/shared'
 import { cn } from '@/lib/utils'
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { getInitials, progressTone, relativeTime } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
 import type { MembersSort } from '@/lib/services/admin-progress-service'
@@ -55,7 +55,7 @@ const SORT_DESCRIPTIONS: Record<MembersSort, string> = {
 export default async function AdminProgressMembersPage({
   searchParams,
 }: PageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("progress")
   const params = await searchParams
   const search = params.search ?? ''
   const roleParam = params.role

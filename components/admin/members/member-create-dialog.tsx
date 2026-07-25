@@ -25,7 +25,7 @@ import {
 import { adminCreateMemberSchema } from '@/lib/validations/admin-members'
 import type { MembershipOption } from './members-shell'
 
-type Role = 'ADMIN' | 'TEAM' | 'MEMBER'
+type UserRole = 'ADMIN' | 'TEAM' | 'MEMBER'
 type FieldErrors = Partial<
   Record<'name' | 'email' | 'role' | 'membershipId', string[]>
 >
@@ -42,18 +42,18 @@ interface MemberCreateDialogProps {
   /** Restrict the role picker to a subset (e.g. Team page uses
    *  [ADMIN, TEAM]). When the array collapses to a single role the
    *  picker is hidden entirely. Defaults to every role. */
-  allowedRoles?: Role[]
+  allowedRoles?: UserRole[]
   /** Which role to pre-select. Defaults to the first entry in
    *  allowedRoles, or MEMBER. */
-  defaultRole?: Role
+  defaultRole?: UserRole
 }
 
-const ROLE_LABELS: Record<Role, string> = {
+const ROLE_LABELS: Record<UserRole, string> = {
   MEMBER: 'Member',
   TEAM: 'Internal Team',
   ADMIN: 'Admin',
 }
-const ROLE_ORDER: Role[] = ['MEMBER', 'TEAM', 'ADMIN']
+const ROLE_ORDER: UserRole[] = ['MEMBER', 'TEAM', 'ADMIN']
 
 function RequiredMark() {
   return (
@@ -74,7 +74,7 @@ export function MemberCreateDialog({
   const roleOptions = ROLE_ORDER.filter((r) =>
     allowedRoles ? allowedRoles.includes(r) : true,
   )
-  const initialRole: Role =
+  const initialRole: UserRole =
     defaultRole && roleOptions.includes(defaultRole)
       ? defaultRole
       : (roleOptions[0] ?? 'MEMBER')
@@ -82,7 +82,7 @@ export function MemberCreateDialog({
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<Role>(initialRole)
+  const [role, setRole] = useState<UserRole>(initialRole)
   const [membershipId, setMembershipId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -233,14 +233,14 @@ export function MemberCreateDialog({
 
           {showRoleField ? (
             <div className="space-y-2">
-              <Label htmlFor="member-role">Role</Label>
+              <Label htmlFor="member-role">UserRole</Label>
               <Select
                 value={role}
-                onValueChange={(v) => setRole((v as Role) ?? initialRole)}
+                onValueChange={(v) => setRole((v as UserRole) ?? initialRole)}
               >
                 <SelectTrigger className="w-full" id="member-role">
                   <SelectValue>
-                    {(v: string) => ROLE_LABELS[v as Role] ?? ROLE_LABELS.MEMBER}
+                    {(v: string) => ROLE_LABELS[v as UserRole] ?? ROLE_LABELS.MEMBER}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>

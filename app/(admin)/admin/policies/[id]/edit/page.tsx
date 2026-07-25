@@ -5,7 +5,7 @@ import {
   fetchPolicyWorkspaceAction,
 } from '@/app/(admin)/admin/policies/actions'
 import { PolicyEditor } from '@/components/admin/policies/policy-editor'
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +16,7 @@ interface PolicyEditPageProps {
 export default async function PolicyEditPage({
   params,
 }: PolicyEditPageProps) {
-  await requireAdmin()
+  await requireTeamModuleAccess("policies")
   const { id } = await params
 
   // Fetch the detail payload + the category list from the workspace

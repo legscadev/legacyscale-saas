@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ColumnDef, VisibilityState } from '@tanstack/react-table'
 import { Columns3, Search, X } from 'lucide-react'
-import type { Role } from '@prisma/client'
+import type { UserRole } from '@prisma/client'
 
 import type { MemberStatusFilter, MemberListItem } from '@/lib/services/member-service'
 
@@ -39,10 +39,10 @@ const STATUSES = [
 
 interface MembersToolbarProps {
   search: string
-  role: Role | null
+  role: UserRole | null
   status: MemberStatusFilter | null
   onSearchChange: (value: string) => void
-  onRoleChange: (role: Role | null) => void
+  onRoleChange: (role: UserRole | null) => void
   onStatusChange: (status: MemberStatusFilter | null) => void
   onClearAll: () => void
   isPending: boolean
@@ -113,7 +113,7 @@ export function MembersToolbar({
           <Select
             value={roleValue}
             onValueChange={(v) =>
-              onRoleChange(!v || v === 'all' ? null : (v as Role))
+              onRoleChange(!v || v === 'all' ? null : (v as UserRole))
             }
           >
             <SelectTrigger className="h-9 w-[140px]">

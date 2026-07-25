@@ -1,6 +1,6 @@
 'use server'
 
-import { requireAdmin } from '@/lib/auth/get-user'
+import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import {
   adminProgressService,
   type MemberCourseProgress,
@@ -16,6 +16,6 @@ export async function getMemberCourseProgressAction(
   userId: string,
   courseId: string,
 ): Promise<MemberCourseProgress | null> {
-  await requireAdmin()
+  await requireTeamModuleAccess("progress")
   return adminProgressService.getMemberCourseProgress(userId, courseId)
 }
