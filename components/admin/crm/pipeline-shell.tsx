@@ -162,7 +162,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Pipeline"
+        title="Opportunities"
         description={
           currentPipeline
             ? `${currentPipeline.name} · ${openDeals.length} open ${
@@ -258,8 +258,8 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         // the first deal instead of a $0 strip.
         <p className="flex items-center gap-2 rounded-xl border border-dashed bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           <KanbanSquare className="size-4 shrink-0" aria-hidden />
-          No deals yet — add one to a stage below, or convert a qualified lead
-          from the Leads inbox.
+          No deals yet — add one to a stage below, or convert a qualified
+          contact from Contacts.
         </p>
       )}
 
