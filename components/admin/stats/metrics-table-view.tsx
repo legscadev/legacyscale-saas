@@ -16,7 +16,14 @@
 // so the cell stays in sync even before the server round trip
 // finishes; errors roll back and toast.
 
-import { useCallback, useMemo, useState, useTransition } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -25,6 +32,7 @@ import { cn } from '@/lib/utils'
 import type { StatMetricRow } from '@/lib/services/stat-tracker-service'
 import {
   deleteDataPointAction,
+  fetchMonthDataPointsAction,
   upsertDataPointAction,
 } from '@/app/(admin)/admin/stats/actions'
 
@@ -69,8 +77,14 @@ function toIsoDate(y: number, m0: number, d: number): string {
 }
 
 function isoOfDataPoint(d: Date): string {
-  return toIsoDate(d.getFullYear(), d.getMonth(), d.getDate())
+  // recordedAt is a @db.Date — Prisma hands it back as UTC midnight.
+  // Read the calendar date in UTC (not local) so the cell key matches
+  // the date we wrote regardless of the viewer's timezone.
+  return toIsoDate(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 }
+
+/** metricId → iso → recorded point, for the visible month. */
+type MonthMap = Map<string, Map<string, { id: string; value: number }>>
 
 function daysInMonth(y: number, m0: number): number {
   return new Date(y, m0 + 1, 0).getDate()
@@ -89,6 +103,40 @@ export function MetricsTableView({
   })
   const [overlay, setOverlay] = useState<Overlay>(new Map())
   const [, startSave] = useTransition()
+
+  // Data points for the visible month, fetched on demand. The initial
+  // page payload only carries the most-recent take-N points per
+  // metric, so any month older than that window (e.g. January viewed
+  // in July) is absent there — this range fetch is what makes those
+  // months render and persist correctly.
+  const [monthData, setMonthData] = useState<MonthMap>(new Map())
+  const monthReqRef = useRef(0)
+
+  useEffect(() => {
+    const reqId = ++monthReqRef.current
+    fetchMonthDataPointsAction(month.year, month.month + 1).then((res) => {
+      // Ignore a stale response if the operator moved to another month.
+      if (reqId !== monthReqRef.current) return
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not load this month')
+        return
+      }
+      const map: MonthMap = new Map()
+      for (const p of res.points) {
+        const iso = isoOfDataPoint(p.recordedAt)
+        let perMetric = map.get(p.metricId)
+        if (!perMetric) {
+          perMetric = new Map()
+          map.set(p.metricId, perMetric)
+        }
+        perMetric.set(iso, { id: p.id, value: p.value })
+      }
+      setMonthData(map)
+      // Authoritative data arrived — drop optimistic overlays so the
+      // two don't diverge.
+      setOverlay(new Map())
+    })
+  }, [month.year, month.month])
 
   const dayCount = daysInMonth(month.year, month.month)
   const monthLabel = `${MONTH_NAMES[month.month]} ${month.year}`
@@ -147,10 +195,15 @@ export function MetricsTableView({
   const readCell = useCallback(
     (metricId: string, iso: string): number | null => {
       const key: CellKey = `${metricId}:${iso}`
+      // overlay (optimistic) > monthData (authoritative for the visible
+      // month) > the capped initial payload (fallback before the month
+      // fetch resolves, mostly the current month).
       if (overlay.has(key)) return overlay.get(key)!
+      const fromMonth = monthData.get(metricId)?.get(iso)
+      if (fromMonth) return fromMonth.value
       return valuesByMetric.get(metricId)?.get(iso) ?? null
     },
-    [overlay, valuesByMetric],
+    [overlay, monthData, valuesByMetric],
   )
 
   const setOverlayCell = useCallback(
@@ -164,6 +217,15 @@ export function MetricsTableView({
     [],
   )
 
+  const clearOverlayCell = useCallback((metricId: string, iso: string) => {
+    setOverlay((prev) => {
+      if (!prev.has(`${metricId}:${iso}`)) return prev
+      const next = new Map(prev)
+      next.delete(`${metricId}:${iso}`)
+      return next
+    })
+  }, [])
+
   const commit = useCallback(
     async (metricId: string, iso: string, next: number | null) => {
       const before = readCell(metricId, iso)
@@ -171,23 +233,50 @@ export function MetricsTableView({
 
       setOverlayCell(metricId, iso, next)
       startSave(async () => {
-        const res =
-          next === null
-            ? await deleteExistingIfAny(metricId, iso, metrics)
-            : await upsertDataPointAction({
-                metricId,
-                recordedAt: iso,
-                value: next,
-              })
+        let res: { ok: true; id?: string } | { ok: false; error: string }
+        if (next === null) {
+          // Delete: prefer the id we already hold for this month; fall
+          // back to scanning the (capped) initial payload.
+          const existing = monthData.get(metricId)?.get(iso)
+          res = existing
+            ? await deleteDataPointAction(existing.id)
+            : await deleteExistingIfAny(metricId, iso, metrics)
+        } else {
+          res = await upsertDataPointAction({
+            metricId,
+            recordedAt: iso,
+            value: next,
+          })
+        }
+
         if (!res.ok) {
           toast.error(res.error ?? 'Could not save')
           setOverlayCell(metricId, iso, before)
           return
         }
+
+        // Reconcile the authoritative month map, then drop the overlay
+        // so the cell reads straight from persisted state.
+        const savedId = 'id' in res ? res.id : undefined
+        setMonthData((prev) => {
+          const nextMap: MonthMap = new Map(prev)
+          const perMetric = new Map(nextMap.get(metricId) ?? [])
+          if (next === null) {
+            perMetric.delete(iso)
+          } else {
+            perMetric.set(iso, {
+              id: savedId ?? perMetric.get(iso)?.id ?? '',
+              value: next,
+            })
+          }
+          nextMap.set(metricId, perMetric)
+          return nextMap
+        })
+        clearOverlayCell(metricId, iso)
         onChanged?.()
       })
     },
-    [metrics, onChanged, readCell, setOverlayCell],
+    [metrics, monthData, onChanged, readCell, setOverlayCell, clearOverlayCell],
   )
 
   if (metrics.length === 0) return null

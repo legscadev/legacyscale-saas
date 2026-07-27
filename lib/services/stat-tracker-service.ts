@@ -228,6 +228,46 @@ export async function listMetricsForDivision(
   return metrics.map(shapeMetricRow)
 }
 
+/** One data point flattened for the table matrix. */
+export interface MonthDataPoint {
+  id: string
+  metricId: string
+  recordedAt: Date
+  value: number
+}
+
+/**
+ * Every data point recorded in a single calendar month, across all
+ * (non-deleted) metrics. Powers the table view's month matrix, which
+ * navigates months client-side — the fixed take-N window on
+ * listAllMetrics only carries the most recent points, so any month
+ * older than that would render (and appear to save) blank without
+ * this range fetch.
+ *
+ * `month` is 1..12. Range is [first of month, first of next month)
+ * in UTC — matching how @db.Date values round-trip as UTC midnight.
+ */
+export async function listDataPointsInMonth(
+  year: number,
+  month: number,
+): Promise<MonthDataPoint[]> {
+  const from = new Date(Date.UTC(year, month - 1, 1))
+  const to = new Date(Date.UTC(year, month, 1))
+  const rows = await prisma.statDataPoint.findMany({
+    where: {
+      recordedAt: { gte: from, lt: to },
+      metric: { deletedAt: null, division: { deletedAt: null } },
+    },
+    select: { id: true, metricId: true, recordedAt: true, value: true },
+  })
+  return rows.map((r) => ({
+    id: r.id,
+    metricId: r.metricId,
+    recordedAt: r.recordedAt,
+    value: r.value.toNumber(),
+  }))
+}
+
 interface RawMetric {
   id: string
   name: string

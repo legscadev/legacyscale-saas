@@ -83,6 +83,12 @@ const SCOPED_MODELS = new Set<string>([
   'RolePermission',
   'UserRoleAssignment',
   'LoginEvent',
+  // CRM — sales pipeline (P0 #1)
+  'CrmPipeline',
+  'CrmPipelineStage',
+  'CrmOpportunity',
+  // CRM — leads (P0 #2)
+  'CrmLead',
 ])
 
 type AnyArgs = { where?: Record<string, unknown>; data?: unknown } & Record<

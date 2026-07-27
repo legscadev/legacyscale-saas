@@ -8,6 +8,8 @@ import {
   CheckSquare,
   ClipboardList,
   GraduationCap,
+  Inbox,
+  KanbanSquare,
   LayoutDashboard,
   type LucideIcon,
   Megaphone,
@@ -73,6 +75,13 @@ export const adminNav: NavSection[] = [
     items: [
       { label: 'Students', href: '/admin/students', icon: Users, moduleKey: 'students' },
       { label: 'Announcements', href: '/admin/announcements', icon: Megaphone, moduleKey: 'announcements' },
+    ],
+  },
+  {
+    label: 'Sales',
+    items: [
+      { label: 'Leads', href: '/admin/crm/leads', icon: Inbox, moduleKey: 'crm-leads' },
+      { label: 'Pipeline', href: '/admin/crm/pipeline', icon: KanbanSquare, moduleKey: 'crm-pipeline' },
     ],
   },
   {
@@ -152,6 +161,8 @@ export const memberNav: NavSection[] = [
     // reserved for ADMIN only.
     items: [
       { label: 'Team', href: '/team', icon: Users, visibleTo: ['TEAM'], moduleKey: 'team' },
+      { label: 'Leads', href: '/team/crm/leads', icon: Inbox, visibleTo: ['TEAM'], moduleKey: 'crm-leads' },
+      { label: 'Pipeline', href: '/team/crm/pipeline', icon: KanbanSquare, visibleTo: ['TEAM'], moduleKey: 'crm-pipeline' },
       { label: 'Task Tracker', href: '/team/tasks', icon: CheckSquare, visibleTo: ['TEAM'], moduleKey: 'tasks' },
       { label: 'Policies', href: '/team/policies', icon: BookText, visibleTo: ['TEAM'], moduleKey: 'policies' },
       { label: 'Trainings', href: '/team/trainings', icon: GraduationCap, visibleTo: ['TEAM'], moduleKey: 'trainings' },
