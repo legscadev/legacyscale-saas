@@ -24,7 +24,7 @@ import {
   useState,
   useTransition,
 } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -110,15 +110,29 @@ export function MetricsTableView({
   // in July) is absent there — this range fetch is what makes those
   // months render and persist correctly.
   const [monthData, setMonthData] = useState<MonthMap>(new Map())
+  // True while the visible month's points are in flight — drives the
+  // table's loading overlay so switching months shows progress instead
+  // of stale cells snapping to new values. Starts false: the initial
+  // mount already has the current month's data from the page payload,
+  // so we reconcile it silently and only show the overlay on an
+  // actual month change.
+  const [monthLoading, setMonthLoading] = useState(false)
   const monthReqRef = useRef(0)
+  const firstMonthRun = useRef(true)
 
   useEffect(() => {
     const reqId = ++monthReqRef.current
+    if (firstMonthRun.current) {
+      firstMonthRun.current = false
+    } else {
+      setMonthLoading(true)
+    }
     fetchMonthDataPointsAction(month.year, month.month + 1).then((res) => {
       // Ignore a stale response if the operator moved to another month.
       if (reqId !== monthReqRef.current) return
       if (!res.ok) {
         toast.error(res.error ?? 'Could not load this month')
+        setMonthLoading(false)
         return
       }
       const map: MonthMap = new Map()
@@ -135,6 +149,7 @@ export function MetricsTableView({
       // Authoritative data arrived — drop optimistic overlays so the
       // two don't diverge.
       setOverlay(new Map())
+      setMonthLoading(false)
     })
   }, [month.year, month.month])
 
@@ -296,8 +311,14 @@ export function MetricsTableView({
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="min-w-[10rem] px-2 text-sm font-medium">
+          <span className="flex min-w-[10rem] items-center gap-1.5 px-2 text-sm font-medium">
             {monthLabel}
+            {monthLoading ? (
+              <Loader2
+                className="size-3.5 animate-spin text-muted-foreground"
+                aria-label="Loading month"
+              />
+            ) : null}
           </span>
           <Button
             variant="ghost"
@@ -321,8 +342,25 @@ export function MetricsTableView({
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <table className="min-w-full border-collapse text-sm">
+      <div className="relative overflow-x-auto rounded-lg border bg-card">
+        {monthLoading ? (
+          <div
+            className="pointer-events-none absolute inset-0 z-30 flex items-start justify-center bg-card/60 backdrop-blur-[1px]"
+            aria-hidden
+          >
+            <div className="mt-16 flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">
+              <Loader2 className="size-3.5 animate-spin" />
+              Loading {monthLabel}…
+            </div>
+          </div>
+        ) : null}
+        <table
+          aria-busy={monthLoading}
+          className={cn(
+            'min-w-full border-collapse text-sm transition-opacity',
+            monthLoading && 'opacity-50',
+          )}
+        >
           <thead className="bg-muted">
             <tr>
               <th
