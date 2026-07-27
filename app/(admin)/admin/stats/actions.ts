@@ -57,7 +57,7 @@ export async function fetchDivisionMetrics(
  *  reverses). */
 export async function fetchAllMetrics(): Promise<StatMetricRow[]> {
   await requireActiveUser()
-  return listAllMetrics(62)
+  return listAllMetrics()
 }
 
 // ─── WRITE — admin only ────────────────────────────────────────

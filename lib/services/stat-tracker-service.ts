@@ -133,14 +133,28 @@ export async function listDivisions(): Promise<StatDivisionSummary[]> {
 }
 
 /**
- * Full board read across every non-deleted division. Includes each
- * metric with the last N data points so the UI can filter + render
- * without a second roundtrip. `points` defaults to 26 (~6 months
- * of weekly grain).
+ * How far back the stats views load data points. The date-range
+ * filter (Today / 7d / 30d / 90d / YTD) is applied client-side over
+ * the fetched set, so the fetch has to reach back at least as far as
+ * the widest preset (YTD ≈ a year). A fixed take-N count silently
+ * dropped older points — a value recorded in January simply wasn't
+ * fetched mid-year, so it never appeared on a 90d/YTD graph. 400
+ * days covers every preset (incl. YTD viewed in late December) with
+ * margin. Recorded days are unique per metric, so this is ≤400
+ * points per metric.
  */
-export async function listAllMetrics(
-  points: number = 26,
-): Promise<StatMetricRow[]> {
+const STATS_LOOKBACK_DAYS = 400
+
+function statsPointsSince(): Date {
+  return new Date(Date.now() - STATS_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+}
+
+/**
+ * Full board read across every non-deleted division. Includes each
+ * metric's data points within the stats lookback window so the UI can
+ * filter to any range preset + render without a second roundtrip.
+ */
+export async function listAllMetrics(): Promise<StatMetricRow[]> {
   const metrics = await prisma.statMetric.findMany({
     where: { deletedAt: null, division: { deletedAt: null } },
     orderBy: [
@@ -166,8 +180,8 @@ export async function listAllMetrics(
         },
       },
       dataPoints: {
+        where: { recordedAt: { gte: statsPointsSince() } },
         orderBy: { recordedAt: 'desc' },
-        take: points,
         select: {
           id: true,
           value: true,
@@ -189,7 +203,6 @@ export async function listAllMetrics(
  */
 export async function listMetricsForDivision(
   divisionId: string,
-  points: number = 26,
 ): Promise<StatMetricRow[]> {
   const metrics = await prisma.statMetric.findMany({
     where: { divisionId, deletedAt: null },
@@ -212,8 +225,8 @@ export async function listMetricsForDivision(
         },
       },
       dataPoints: {
+        where: { recordedAt: { gte: statsPointsSince() } },
         orderBy: { recordedAt: 'desc' },
-        take: points,
         select: {
           id: true,
           value: true,
