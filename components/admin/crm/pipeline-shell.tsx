@@ -10,7 +10,6 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { KanbanSquare, Plus } from 'lucide-react'
 
-import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
 import { Button } from '@/components/ui/button'
 
@@ -124,44 +123,40 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         }
       />
 
-      {deals.length === 0 ? (
-        // Empty pipeline — a bare "$0 / $0 / $0" strip reads as broken,
-        // so show a clear call-to-action instead until the first deal
-        // lands. Stages still exist; they just have nothing on them yet.
-        <EmptyState
-          icon={KanbanSquare}
-          title="No deals in this pipeline yet"
-          description="Add a deal to start tracking pipeline value, or convert a qualified lead from the Leads inbox."
-        >
-          <Button onClick={() => openCreate()} disabled={!currentPipelineId}>
-            <Plus className="size-4" />
-            New deal
-          </Button>
-        </EmptyState>
-      ) : (
-        <>
-          <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/30 px-4 py-3 text-sm">
-            <SummaryStat label="Open value" value={formatDealValue(openValue)} />
-            <SummaryStat
-              label="Weighted forecast"
-              value={formatDealValue(weighted)}
-              hint="Σ value × probability"
-            />
-            <SummaryStat
-              label="Won"
-              value={formatDealValue(wonValue)}
-              tone="emerald"
-            />
-          </div>
-
-          <PipelineBoard
-            stages={stages}
-            opportunities={deals}
-            onCreate={openCreate}
-            onChanged={() => router.refresh()}
+      {deals.length > 0 ? (
+        // Summary strip only once there are deals — a bare "$0 / $0 /
+        // $0" reads as broken on an empty board.
+        <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/30 px-4 py-3 text-sm">
+          <SummaryStat label="Open value" value={formatDealValue(openValue)} />
+          <SummaryStat
+            label="Weighted forecast"
+            value={formatDealValue(weighted)}
+            hint="Σ value × probability"
           />
-        </>
+          <SummaryStat
+            label="Won"
+            value={formatDealValue(wonValue)}
+            tone="emerald"
+          />
+        </div>
+      ) : (
+        // Empty board still shows its stages below — just nudge toward
+        // the first deal instead of a $0 strip.
+        <p className="flex items-center gap-2 rounded-xl border border-dashed bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          <KanbanSquare className="size-4 shrink-0" aria-hidden />
+          No deals yet — add one to a stage below, or convert a qualified lead
+          from the Leads inbox.
+        </p>
       )}
+
+      {/* The Kanban board is always visible so the stages read as a
+          pipeline even before the first deal lands. */}
+      <PipelineBoard
+        stages={stages}
+        opportunities={deals}
+        onCreate={openCreate}
+        onChanged={() => router.refresh()}
+      />
 
       {currentPipelineId ? (
         <CreateOpportunityDialog
