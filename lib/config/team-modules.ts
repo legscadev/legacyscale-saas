@@ -20,6 +20,7 @@ import {
   CheckSquare,
   ClipboardList,
   GraduationCap,
+  Inbox,
   KanbanSquare,
   Megaphone,
   Network,
@@ -44,6 +45,7 @@ export type TeamModuleKey =
   | 'students'
   | 'announcements'
   // Sales section (CRM)
+  | 'crm-leads'
   | 'crm-pipeline'
   // Internal section
   | 'team'
@@ -145,6 +147,15 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
     description: 'Publish announcements to the member community.',
   },
   // Sales (CRM) ──────────────────────────
+  {
+    key: 'crm-leads',
+    section: 'Sales',
+    label: 'Leads',
+    href: '/admin/crm/leads',
+    icon: Inbox,
+    description:
+      'Lead inbox — capture, qualify, assign to setters, and convert to deals.',
+  },
   {
     key: 'crm-pipeline',
     section: 'Sales',

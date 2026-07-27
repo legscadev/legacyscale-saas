@@ -306,6 +306,11 @@ model User {
   crmOpportunitiesAssigned CrmOpportunity[] @relation("CrmOpportunityCloser")
   crmOpportunitiesCreated  CrmOpportunity[] @relation("CrmOpportunityCreator")
 
+  // CRM — leads. Setter the lead is routed to + operator who
+  // captured it.
+  crmLeadsAssigned CrmLead[] @relation("CrmLeadSetter")
+  crmLeadsCreated  CrmLead[] @relation("CrmLeadCreator")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -2409,6 +2414,8 @@ model CrmOpportunity {
   stage          CrmPipelineStage @relation(fields: [stageId], references: [id], onDelete: Restrict)
   assignedCloser User?            @relation("CrmOpportunityCloser", fields: [assignedCloserId], references: [id], onDelete: SetNull)
   createdBy      User?            @relation("CrmOpportunityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  // Leads that converted into this deal (usually 0 or 1).
+  sourceLeads    CrmLead[]        @relation("CrmLeadConversion")
   companyId      String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([companyId, pipelineId, stageId, orderIndex])
@@ -2416,4 +2423,91 @@ model CrmOpportunity {
   @@index([companyId, status])
   @@index([companyId, deletedAt])
   @@map("crm_opportunities")
+}
+
+// ============================================
+// CRM — LEADS  (P0 #2)
+// ============================================
+//
+// The top of the funnel: raw inbound people/companies before they're
+// qualified. A lead carries its original source, an optional assigned
+// setter, and a qualification status. On qualification it converts —
+// for P0 that means spawning a CrmOpportunity directly (contact fields
+// copy across as free text); P0 #3 inserts a crm_contact in between.
+
+/// Where a lead originally came from. Stored from day one so later
+/// source integrations (Facebook/Google Ads, webhooks, API) don't
+/// need a schema change — they just set a different value.
+enum CrmLeadSource {
+  WEBSITE_FORM
+  LANDING_PAGE
+  FACEBOOK_ADS
+  GOOGLE_ADS
+  CSV_IMPORT
+  MANUAL
+  API
+  WEBHOOK
+  OTHER
+}
+
+/// Lead qualification lifecycle. NEW → CONTACTED → QUALIFIED (then
+/// CONVERTED once a deal is spawned) or UNQUALIFIED (dead).
+enum CrmLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+  CONVERTED
+}
+
+model CrmLead {
+  id             String        @id @default(uuid())
+  fullName       String        @map("full_name")
+  email          String?
+  phone          String?
+  secondaryPhone String?       @map("secondary_phone")
+  /// Prospect's company name (free text). Becomes a crm_company FK
+  /// in a later phase.
+  companyName    String?       @map("company_name")
+  address        String?
+
+  source         CrmLeadSource @default(MANUAL)
+  /// Free-text marketing campaign / ad-set label.
+  campaign       String?
+  industry       String?
+  status         CrmLeadStatus @default(NEW)
+
+  /// Setter the lead is routed to. SetNull so removing a user leaves
+  /// the lead in the inbox, unassigned.
+  assignedSetterId String?     @map("assigned_setter_id")
+  /// Operator who captured the row. SetNull on user delete.
+  createdById      String?     @map("created_by_id")
+
+  notes          String?       @db.Text
+  /// Last time any activity touched the lead — powers the "Last
+  /// activity" column + stale-lead surfacing later.
+  lastActivityAt DateTime?     @map("last_activity_at")
+
+  /// Set when the lead is converted; points at the spawned deal so
+  /// the inbox can link straight to the pipeline card.
+  convertedAt            DateTime? @map("converted_at")
+  convertedOpportunityId String?   @map("converted_opportunity_id")
+
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
+
+  assignedSetter       User?           @relation("CrmLeadSetter", fields: [assignedSetterId], references: [id], onDelete: SetNull)
+  createdBy            User?           @relation("CrmLeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  convertedOpportunity CrmOpportunity? @relation("CrmLeadConversion", fields: [convertedOpportunityId], references: [id], onDelete: SetNull)
+  companyId            String          @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, status])
+  @@index([companyId, assignedSetterId])
+  @@index([companyId, source])
+  @@index([companyId, deletedAt])
+  // Dedupe lookups hit these on every create.
+  @@index([companyId, email])
+  @@index([companyId, phone])
+  @@map("crm_leads")
 }

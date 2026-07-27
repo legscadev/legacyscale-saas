@@ -95,7 +95,9 @@ DECLARE
     -- CRM — sales pipeline (P0 #1)
     'crm_pipelines',
     'crm_pipeline_stages',
-    'crm_opportunities'
+    'crm_opportunities',
+    -- CRM — leads (P0 #2)
+    'crm_leads'
   ];
 BEGIN
   FOREACH scoped_table IN ARRAY scoped_tables LOOP

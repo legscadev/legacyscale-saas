@@ -87,6 +87,8 @@ const SCOPED_MODELS = new Set<string>([
   'CrmPipeline',
   'CrmPipelineStage',
   'CrmOpportunity',
+  // CRM — leads (P0 #2)
+  'CrmLead',
 ])
 
 type AnyArgs = { where?: Record<string, unknown>; data?: unknown } & Record<
