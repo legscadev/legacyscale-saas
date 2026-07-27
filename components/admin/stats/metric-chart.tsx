@@ -70,21 +70,31 @@ export function MetricChart({
   // Use timestamps for x so the axis can span the whole selected
   // range even when the data covers only part of it (widening the
   // range visibly zooms out, not just shifts).
-  const data = points.map((p) => ({
+  const rawData = points.map((p) => ({
     x: new Date(p.recordedAt).getTime(),
     value: p.value,
     fullDate: p.recordedAt,
   }))
 
-  const domain = computeDomain(data, fromDate, toDate)
+  const domain = computeDomain(rawData, fromDate, toDate)
   const axisConfig = buildAxisConfig(domain[0], domain[1])
 
-  // Key the chart on the domain (not the data) so a filtered range
-  // mounts a fresh chart even when the visible data set is the
-  // same size — otherwise widening the range with no additional
-  // points would leave the previous chart in place. Recharts holds
-  // onto stale dimensions when props change without a remount.
-  const chartKey = `${domain[0]}-${domain[1]}`
+  // Bucket the plotted points to the same granularity as the axis
+  // ticks so a wide range (90d / YTD) shows ~a dozen aggregated
+  // points instead of hundreds of crammed daily dots. Aggregation
+  // matches the card's headline summation: SUM for COUNT/CURRENCY,
+  // AVG for PERCENT (a "% over a period" doesn't sum).
+  const spanDays = Math.max(1, Math.round((domain[1] - domain[0]) / DAY_MS))
+  const granularity = pickGranularity(spanDays)
+  const data = aggregatePoints(rawData, unit, granularity)
+
+  // Key the chart on the domain + granularity (not the data) so a
+  // filtered range mounts a fresh chart even when the visible data
+  // set is the same size — otherwise widening the range with no
+  // additional points would leave the previous chart in place.
+  // Recharts holds onto stale dimensions when props change without
+  // a remount.
+  const chartKey = `${domain[0]}-${domain[1]}-${granularity}`
 
   return (
     <div className={fillHeight ? 'h-full w-full' : 'h-40 w-full'}>
@@ -125,10 +135,10 @@ export function MetricChart({
               const row = payload?.[0]?.payload as
                 | { fullDate: Date }
                 | undefined
-              // Always render the tooltip with the full long-form date
-              // regardless of axis granularity — the mouse-target is
-              // one specific point, precision helps.
-              return row ? formatLongDate(row.fullDate) : ''
+              // Label the tooltip for the bucket the point represents
+              // ("Week of…", month, year) so an aggregated dot doesn't
+              // masquerade as a single day.
+              return row ? formatBucketLabel(row.fullDate, granularity) : ''
             }}
             formatter={(v) => [
               typeof v === 'number' ? formatMetricValue(v, unit) : '—',
@@ -169,6 +179,92 @@ interface AxisConfig {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+type Granularity = 'raw' | 'day' | 'week' | 'month' | 'year'
+
+/**
+ * How finely to bucket the plotted points, chosen from the visible
+ * span. Thresholds mirror buildAxisConfig so the number of dots
+ * tracks the number of axis ticks (no crammed line on wide ranges).
+ *   ≤ 1 day    → raw          (Today)
+ *   ≤ 14 days  → daily        (7d — data is already ≤1/day)
+ *   ≤ 90 days  → weekly       (30d, 90d)
+ *   ≤ 400 days → monthly      (YTD)
+ *   > 400 days → yearly
+ */
+function pickGranularity(spanDays: number): Granularity {
+  if (spanDays <= 1) return 'raw'
+  if (spanDays <= 14) return 'day'
+  if (spanDays <= 90) return 'week'
+  if (spanDays <= 400) return 'month'
+  return 'year'
+}
+
+/** Start-of-bucket timestamp in UTC (data points are @db.Date at UTC
+ *  midnight, so bucketing + labels stay in UTC to agree with the
+ *  axis). Week buckets start Monday. */
+function bucketStartUTC(ts: number, gran: Granularity): number {
+  const d = new Date(ts)
+  d.setUTCHours(0, 0, 0, 0)
+  if (gran === 'week') {
+    const mondayOffset = (d.getUTCDay() + 6) % 7 // Sun=0 → 6, Mon=1 → 0
+    d.setUTCDate(d.getUTCDate() - mondayOffset)
+  } else if (gran === 'month') {
+    d.setUTCDate(1)
+  } else if (gran === 'year') {
+    d.setUTCMonth(0, 1)
+  }
+  return d.getTime()
+}
+
+interface ChartPoint {
+  x: number
+  value: number
+  fullDate: Date
+}
+
+/**
+ * Collapse raw daily points into buckets of the chosen granularity.
+ * SUM for COUNT/CURRENCY (period total, matching the card headline);
+ * AVG for PERCENT. Returns chronological buckets keyed on their start.
+ */
+function aggregatePoints(
+  rawData: ChartPoint[],
+  unit: MetricUnit,
+  gran: Granularity,
+): ChartPoint[] {
+  if (gran === 'raw') return rawData
+
+  const buckets = new Map<number, { sum: number; count: number }>()
+  for (const p of rawData) {
+    const key = bucketStartUTC(p.x, gran)
+    const b = buckets.get(key) ?? { sum: 0, count: 0 }
+    b.sum += p.value
+    b.count += 1
+    buckets.set(key, b)
+  }
+
+  return [...buckets.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([x, b]) => ({
+      x,
+      value: unit === 'PERCENT' ? b.sum / b.count : b.sum,
+      fullDate: new Date(x),
+    }))
+}
+
+/** Tooltip label for a bucket, granularity-aware. */
+function formatBucketLabel(date: Date, gran: Granularity): string {
+  if (gran === 'month' || gran === 'year') {
+    return new Intl.DateTimeFormat('en-US', {
+      month: gran === 'year' ? undefined : 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(date))
+  }
+  const long = formatLongDate(date)
+  return gran === 'week' ? `Week of ${long}` : long
+}
 
 /**
  * Choose a sensible tick series + label format based on how wide
