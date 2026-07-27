@@ -20,6 +20,7 @@ import {
   CheckSquare,
   ClipboardList,
   GraduationCap,
+  KanbanSquare,
   Megaphone,
   Network,
   PhoneCall,
@@ -42,6 +43,8 @@ export type TeamModuleKey =
   // Community section
   | 'students'
   | 'announcements'
+  // Sales section (CRM)
+  | 'crm-pipeline'
   // Internal section
   | 'team'
   | 'tasks'
@@ -59,7 +62,12 @@ export type TeamModuleKey =
 /** Sidebar section the module lives under. Purely presentational —
  *  used by the roles matrix to group columns and by the sidebar
  *  itself for the section headings. */
-export type ModuleSection = 'Learning' | 'Community' | 'Internal' | 'System'
+export type ModuleSection =
+  | 'Learning'
+  | 'Community'
+  | 'Sales'
+  | 'Internal'
+  | 'System'
 
 export interface TeamModuleDef {
   key: TeamModuleKey
@@ -135,6 +143,16 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
     href: '/admin/announcements',
     icon: Megaphone,
     description: 'Publish announcements to the member community.',
+  },
+  // Sales (CRM) ──────────────────────────
+  {
+    key: 'crm-pipeline',
+    section: 'Sales',
+    label: 'Pipeline',
+    href: '/admin/crm/pipeline',
+    icon: KanbanSquare,
+    description:
+      'Kanban sales pipeline — drag deals through stages from lead to close.',
   },
   // Internal ─────────────────────────────
   {
@@ -234,6 +252,7 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
 export const MODULE_SECTIONS: readonly ModuleSection[] = [
   'Learning',
   'Community',
+  'Sales',
   'Internal',
   'System',
 ] as const

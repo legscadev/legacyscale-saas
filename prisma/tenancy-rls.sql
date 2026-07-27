@@ -91,7 +91,11 @@ DECLARE
     'employees',
     'onboarding_checklist_items',
     'employee_checklist_item_statuses',
-    'app_settings'
+    'app_settings',
+    -- CRM — sales pipeline (P0 #1)
+    'crm_pipelines',
+    'crm_pipeline_stages',
+    'crm_opportunities'
   ];
 BEGIN
   FOREACH scoped_table IN ARRAY scoped_tables LOOP

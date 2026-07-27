@@ -300,6 +300,12 @@ model User {
   appointmentsSet         AppointmentSet[]  @relation("AppointmentSetSetter")
   appointmentsClosed      AppointmentSet[]  @relation("AppointmentSetCloser")
 
+  // CRM — sales pipeline. A user shows up as the closer a deal is
+  // assigned to and as the operator who created the row. Named
+  // relations because both point at the same model.
+  crmOpportunitiesAssigned CrmOpportunity[] @relation("CrmOpportunityCloser")
+  crmOpportunitiesCreated  CrmOpportunity[] @relation("CrmOpportunityCreator")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -2282,4 +2288,132 @@ model AppointmentSet {
   @@index([companyId, closerId, appointmentAt])
   @@index([companyId, status])
   @@map("appointment_sets")
+}
+
+// ============================================
+// CRM — SALES PIPELINE  (P0 #1)
+// ============================================
+//
+// The GoHighLevel-style pipeline. This is the evolution of the
+// AppointmentSet proto-opportunity into a real Lead → Opportunity →
+// Deal board. Structure deliberately mirrors the Task Tracker
+// (CrmPipeline ≈ board, CrmPipelineStage ≈ TaskStatus, CrmOpportunity
+// ≈ Task) so the Kanban + service + seeding conventions carry over.
+//
+// P0 keeps a contact as free-text fields on the opportunity; the
+// crm_contact / crm_company models arrive in P0 #3 and will swap the
+// text columns for FKs without touching the board.
+
+/// Terminal-ish outcome of an opportunity. OPEN = still on the
+/// board; WON/LOST are set when a card lands in a stage flagged
+/// isWon / isLost (or via an explicit outcome action).
+enum CrmOpportunityStatus {
+  OPEN
+  WON
+  LOST
+}
+
+/// One sales pipeline (a Kanban board). A tenant can run several
+/// (e.g. "New Business", "Renewals"); exactly one row should carry
+/// isDefault, enforced app-side. Stages hang off this via cascade.
+model CrmPipeline {
+  id         String   @id @default(uuid())
+  name       String
+  /// URL-safe handle, unique per tenant — survives a rename in
+  /// filter query strings + saved views.
+  slug       String
+  isDefault  Boolean  @default(false) @map("is_default")
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  stages        CrmPipelineStage[]
+  opportunities CrmOpportunity[]
+  companyId     String             @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([companyId, slug])
+  @@index([companyId, orderIndex])
+  @@map("crm_pipelines")
+}
+
+/// A column on a pipeline. Mirrors TaskStatus. `isWon` / `isLost`
+/// mark terminal columns so counters + reporting can split "in
+/// flight" from "closed" without hard-coding names. `probability`
+/// is the default win-likelihood a deal inherits when it lands here.
+model CrmPipelineStage {
+  id          String   @id @default(uuid())
+  pipelineId  String   @map("pipeline_id")
+  name        String
+  slug        String
+  /// Tailwind-safe hex for the column bar + stage pill.
+  color       String   @default("#94a3b8")
+  orderIndex  Int      @default(0) @map("order_index")
+  /// Default win-probability (0–100) applied to deals in this stage.
+  probability Int?
+  isWon       Boolean  @default(false) @map("is_won")
+  isLost      Boolean  @default(false) @map("is_lost")
+  /// Optional soft WIP limit for the Kanban column. Null = no limit.
+  wipLimit    Int?     @map("wip_limit")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  pipeline      CrmPipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  opportunities CrmOpportunity[]
+  companyId     String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@unique([pipelineId, slug])
+  @@index([companyId, pipelineId, orderIndex])
+  @@map("crm_pipeline_stages")
+}
+
+/// A deal on the board. Ordered within its stage by orderIndex
+/// (gaps of 100 so single-card drags rarely touch neighbours) —
+/// same scheme as Task. Stage FK is Restrict so a stage holding
+/// deals can't be deleted out from under them.
+model CrmOpportunity {
+  id                String               @id @default(uuid())
+  name              String
+  pipelineId        String               @map("pipeline_id")
+  stageId           String               @map("stage_id")
+
+  /// Free-text contact/company for P0 — swapped for crm_contact /
+  /// crm_company FKs in P0 #3.
+  contactName       String?              @map("contact_name")
+  contactEmail      String?              @map("contact_email")
+  contactPhone      String?              @map("contact_phone")
+  companyName       String?              @map("company_name")
+
+  value             Decimal?             @db.Decimal(12, 2)
+  probability       Int?
+  expectedCloseDate DateTime?            @map("expected_close_date") @db.Date
+
+  /// The closer working the deal. SetNull so removing a user leaves
+  /// the deal on the board unassigned rather than deleting history.
+  assignedCloserId  String?              @map("assigned_closer_id")
+  /// Who created the row. SetNull on user delete.
+  createdById       String?              @map("created_by_id")
+
+  status            CrmOpportunityStatus @default(OPEN)
+  notes             String?              @db.Text
+  orderIndex        Int                  @default(0) @map("order_index")
+
+  wonAt             DateTime?            @map("won_at")
+  lostAt            DateTime?            @map("lost_at")
+  lostReason        String?              @map("lost_reason")
+
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  deletedAt         DateTime?            @map("deleted_at")
+
+  pipeline       CrmPipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage          CrmPipelineStage @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  assignedCloser User?            @relation("CrmOpportunityCloser", fields: [assignedCloserId], references: [id], onDelete: SetNull)
+  createdBy      User?            @relation("CrmOpportunityCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  companyId      String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, pipelineId, stageId, orderIndex])
+  @@index([companyId, assignedCloserId])
+  @@index([companyId, status])
+  @@index([companyId, deletedAt])
+  @@map("crm_opportunities")
 }
