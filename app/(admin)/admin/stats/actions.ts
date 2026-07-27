@@ -6,7 +6,6 @@ import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { requireActiveUser } from '@/lib/auth'
 import { writeAuditLog } from '@/lib/services/audit-log-service'
 import { prisma } from '@/lib/prisma'
-import { memberTenantScope } from '@/lib/tenancy/request-company'
 import {
   archiveDivision,
   archiveMetric,
@@ -16,6 +15,7 @@ import {
   deleteDivision,
   deleteMetric,
   listAllMetrics,
+  listDataPointsInMonth,
   listDivisions,
   listMetricsForDivision,
   updateDivision,
@@ -25,6 +25,7 @@ import {
   type CreateMetricInput,
   type StatDivisionSummary,
   type StatMetricRow,
+  type MonthDataPoint,
   type UpdateDivisionInput,
   type UpdateMetricInput,
   type UpsertDataPointInput,
@@ -210,6 +211,31 @@ export async function deleteMetricAction(
 }
 
 // ─── WRITE — assignee or admin ────────────────────────────────
+
+/**
+ * Data points for a single calendar month across all metrics. The
+ * table view calls this on mount + whenever the operator navigates
+ * to a different month, so historical months (outside the initial
+ * take-N payload) render + persist correctly. `month` is 1..12.
+ */
+export async function fetchMonthDataPointsAction(
+  year: number,
+  month: number,
+): Promise<
+  { ok: true; points: MonthDataPoint[] } | { ok: false; error: string }
+> {
+  await requireActiveUser()
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    month < 1 ||
+    month > 12
+  ) {
+    return { ok: false, error: 'Invalid month' }
+  }
+  const points = await listDataPointsInMonth(year, month)
+  return { ok: true, points }
+}
 
 export async function upsertDataPointAction(
   input: UpsertDataPointInput,
