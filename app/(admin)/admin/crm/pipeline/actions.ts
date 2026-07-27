@@ -18,6 +18,9 @@ import {
 import {
   crmPipelineService,
   ensurePipelineReady,
+  LastPipelineError,
+  PipelineInUseError,
+  PipelineNotFoundError,
   type PipelineStage,
   type PipelineSummary,
 } from '@/lib/services/crm-pipeline-service'
@@ -27,10 +30,13 @@ import {
 } from '@/lib/tenancy/request-company'
 import {
   createOpportunitySchema,
+  createPipelineSchema,
   moveOpportunitySchema,
   opportunityFilterSchema,
+  renamePipelineSchema,
   updateOpportunitySchema,
   type CreateOpportunityInput,
+  type CreatePipelineInput,
   type UpdateOpportunityInput,
 } from '@/lib/validations/crm'
 
@@ -64,7 +70,10 @@ function fieldErrorsFromZod(
 function toMutationErr(err: unknown, fallback: string): MutationErr {
   if (
     err instanceof OpportunityNotFoundError ||
-    err instanceof StageNotFoundError
+    err instanceof StageNotFoundError ||
+    err instanceof PipelineNotFoundError ||
+    err instanceof LastPipelineError ||
+    err instanceof PipelineInUseError
   ) {
     return { ok: false, error: err.message }
   }
@@ -268,5 +277,80 @@ export async function deleteOpportunityAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not delete deal')
+  }
+}
+
+/** Full detail for the edit-card dialog (includes fields the board
+ *  list omits — email, phone, notes, pipelineId). */
+export async function fetchOpportunityAction(id: string): Promise<
+  MutationResult<
+    OpportunityListItem & {
+      contactEmail: string | null
+      contactPhone: string | null
+      notes: string | null
+      pipelineId: string
+    }
+  >
+> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const data = await crmOpportunityService.get(id)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load deal')
+  }
+}
+
+// ============================================
+// PIPELINE MANAGEMENT
+// ============================================
+
+export async function createPipelineAction(
+  input: CreatePipelineInput,
+): Promise<MutationResult<PipelineSummary>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = createPipelineSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmPipelineService.createPipeline(parsed.data)
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not create pipeline')
+  }
+}
+
+export async function renamePipelineAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<PipelineSummary>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = renamePipelineSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmPipelineService.renamePipeline(
+      parsed.data.pipelineId,
+      parsed.data.name,
+    )
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not rename pipeline')
+  }
+}
+
+export async function deletePipelineAction(
+  id: string,
+): Promise<MutationResult> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    await crmPipelineService.deletePipeline(id)
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete pipeline')
   }
 }

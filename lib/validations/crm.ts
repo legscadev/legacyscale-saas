@@ -127,6 +127,28 @@ export type MoveOpportunityInput = z.input<typeof moveOpportunitySchema>
 // FILTERS (URL-encoded on the board page)
 // ============================================
 
+// ============================================
+// PIPELINE CRUD
+// ============================================
+
+export const createPipelineSchema = z.object({
+  name: z.string().trim().min(1, 'Pipeline name is required').max(100),
+  stageNames: z
+    .array(z.string().trim().min(1).max(60))
+    .min(1, 'Add at least one stage')
+    .max(30, 'Too many stages'),
+})
+export type CreatePipelineInput = z.input<typeof createPipelineSchema>
+
+export const renamePipelineSchema = z.object({
+  pipelineId: z.string().uuid(),
+  name: z.string().trim().min(1, 'Pipeline name is required').max(100),
+})
+
+// ============================================
+// FILTERS (URL-encoded on the board page)
+// ============================================
+
 export const opportunityFilterSchema = z.object({
   pipelineId: z.string().uuid().optional(),
   search: z.string().trim().max(200).optional(),

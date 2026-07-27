@@ -12,12 +12,36 @@
 // behalf of whichever tenant is active (mirrors task-workflow-service).
 
 import { prisma } from '@/lib/prisma'
-import { runAsSuperAdmin } from '@/lib/tenancy/request-company'
+import {
+  getRequestCompanyId,
+  runAsSuperAdmin,
+} from '@/lib/tenancy/request-company'
 
 export class StageInUseError extends Error {
   constructor(message = 'Cannot delete a stage that still holds deals') {
     super(message)
     this.name = 'StageInUseError'
+  }
+}
+
+export class LastPipelineError extends Error {
+  constructor(message = 'A tenant must keep at least one pipeline') {
+    super(message)
+    this.name = 'LastPipelineError'
+  }
+}
+
+export class PipelineInUseError extends Error {
+  constructor(message = 'Cannot delete a pipeline that still holds deals') {
+    super(message)
+    this.name = 'PipelineInUseError'
+  }
+}
+
+export class PipelineNotFoundError extends Error {
+  constructor(message = 'Pipeline not found') {
+    super(message)
+    this.name = 'PipelineNotFoundError'
   }
 }
 
@@ -41,6 +65,27 @@ const DEFAULT_STAGES = [
   { name: 'Won',                  slug: 'won',           color: '#22c55e', orderIndex: 7, probability: 100, isWon: true,  isLost: false },
   { name: 'Lost',                 slug: 'lost',          color: '#ef4444', orderIndex: 8, probability: 0,   isWon: false, isLost: true  },
 ] as const
+
+/** Default stage names — surfaced to the create-pipeline dialog so a
+ *  new pipeline pre-fills with the standard stages (editable). */
+export const DEFAULT_STAGE_NAMES: readonly string[] = DEFAULT_STAGES.map(
+  (s) => s.name,
+)
+
+/** Colour palette cycled across a custom pipeline's stages. */
+const STAGE_PALETTE = [
+  '#64748b', '#3b82f6', '#0ea5e9', '#8b5cf6', '#a855f7',
+  '#f59e0b', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
+]
+
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+}
 
 export interface PipelineSeedResult {
   pipelinesCreated: number
@@ -169,6 +214,151 @@ class CrmPipelineService {
     })
     return rows
   }
+
+  /**
+   * Create a new pipeline with the given stages. Slug is derived from
+   * the name and made unique per tenant. Stage colours cycle the
+   * palette; a stage named "won"/"lost" (case-insensitive) is flagged
+   * terminal so the board's WON/LOST logic still works. companyId is
+   * stamped explicitly on the nested stage rows (the tenancy extension
+   * only auto-stamps top-level writes).
+   */
+  async createPipeline(input: {
+    name: string
+    stageNames: string[]
+  }): Promise<PipelineSummary> {
+    const companyId = await requireCompanyId()
+    const names = input.stageNames
+      .map((n) => n.trim())
+      .filter((n) => n.length > 0)
+    if (names.length === 0) {
+      throw new Error('A pipeline needs at least one stage')
+    }
+
+    const slug = await this.uniqueSlug(companyId, slugify(input.name) || 'pipeline')
+
+    const lastOrder = await prisma.crmPipeline.findFirst({
+      orderBy: { orderIndex: 'desc' },
+      select: { orderIndex: true },
+    })
+
+    const created = await prisma.crmPipeline.create({
+      data: {
+        name: input.name.trim(),
+        slug,
+        isDefault: false,
+        orderIndex: (lastOrder?.orderIndex ?? -1) + 1,
+        companyId,
+        stages: {
+          create: names.map((name, i) => {
+            const lower = name.toLowerCase()
+            return {
+              name,
+              slug: slugify(name) || `stage-${i + 1}`,
+              color: STAGE_PALETTE[i % STAGE_PALETTE.length]!,
+              orderIndex: i,
+              isWon: lower === 'won',
+              isLost: lower === 'lost',
+              probability: lower === 'won' ? 100 : lower === 'lost' ? 0 : null,
+              companyId,
+            }
+          }),
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isDefault: true,
+        orderIndex: true,
+      },
+    })
+    return created
+  }
+
+  async renamePipeline(id: string, name: string): Promise<PipelineSummary> {
+    await this.assertPipelineExists(id)
+    const row = await prisma.crmPipeline.update({
+      where: { id },
+      data: { name: name.trim() },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isDefault: true,
+        orderIndex: true,
+      },
+    })
+    return row
+  }
+
+  /**
+   * Delete a pipeline. Blocked when it's the tenant's last one or
+   * still holds (non-deleted) deals — the FK cascade would wipe those
+   * deals, so we force the operator to move/close them first. If the
+   * deleted pipeline was the default, the next one is promoted.
+   */
+  async deletePipeline(id: string): Promise<void> {
+    const [pipeline, total] = await Promise.all([
+      prisma.crmPipeline.findFirst({
+        where: { id },
+        select: { id: true, isDefault: true },
+      }),
+      prisma.crmPipeline.count(),
+    ])
+    if (!pipeline) throw new PipelineNotFoundError()
+    if (total <= 1) throw new LastPipelineError()
+
+    const dealCount = await prisma.crmOpportunity.count({
+      where: { pipelineId: id, deletedAt: null },
+    })
+    if (dealCount > 0) throw new PipelineInUseError()
+
+    await prisma.crmPipeline.delete({ where: { id } })
+
+    if (pipeline.isDefault) {
+      const next = await prisma.crmPipeline.findFirst({
+        orderBy: { orderIndex: 'asc' },
+        select: { id: true },
+      })
+      if (next) {
+        await prisma.crmPipeline.update({
+          where: { id: next.id },
+          data: { isDefault: true },
+        })
+      }
+    }
+  }
+
+  private async assertPipelineExists(id: string): Promise<void> {
+    const row = await prisma.crmPipeline.findFirst({
+      where: { id },
+      select: { id: true },
+    })
+    if (!row) throw new PipelineNotFoundError()
+  }
+
+  /** Append -2, -3… until the slug is free within the tenant. */
+  private async uniqueSlug(companyId: string, base: string): Promise<string> {
+    let candidate = base
+    let n = 2
+    // The (companyId, slug) unique index is what we're avoiding.
+    while (
+      await prisma.crmPipeline.findFirst({
+        where: { companyId, slug: candidate },
+        select: { id: true },
+      })
+    ) {
+      candidate = `${base}-${n++}`
+    }
+    return candidate
+  }
+}
+
+async function requireCompanyId(): Promise<string> {
+  const id = await getRequestCompanyId()
+  if (!id) throw new Error('crm-pipeline-service: no active company')
+  return id
 }
 
 export const crmPipelineService = new CrmPipelineService()
