@@ -10,6 +10,11 @@ import { revalidatePath } from 'next/cache'
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
 import {
+  crmBulkActionService,
+  type BulkActionListFilters,
+  type BulkActionLogRow,
+} from '@/lib/services/crm-bulk-action-service'
+import {
   crmOpportunityService,
   OpportunityNotFoundError,
   StageNotFoundError,
@@ -33,6 +38,8 @@ import {
 } from '@/lib/tenancy/request-company'
 import {
   addStageSchema,
+  bulkActionHistoryFilterSchema,
+  bulkDeleteOpportunitiesSchema,
   createOpportunitySchema,
   createPipelineSchema,
   moveOpportunitySchema,
@@ -483,5 +490,57 @@ export async function deleteStageAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not delete stage')
+  }
+}
+
+// ============================================
+// BULK ACTIONS
+// ============================================
+
+/** Soft-deletes a list of opportunities and returns the persisted
+ *  log row (so the toolbar toast can show target/success counts and
+ *  the history page can render it without a refetch). */
+export async function bulkDeleteOpportunitiesAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<BulkActionLogRow>> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = bulkDeleteOpportunitiesSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const log = await crmBulkActionService.bulkDeleteOpportunities({
+      opportunityIds: parsed.data.opportunityIds,
+      actorId: user.id,
+    })
+    revalidateAll()
+    revalidatePath('/admin/crm/opportunities/bulk-actions')
+    revalidatePath('/team/crm/opportunities/bulk-actions')
+    return { ok: true, data: log }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete deals')
+  }
+}
+
+/** Powers the /bulk-actions history table. */
+export async function fetchBulkActionsHistoryAction(
+  input: Record<string, unknown> = {},
+): Promise<
+  MutationResult<{ rows: BulkActionLogRow[]; total: number; page: number; limit: number }>
+> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = bulkActionHistoryFilterSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const filters: BulkActionListFilters = parsed.data
+    const { rows, total } = await crmBulkActionService.list(filters)
+    return {
+      ok: true,
+      data: { rows, total, page: parsed.data.page, limit: parsed.data.limit },
+    }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load bulk action history')
   }
 }

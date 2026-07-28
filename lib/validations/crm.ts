@@ -149,6 +149,38 @@ export const reorderPipelinesSchema = z.object({
   pipelineIds: z.array(z.string().uuid()).min(1),
 })
 
+// ---- Bulk actions ----
+
+export const crmBulkActionStatusSchema = z.enum([
+  'RUNNING',
+  'COMPLETE',
+  'FAILED',
+])
+export const crmBulkActionOperationSchema = z.enum([
+  'DELETE',
+  'MOVE_STAGE',
+  'ASSIGN_CLOSER',
+])
+
+/** Bulk-delete input — capped at 500 so a single click can't take out
+ *  a whole tenant. The board's toolbar surfaces this ceiling. */
+export const bulkDeleteOpportunitiesSchema = z.object({
+  opportunityIds: z
+    .array(z.string().uuid())
+    .min(1, 'Select at least one deal')
+    .max(500, 'You can delete at most 500 deals at once'),
+})
+
+export const bulkActionHistoryFilterSchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  statuses: z.array(crmBulkActionStatusSchema).optional(),
+  operations: z.array(crmBulkActionOperationSchema).optional(),
+  actorIds: z.array(z.string().uuid()).optional(),
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(200).default(50),
+})
+
 // ---- Stage editor ----
 
 const hexColor = z

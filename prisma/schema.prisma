@@ -311,6 +311,10 @@ model User {
   crmLeadsAssigned CrmLead[] @relation("CrmLeadSetter")
   crmLeadsCreated  CrmLead[] @relation("CrmLeadCreator")
 
+  // CRM — bulk-action job log (audit of who ran what against the
+  // pipeline).
+  crmBulkActionsRun CrmBulkAction[] @relation("CrmBulkActionActor")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -2510,4 +2514,71 @@ model CrmLead {
   @@index([companyId, email])
   @@index([companyId, phone])
   @@map("crm_leads")
+}
+
+// ============================================
+// CRM — BULK ACTIONS LOG
+// ============================================
+
+/// One bulk operation initiated from the CRM board. Persisted so the
+/// Bulk Actions tab can render an audit trail (who ran what, when it
+/// finished, how many rows it touched, and whether any failed).
+///
+/// For P0 the runner is synchronous — every action row starts at
+/// COMPLETE or FAILED; the RUNNING state exists so a later async
+/// worker can flip it without another migration.
+enum CrmBulkActionStatus {
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+/// The kind of write a bulk job performs. Delete is the only op for
+/// P0; Move / Assign are placeholders reserved for later phases so
+/// the enum + history filters don't need re-shipping.
+enum CrmBulkActionOperation {
+  DELETE
+  MOVE_STAGE
+  ASSIGN_CLOSER
+}
+
+/// The entity a bulk job targets. Kept broad so contact + lead bulk
+/// actions can share this log later without a schema fork.
+enum CrmBulkActionTargetType {
+  OPPORTUNITY
+  LEAD
+  CONTACT
+}
+
+model CrmBulkAction {
+  id            String                  @id @default(uuid())
+  /// Human-friendly auto-generated name — surfaced in the history
+  /// table's "Action label" column.
+  label         String
+  operation     CrmBulkActionOperation
+  targetType    CrmBulkActionTargetType @map("target_type")
+  status        CrmBulkActionStatus     @default(RUNNING)
+
+  targetCount   Int      @default(0) @map("target_count")
+  successCount  Int      @default(0) @map("success_count")
+  failureCount  Int      @default(0) @map("failure_count")
+
+  /// Inputs the job was launched with (target ids, target stage,
+  /// etc.). JSON so the shape can evolve per-operation without a
+  /// migration.
+  params        Json?
+  /// First error message when the job failed / partial-failed.
+  errorMessage  String?  @map("error_message") @db.Text
+
+  actorId       String?  @map("actor_id")
+  actor         User?    @relation("CrmBulkActionActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime  @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+  companyId     String    @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, createdAt])
+  @@index([companyId, operation])
+  @@index([companyId, status])
+  @@map("crm_bulk_actions")
 }

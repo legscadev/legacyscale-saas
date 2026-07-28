@@ -53,6 +53,7 @@ import { Label } from '@/components/ui/label'
 import type { OpportunityListItem } from '@/lib/services/crm-opportunity-service'
 
 import {
+  bulkDeleteOpportunitiesAction,
   deletePipelineAction,
   renamePipelineAction,
   type PipelineWorkspacePayload,
@@ -120,6 +121,8 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [stagesOpen, setStagesOpen] = useState(false)
   const [pipelinePending, startPipelineOp] = useTransition()
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
+  const [bulkPending, startBulkOp] = useTransition()
 
   function toggleSelect(id: string, next: boolean) {
     setSelectedIds((prev) => {
@@ -132,6 +135,33 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
 
   function toggleAll(next: boolean) {
     setSelectedIds(next ? new Set(deals.map((d) => d.id)) : new Set())
+  }
+
+  function runBulkDelete() {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    startBulkOp(async () => {
+      const res = await bulkDeleteOpportunitiesAction({ opportunityIds: ids })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not delete deals')
+        return
+      }
+      const { successCount, failureCount, targetCount } = res.data
+      if (failureCount === 0) {
+        toast.success(`Deleted ${successCount} deals`)
+      } else if (successCount === 0) {
+        toast.error(`Delete failed for all ${targetCount} deals`)
+      } else {
+        toast.warning(
+          `Deleted ${successCount} deals — ${failureCount} failed`,
+        )
+      }
+      // Local optimistic pull so the removed cards vanish instantly.
+      setDeals((prev) => prev.filter((d) => !selectedIds.has(d.id)))
+      setSelectedIds(new Set())
+      setBulkConfirmOpen(false)
+      router.refresh()
+    })
   }
 
   const currentPipeline = pipelines.find((p) => p.id === currentPipelineId)
@@ -370,11 +400,38 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
       <BulkSelectToolbar
         selectedCount={selectedIds.size}
         onClear={() => setSelectedIds(new Set())}
-        onDelete={() => {
-          // Wired up in Phase 3 alongside the real bulk-delete action.
-          toast('Bulk delete arrives with Phase 3 — coming next.')
-        }}
+        onDelete={() => setBulkConfirmOpen(true)}
+        disabled={bulkPending}
       />
+
+      <AlertDialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size}{' '}
+              {selectedIds.size === 1 ? 'deal' : 'deals'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Selected deals will be soft-deleted and closed as lost. Run
+              history stays visible on the Bulk Actions tab. This can’t
+              be undone from the UI.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                runBulkDelete()
+              }}
+              disabled={bulkPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkPending ? 'Deleting…' : 'Delete deals'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {currentPipelineId ? (
         <CreateOpportunityDialog

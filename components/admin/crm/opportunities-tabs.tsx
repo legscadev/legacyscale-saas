@@ -19,11 +19,10 @@ interface OpportunitiesTabsProps {
 export function OpportunitiesTabs({ basePath }: OpportunitiesTabsProps) {
   const pathname = usePathname()
 
-  // Bulk Actions tab is added in a later phase — omitted for now so
-  // clicking it never lands on a 404.
   const tabs = [
     { label: 'Opportunities', href: basePath },
     { label: 'Pipelines', href: `${basePath}/pipelines` },
+    { label: 'Bulk Actions', href: `${basePath}/bulk-actions` },
   ]
 
   return (
