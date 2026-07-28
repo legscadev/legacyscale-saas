@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/page-header'
+import { StatStrip } from '@/components/shared/stat-strip'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -353,19 +354,25 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
       {deals.length > 0 ? (
         // Summary strip only once there are deals — a bare "$0 / $0 /
         // $0" reads as broken on an empty board.
-        <div className="flex flex-wrap gap-4 rounded-xl border bg-muted/30 px-4 py-3 text-sm">
-          <SummaryStat label="Open value" value={formatDealValue(openValue)} />
-          <SummaryStat
-            label="Weighted forecast"
-            value={formatDealValue(weighted)}
-            hint="Σ value × probability"
-          />
-          <SummaryStat
-            label="Won"
-            value={formatDealValue(wonValue)}
-            tone="emerald"
-          />
-        </div>
+        <StatStrip
+          columns={3}
+          cells={[
+            {
+              label: 'Open value',
+              value: formatDealValue(openValue) ?? '—',
+            },
+            {
+              label: 'Weighted forecast',
+              value: formatDealValue(weighted) ?? '—',
+              description: 'Σ value × probability',
+            },
+            {
+              label: 'Won',
+              value: formatDealValue(wonValue) ?? '—',
+              valueClassName: 'text-emerald-600',
+            },
+          ]}
+        />
       ) : (
         // Empty board still shows its stages below — just nudge toward
         // the first deal instead of a $0 strip.
@@ -538,34 +545,3 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   )
 }
 
-function SummaryStat({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string
-  value: string | null
-  hint?: string
-  tone?: 'emerald'
-}) {
-  return (
-    <div className="min-w-[8rem]">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p
-        className={
-          tone === 'emerald'
-            ? 'text-lg font-semibold tabular-nums text-emerald-600'
-            : 'text-lg font-semibold tabular-nums'
-        }
-      >
-        {value ?? '—'}
-      </p>
-      {hint ? (
-        <p className="text-[10px] text-muted-foreground">{hint}</p>
-      ) : null}
-    </div>
-  )
-}

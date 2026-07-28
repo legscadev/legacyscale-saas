@@ -16,7 +16,17 @@ export interface StatStripCell {
 
 interface StatStripProps {
   cells: StatStripCell[]
+  /** Column count for the sm+ breakpoint. Defaults to 4 (the most
+   *  common case). Use 3 when you have three cells so the strip
+   *  doesn't leave a phantom empty column. */
+  columns?: 2 | 3 | 4
   className?: string
+}
+
+const COLUMNS_CLASS: Record<NonNullable<StatStripProps['columns']>, string> = {
+  2: 'sm:grid-cols-2',
+  3: 'sm:grid-cols-3',
+  4: 'sm:grid-cols-4',
 }
 
 /**
@@ -26,11 +36,12 @@ interface StatStripProps {
  * Cells are divided by a hairline rule; on small screens they wrap
  * into a grid.
  */
-export function StatStrip({ cells, className }: StatStripProps) {
+export function StatStrip({ cells, columns = 4, className }: StatStripProps) {
   return (
     <Card
       className={cn(
-        'grid grid-cols-2 gap-0 divide-x divide-y divide-border p-0 sm:grid-cols-4 sm:divide-y-0',
+        'grid grid-cols-2 gap-0 divide-x divide-y divide-border p-0 sm:divide-y-0',
+        COLUMNS_CLASS[columns],
         className,
       )}
     >
