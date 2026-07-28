@@ -9,6 +9,7 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  Filter,
   KanbanSquare,
   LayoutGrid,
   List,
@@ -67,6 +68,14 @@ import { CreateOpportunityDialog } from './create-opportunity-dialog'
 import { CreatePipelineDialog } from './create-pipeline-dialog'
 import { EditOpportunityDialog } from './edit-opportunity-dialog'
 import { ManageStagesDialog } from './manage-stages-dialog'
+import { OpportunitiesFilterChips } from './opportunities-filter-chips'
+import {
+  applyOpportunityFilter,
+  countActiveFilters,
+  EMPTY_FILTER,
+  OpportunitiesFilterDrawer,
+  type OpportunityFilterState,
+} from './opportunities-filter-drawer'
 import { OpportunitiesListView } from './opportunities-list-view'
 import { OpportunitiesTabs } from './opportunities-tabs'
 import {
@@ -123,6 +132,12 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   // for drag-drop). Default 'orderIndex' means "use the pinned order".
   const [sortBy, setSortBy] = useState<OpportunitySortBy>('orderIndex')
   const [sortOrder, setSortOrder] = useState<OpportunitySortOrder>('asc')
+
+  // Advanced filter drawer + its committed state. Applied client-side
+  // to the loaded deals so tweaking a facet is instantaneous.
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [filter, setFilter] = useState<OpportunityFilterState>(EMPTY_FILTER)
+  const activeFilterCount = countActiveFilters(filter)
 
   // Multi-select — used by both the board (Phase 3) and the list view.
   // Shell owns the state so switching views doesn't drop selection.
@@ -309,6 +324,25 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
               </select>
             ) : null}
 
+            {/* Filter — opens the advanced drawer. Badge reflects
+                active facets. Visible in both board and list modes. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilterOpen(true)}
+              className={cn(
+                activeFilterCount > 0 && 'border-primary/50 text-primary',
+              )}
+            >
+              <Filter className="size-4" />
+              Filters
+              {activeFilterCount > 0 ? (
+                <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
+                  {activeFilterCount}
+                </span>
+              ) : null}
+            </Button>
+
             {/* Sort — only meaningful in list view (Kanban is
                 manually ordered via drag). Hide in board mode so
                 the toolbar doesn't dangle a no-op control. */}
@@ -420,6 +454,13 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
 
       <OpportunitiesTabs basePath={basePath} />
 
+      <OpportunitiesFilterChips
+        filter={filter}
+        stages={stages}
+        members={members}
+        onChange={setFilter}
+      />
+
       {deals.length > 0 ? (
         // Summary strip only once there are deals — a bare "$0 / $0 /
         // $0" reads as broken on an empty board.
@@ -452,26 +493,38 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         </p>
       )}
 
-      {viewMode === 'board' ? (
-        // Board is always visible in this mode so the stages read as
-        // a pipeline even before the first deal lands.
-        <PipelineBoard
-          stages={stages}
-          opportunities={deals}
-          onOpen={setEditId}
-          onCreate={openCreate}
-          onChanged={() => router.refresh()}
-        />
-      ) : (
-        <OpportunitiesListView
-          stages={stages}
-          opportunities={sortOpportunities(deals, sortBy, sortOrder)}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-          onToggleAll={toggleAll}
-          onOpen={setEditId}
-        />
-      )}
+      {(() => {
+        const filtered = applyOpportunityFilter(deals, filter)
+        return viewMode === 'board' ? (
+          // Board is always visible in this mode so the stages read as
+          // a pipeline even before the first deal lands.
+          <PipelineBoard
+            stages={stages}
+            opportunities={filtered}
+            onOpen={setEditId}
+            onCreate={openCreate}
+            onChanged={() => router.refresh()}
+          />
+        ) : (
+          <OpportunitiesListView
+            stages={stages}
+            opportunities={sortOpportunities(filtered, sortBy, sortOrder)}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleAll={toggleAll}
+            onOpen={setEditId}
+          />
+        )
+      })()}
+
+      <OpportunitiesFilterDrawer
+        open={filterOpen}
+        onOpenChange={setFilterOpen}
+        value={filter}
+        stages={stages}
+        members={members}
+        onApply={setFilter}
+      />
 
       <BulkSelectToolbar
         selectedCount={selectedIds.size}
