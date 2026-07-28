@@ -44,6 +44,7 @@ import {
   bulkMoveOpportunitiesSchema,
   createOpportunitySchema,
   createPipelineSchema,
+  importOpportunitiesSchema,
   moveOpportunitySchema,
   opportunityFilterSchema,
   renamePipelineSchema,
@@ -54,6 +55,7 @@ import {
   type AddStageInput,
   type CreateOpportunityInput,
   type CreatePipelineInput,
+  type CsvOpportunityRow,
   type UpdateOpportunityInput,
   type UpdateStageInput,
 } from '@/lib/validations/crm'
@@ -521,6 +523,29 @@ export async function bulkDeleteOpportunitiesAction(
     return { ok: true, data: log }
   } catch (err) {
     return toMutationErr(err, 'Could not delete deals')
+  }
+}
+
+/** CSV import — bulk-inserts opportunities into a pipeline. */
+export async function importOpportunitiesAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<{ created: number; skipped: number }>> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = importOpportunitiesSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const result = await crmOpportunityService.importFromCsv({
+      pipelineId: parsed.data.pipelineId,
+      rows: parsed.data.rows as CsvOpportunityRow[],
+      assignedCloserId: parsed.data.assignedCloserId,
+      actorId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data: result }
+  } catch (err) {
+    return toMutationErr(err, 'Could not import opportunities')
   }
 }
 

@@ -18,6 +18,7 @@ import {
   Plus,
   Settings2,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -67,6 +68,7 @@ import { BulkSelectToolbar } from './bulk-select-toolbar'
 import { CreateOpportunityDialog } from './create-opportunity-dialog'
 import { CreatePipelineDialog } from './create-pipeline-dialog'
 import { EditOpportunityDialog } from './edit-opportunity-dialog'
+import { ImportOpportunitiesDialog } from './import-opportunities-dialog'
 import { ManageStagesDialog } from './manage-stages-dialog'
 import { OpportunitiesFilterChips } from './opportunities-filter-chips'
 import {
@@ -152,6 +154,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   const [pipelinePending, startPipelineOp] = useTransition()
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
   const [bulkPending, startBulkOp] = useTransition()
+  const [importOpen, setImportOpen] = useState(false)
 
   function toggleSelect(id: string, next: boolean) {
     setSelectedIds((prev) => {
@@ -441,6 +444,16 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
             </DropdownMenu>
 
             <Button
+              variant="outline"
+              size="sm"
+              disabled={!currentPipelineId}
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload className="size-4" />
+              Import
+            </Button>
+
+            <Button
               onClick={() => openCreate()}
               disabled={!currentPipelineId}
               size="sm"
@@ -525,6 +538,16 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         members={members}
         onApply={setFilter}
       />
+
+      {currentPipelineId ? (
+        <ImportOpportunitiesDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          pipelineId={currentPipelineId}
+          members={members}
+          onImported={() => router.refresh()}
+        />
+      ) : null}
 
       <BulkSelectToolbar
         selectedCount={selectedIds.size}

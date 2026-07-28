@@ -189,6 +189,42 @@ export const bulkAssignCloserSchema = z.object({
   closerId: z.string().uuid().nullable(),
 })
 
+// ---- CSV import ----
+
+const shortText = (max: number) =>
+  z.string().trim().max(max).nullable().optional()
+
+const optionalEmail = z
+  .string()
+  .trim()
+  .max(320)
+  .email('Enter a valid email')
+  .nullable()
+  .optional()
+  .or(z.literal('').transform(() => null))
+
+/** One parsed opportunity CSV row. Everything except name is optional. */
+export const csvOpportunitySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  contactName: shortText(200),
+  contactEmail: optionalEmail,
+  contactPhone: shortText(50),
+  companyName: shortText(200),
+  value: z.number().min(0).max(1_000_000_000).nullable().optional(),
+  probability: z.number().int().min(0).max(100).nullable().optional(),
+  /** Free-text stage name — resolved server-side against the target
+   *  pipeline's stages (case-insensitive). Falls back to the first
+   *  stage when omitted or unknown. */
+  stageName: shortText(60),
+})
+export type CsvOpportunityRow = z.output<typeof csvOpportunitySchema>
+
+export const importOpportunitiesSchema = z.object({
+  pipelineId: z.string().uuid(),
+  rows: z.array(csvOpportunitySchema).min(1, 'No rows to import').max(2000),
+  assignedCloserId: z.string().uuid().nullable().optional(),
+})
+
 export const bulkActionHistoryFilterSchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
