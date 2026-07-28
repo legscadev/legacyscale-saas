@@ -12,9 +12,26 @@
 
 import { useState, useTransition } from 'react'
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   BarChart3,
   Eye,
   EyeOff,
+  GripVertical,
   Plus,
   Trash2,
 } from 'lucide-react'
@@ -80,6 +97,28 @@ export function CreatePipelineDialog({
     DEFAULT_STAGE_NAMES.map((n) => makeStage(n)),
   )
   const [touched, setTouched] = useState(false)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setStages((prev) => {
+      const oldIndex = prev.findIndex((s) => s.key === active.id)
+      const newIndex = prev.findIndex((s) => s.key === over.id)
+      if (oldIndex === -1 || newIndex === -1) return prev
+      const next = prev.slice()
+      const [moved] = next.splice(oldIndex, 1)
+      if (!moved) return prev
+      next.splice(newIndex, 0, moved)
+      return next
+    })
+  }
 
   function reset() {
     setName('')
@@ -247,8 +286,10 @@ export function CreatePipelineDialog({
                 </Button>
               </div>
 
-              {/* Column labels */}
-              <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {/* Column labels — leading column left blank for the
+                  drag handle so the header aligns with the rows. */}
+              <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="w-6" aria-hidden />
                 <span>Stage name</span>
                 <span
                   className="text-right"
@@ -265,21 +306,33 @@ export function CreatePipelineDialog({
                     No stages yet — click “Add stage” to start.
                   </p>
                 ) : (
-                  stages.map((stage) => (
-                    <StageRow
-                      key={stage.key}
-                      name={stage.name}
-                      showInReports={stage.showInReports}
-                      canDelete={stages.length > 1}
-                      onChange={(name) => updateStage(stage.key, { name })}
-                      onToggleReports={() =>
-                        updateStage(stage.key, {
-                          showInReports: !stage.showInReports,
-                        })
-                      }
-                      onDelete={() => removeStage(stage.key)}
-                    />
-                  ))
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={stages.map((s) => s.key)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {stages.map((stage) => (
+                        <StageRow
+                          key={stage.key}
+                          id={stage.key}
+                          name={stage.name}
+                          showInReports={stage.showInReports}
+                          canDelete={stages.length > 1}
+                          onChange={(name) => updateStage(stage.key, { name })}
+                          onToggleReports={() =>
+                            updateStage(stage.key, {
+                              showInReports: !stage.showInReports,
+                            })
+                          }
+                          onDelete={() => removeStage(stage.key)}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 )}
               </div>
             </section>
@@ -336,6 +389,7 @@ function DisplayModeCard({
 }
 
 interface StageRowProps {
+  id: string
   name: string
   showInReports: boolean
   canDelete: boolean
@@ -345,6 +399,7 @@ interface StageRowProps {
 }
 
 function StageRow({
+  id,
   name,
   showInReports,
   canDelete,
@@ -352,12 +407,40 @@ function StageRow({
   onToggleReports,
   onDelete,
 }: StageRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+
   const lower = name.trim().toLowerCase()
   const isWon = lower === 'won'
   const isLost = lower === 'lost'
 
   return (
-    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3"
+    >
+      <button
+        type="button"
+        aria-label="Reorder stage"
+        {...attributes}
+        {...listeners}
+        className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+      >
+        <GripVertical className="size-4" />
+      </button>
       <Input
         value={name}
         onChange={(e) => onChange(e.target.value)}
