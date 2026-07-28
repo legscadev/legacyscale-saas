@@ -3,16 +3,31 @@
 // Manage-stages editor for the current pipeline. Header shows the
 // pipeline name with an inline rename pencil (HighLevel-style). Body
 // lists stages with a search box, per-row inline editing (colour,
-// name, probability, Won/Lost), reorder via up/down arrows, and
+// name, probability, Won/Lost), drag-reorder via a grip handle, and
 // per-stage delete (guarded — a stage holding deals or the last
 // stage can't be removed). Every edit is its own action call, applied
 // optimistically and reconciled by the board on close.
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import {
-  ArrowDown,
-  ArrowUp,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   Check,
+  GripVertical,
   Loader2,
   Pencil,
   Plus,
@@ -125,12 +140,26 @@ export function ManageStagesDialog({
     saveStage(stage.id, patch, { isWon: stage.isWon, isLost: stage.isLost })
   }
 
-  function move(index: number, dir: -1 | 1) {
-    const target = index + dir
-    if (target < 0 || target >= stages.length) return
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = stages.findIndex((s) => s.id === active.id)
+    const newIndex = stages.findIndex((s) => s.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
     const next = stages.slice()
-    ;[next[index], next[target]] = [next[target]!, next[index]!]
+    const [moved] = next.splice(oldIndex, 1)
+    if (!moved) return
+    next.splice(newIndex, 0, moved)
     setStages(next)
+
     startOp(async () => {
       const res = await reorderStagesAction({
         pipelineId,
@@ -322,7 +351,7 @@ export function ManageStagesDialog({
             <div className="max-h-[55vh] space-y-2 overflow-y-auto py-2">
               {/* Header row */}
               <div className="grid grid-cols-[auto_1fr_5rem_auto_3rem_auto] items-center gap-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                <span className="w-14">Order</span>
+                <span className="w-6" aria-hidden />
                 <span>Name</span>
                 <span>Prob %</span>
                 <span>Outcome</span>
@@ -337,145 +366,62 @@ export function ManageStagesDialog({
                     : 'No stages yet — add one above.'}
                 </p>
               ) : (
-                filteredStages.map((stage) => {
-                  const i = stages.indexOf(stage)
-                  return (
-                    <div
-                      key={stage.id}
-                      className="grid grid-cols-[auto_1fr_5rem_auto_3rem_auto] items-center gap-2 rounded-lg border bg-card px-2 py-1.5"
-                    >
-                      <div className="flex items-center gap-0.5">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={i === 0 || !!query}
-                          onClick={() => move(i, -1)}
-                          aria-label="Move up"
-                        >
-                          <ArrowUp className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={i === stages.length - 1 || !!query}
-                          onClick={() => move(i, 1)}
-                          aria-label="Move down"
-                        >
-                          <ArrowDown className="size-3.5" />
-                        </Button>
-                      </div>
-
-                      <div className="flex min-w-0 items-center gap-2">
-                        <input
-                          type="color"
-                          value={stage.color}
-                          onChange={(e) => {
-                            const prev = stage.color
-                            patchLocal(stage.id, { color: e.target.value })
-                            saveStage(
-                              stage.id,
-                              { color: e.target.value },
-                              { color: prev },
-                            )
-                          }}
-                          className="size-6 shrink-0 cursor-pointer rounded border bg-transparent"
-                          aria-label="Stage colour"
-                        />
-                        <Input
-                          defaultValue={stage.name}
-                          key={`name-${stage.id}-${stage.name}`}
-                          onBlur={(e) => {
-                            const val = e.target.value.trim()
-                            if (val && val !== stage.name) {
-                              saveStage(
-                                stage.id,
-                                { name: val },
-                                { name: stage.name },
-                              )
-                              patchLocal(stage.id, { name: val })
-                            }
-                          }}
-                          className="h-8"
-                        />
-                      </div>
-
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        defaultValue={stage.probability ?? ''}
-                        key={`prob-${stage.id}-${stage.probability}`}
-                        onBlur={(e) => {
-                          const raw = e.target.value.trim()
-                          const val = raw === '' ? null : Number(raw)
-                          if (val !== stage.probability) {
-                            saveStage(
-                              stage.id,
-                              { probability: val },
-                              { probability: stage.probability },
-                            )
-                            patchLocal(stage.id, { probability: val })
-                          }
-                        }}
-                        className="no-spinner h-8"
-                      />
-
-                      <div className="flex gap-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={stage.isWon ? 'default' : 'outline'}
-                          onClick={() => toggleOutcome(stage, 'won')}
-                          className={cn(
-                            'h-7 px-2 text-xs',
-                            stage.isWon &&
-                              'bg-emerald-600 hover:bg-emerald-700',
-                          )}
-                        >
-                          Won
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={stage.isLost ? 'default' : 'outline'}
-                          onClick={() => toggleOutcome(stage, 'lost')}
-                          className={cn(
-                            'h-7 px-2 text-xs',
-                            stage.isLost &&
-                              'bg-rose-600 hover:bg-rose-700',
-                          )}
-                        >
-                          Lost
-                        </Button>
-                      </div>
-
-                      <span className="text-center text-xs tabular-nums text-muted-foreground">
-                        {stage.dealCount}
-                      </span>
-
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        disabled={stage.dealCount > 0 || stages.length <= 1}
-                        onClick={() => removeStage(stage)}
-                        aria-label="Delete stage"
-                        title={
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={filteredStages.map((s) => s.id)}
+                    strategy={verticalListSortingStrategy}
+                    disabled={query.trim().length > 0}
+                  >
+                    {filteredStages.map((stage) => (
+                      <SortableStageRow
+                        key={stage.id}
+                        stage={stage}
+                        dragDisabled={query.trim().length > 0}
+                        canDelete={
+                          stage.dealCount === 0 && stages.length > 1
+                        }
+                        deleteHint={
                           stage.dealCount > 0
                             ? 'Move its deals first'
                             : stages.length <= 1
                               ? 'A pipeline needs at least one stage'
                               : 'Delete stage'
                         }
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  )
-                })
+                        onColor={(v) => {
+                          const prev = stage.color
+                          patchLocal(stage.id, { color: v })
+                          saveStage(stage.id, { color: v }, { color: prev })
+                        }}
+                        onName={(v) => {
+                          if (v && v !== stage.name) {
+                            saveStage(
+                              stage.id,
+                              { name: v },
+                              { name: stage.name },
+                            )
+                            patchLocal(stage.id, { name: v })
+                          }
+                        }}
+                        onProbability={(v) => {
+                          if (v !== stage.probability) {
+                            saveStage(
+                              stage.id,
+                              { probability: v },
+                              { probability: stage.probability },
+                            )
+                            patchLocal(stage.id, { probability: v })
+                          }
+                        }}
+                        onToggleOutcome={(kind) => toggleOutcome(stage, kind)}
+                        onDelete={() => removeStage(stage)}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
               )}
             </div>
           </>
@@ -488,5 +434,141 @@ export function ManageStagesDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+interface SortableStageRowProps {
+  stage: StageWithCount
+  dragDisabled: boolean
+  canDelete: boolean
+  deleteHint: string
+  onColor: (value: string) => void
+  onName: (value: string) => void
+  onProbability: (value: number | null) => void
+  onToggleOutcome: (kind: 'won' | 'lost') => void
+  onDelete: () => void
+}
+
+function SortableStageRow({
+  stage,
+  dragDisabled,
+  canDelete,
+  deleteHint,
+  onColor,
+  onName,
+  onProbability,
+  onToggleOutcome,
+  onDelete,
+}: SortableStageRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: stage.id, disabled: dragDisabled })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="grid grid-cols-[auto_1fr_5rem_auto_3rem_auto] items-center gap-2 rounded-lg border bg-card px-2 py-1.5"
+    >
+      <button
+        type="button"
+        aria-label={`Reorder ${stage.name}`}
+        disabled={dragDisabled}
+        {...attributes}
+        {...listeners}
+        className={cn(
+          'flex size-6 items-center justify-center rounded text-muted-foreground transition-colors',
+          dragDisabled
+            ? 'cursor-not-allowed opacity-30'
+            : 'cursor-grab hover:text-foreground active:cursor-grabbing',
+        )}
+      >
+        <GripVertical className="size-4" />
+      </button>
+
+      <div className="flex min-w-0 items-center gap-2">
+        <input
+          type="color"
+          value={stage.color}
+          onChange={(e) => onColor(e.target.value)}
+          className="size-6 shrink-0 cursor-pointer rounded border bg-transparent"
+          aria-label="Stage colour"
+        />
+        <Input
+          defaultValue={stage.name}
+          key={`name-${stage.id}-${stage.name}`}
+          onBlur={(e) => onName(e.target.value.trim())}
+          className="h-8"
+        />
+      </div>
+
+      <Input
+        type="number"
+        min={0}
+        max={100}
+        defaultValue={stage.probability ?? ''}
+        key={`prob-${stage.id}-${stage.probability}`}
+        onBlur={(e) => {
+          const raw = e.target.value.trim()
+          onProbability(raw === '' ? null : Number(raw))
+        }}
+        className="no-spinner h-8"
+      />
+
+      <div className="flex gap-1">
+        <Button
+          type="button"
+          size="sm"
+          variant={stage.isWon ? 'default' : 'outline'}
+          onClick={() => onToggleOutcome('won')}
+          className={cn(
+            'h-7 px-2 text-xs',
+            stage.isWon && 'bg-emerald-600 hover:bg-emerald-700',
+          )}
+        >
+          Won
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={stage.isLost ? 'default' : 'outline'}
+          onClick={() => onToggleOutcome('lost')}
+          className={cn(
+            'h-7 px-2 text-xs',
+            stage.isLost && 'bg-rose-600 hover:bg-rose-700',
+          )}
+        >
+          Lost
+        </Button>
+      </div>
+
+      <span className="text-center text-xs tabular-nums text-muted-foreground">
+        {stage.dealCount}
+      </span>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        disabled={!canDelete}
+        onClick={onDelete}
+        aria-label="Delete stage"
+        title={deleteHint}
+        className="text-destructive hover:text-destructive"
+      >
+        <Trash2 className="size-3.5" />
+      </Button>
+    </div>
   )
 }

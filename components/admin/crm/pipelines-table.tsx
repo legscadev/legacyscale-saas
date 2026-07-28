@@ -9,7 +9,7 @@
 // there's one story for reorder in the CRM. Reorders apply
 // optimistically and reconcile with router.refresh() on success.
 
-import { useMemo, useState, useTransition } from 'react'
+import { useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -100,6 +100,10 @@ interface PipelinesTableProps {
   boardBasePath: string
 }
 
+function signaturePipelines(rows: PipelineListRow[]): string {
+  return rows.map((r) => `${r.id}:${r.name}:${r.orderIndex}:${r.stageCount}`).join('|')
+}
+
 const RELATIVE = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 function formatUpdated(date: Date): string {
   const diff = Date.now() - date.getTime()
@@ -122,6 +126,15 @@ export function PipelinesTable({
 }: PipelinesTableProps) {
   const router = useRouter()
   const [pipelines, setPipelines] = useState(initialPipelines)
+  // Re-seed local state whenever the server payload changes (router
+  // .refresh() after create/duplicate/reorder). Signature-diff so we
+  // don't stomp mid-drag optimistic edits with an identical payload.
+  const lastSignature = useRef(signaturePipelines(initialPipelines))
+  const incomingSignature = signaturePipelines(initialPipelines)
+  if (incomingSignature !== lastSignature.current) {
+    lastSignature.current = incomingSignature
+    setPipelines(initialPipelines)
+  }
   const [query, setQuery] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
 
