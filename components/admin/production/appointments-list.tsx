@@ -420,6 +420,7 @@ function AppointmentEditor({
             <Input
               type="number"
               step="0.01"
+              className="no-spinner"
               value={form.revenueCollected ?? ''}
               onChange={(e) => update('revenueCollected', e.target.value === '' ? null : Number(e.target.value))}
             />
@@ -429,6 +430,7 @@ function AppointmentEditor({
             <Input
               type="number"
               step="0.01"
+              className="no-spinner"
               value={form.immediateAmount ?? ''}
               onChange={(e) => update('immediateAmount', e.target.value === '' ? null : Number(e.target.value))}
             />
@@ -438,6 +440,7 @@ function AppointmentEditor({
             <Input
               type="number"
               step="0.01"
+              className="no-spinner"
               value={form.monthlyPayment ?? ''}
               onChange={(e) => update('monthlyPayment', e.target.value === '' ? null : Number(e.target.value))}
             />

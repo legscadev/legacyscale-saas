@@ -201,3 +201,15 @@ h1, h2, h3 {
   background-color: hsl(var(--muted));
   border-radius: 4px;
 }
+
+/* Suppress the built-in spinner buttons on <input type="number">.
+   Opt-in — apply on inputs where the up/down arrows add visual noise
+   without utility (e.g. the production-sheets grid). */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+}
