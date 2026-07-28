@@ -14,12 +14,13 @@ import {
   LayoutGrid,
   List,
   Plus,
+  Search,
   Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { PageHeader } from '@/components/shared/page-header'
 import { StatStrip } from '@/components/shared/stat-strip'
+import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -121,6 +122,10 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   // Which saved view (if any) is the current filter mirroring.
   // Null = the "All" tab. Applying a view sets both this and `filter`.
   const [activeViewId, setActiveViewId] = useState<string | null>(null)
+
+  // Quick search — applies to both board + list views. Case-insensitive
+  // substring on deal name / contact / company.
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Multi-select — used by both the board (Phase 3) and the list view.
   // Shell owns the state so switching views doesn't drop selection.
@@ -244,142 +249,154 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Opportunities"
-        description={
-          currentPipeline
-            ? `${currentPipeline.name} · ${openDeals.length} open ${
-                openDeals.length === 1 ? 'deal' : 'deals'
-              }`
-            : 'Sales pipeline'
-        }
-        actions={
-          <div className="flex items-center gap-2">
-            {pipelines.length > 1 ? (
-              <select
-                value={currentPipelineId ?? ''}
-                onChange={handleSwitchPipeline}
-                aria-label="Switch pipeline"
-                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                {pipelines.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+    <div className="space-y-3">
+      {/* Compact page header — matches HighLevel: pipeline switcher +
+          count badge on the left, action rail on the right. No big
+          "Opportunities" title (redundant with the sub-tabs below). */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <select
+            value={currentPipelineId ?? ''}
+            onChange={handleSwitchPipeline}
+            aria-label="Switch pipeline"
+            disabled={pipelines.length === 0}
+            className="h-9 rounded-md border border-input bg-transparent px-3 text-base font-semibold shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            {pipelines.length === 0 ? (
+              <option value="">Sales Pipeline</option>
             ) : null}
+            {pipelines.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+            {openDeals.length}{' '}
+            {openDeals.length === 1 ? 'opportunity' : 'opportunities'}
+          </span>
+        </div>
 
-            {/* Filter — opens the advanced drawer. Badge reflects
-                active facets. Visible in both board and list modes. */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setFilterOpen(true)}
+        <div className="flex items-center gap-2">
+          {/* View toggle — board vs list. */}
+          <div
+            role="group"
+            aria-label="View mode"
+            className="inline-flex h-9 items-center rounded-md border border-input bg-transparent p-0.5"
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode('board')}
+              aria-pressed={viewMode === 'board'}
               className={cn(
-                activeFilterCount > 0 && 'border-primary/50 text-primary',
+                'inline-flex size-8 items-center justify-center rounded transition-colors',
+                viewMode === 'board'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <Filter className="size-4" />
-              Filters
-              {activeFilterCount > 0 ? (
-                <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
-                  {activeFilterCount}
-                </span>
-              ) : null}
-            </Button>
-
-            {/* Sort — only meaningful in list view (Kanban is
-                manually ordered via drag). Hide in board mode so
-                the toolbar doesn't dangle a no-op control. */}
-            {viewMode === 'list' ? (
-              <OpportunitiesSortMenu
-                sortBy={sortBy}
-                sortOrder={sortOrder}
-                onChange={({ sortBy: nb, sortOrder: no }) => {
-                  setSortBy(nb)
-                  setSortOrder(no)
-                }}
-              />
-            ) : null}
-
-            {/* View toggle — board vs list. Segmented pair sits on its
-                own rail so the Pipelines dropdown + New opportunity
-                buttons keep their existing prominence. */}
-            <div
-              role="group"
-              aria-label="View mode"
-              className="inline-flex h-9 items-center rounded-md border border-input bg-transparent p-0.5"
+              <LayoutGrid className="size-4" />
+              <span className="sr-only">Board view</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
+              className={cn(
+                'inline-flex size-8 items-center justify-center rounded transition-colors',
+                viewMode === 'list'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
             >
-              <button
-                type="button"
-                onClick={() => setViewMode('board')}
-                aria-pressed={viewMode === 'board'}
-                className={cn(
-                  'inline-flex size-8 items-center justify-center rounded transition-colors',
-                  viewMode === 'board'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <LayoutGrid className="size-4" />
-                <span className="sr-only">Board view</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                aria-pressed={viewMode === 'list'}
-                className={cn(
-                  'inline-flex size-8 items-center justify-center rounded transition-colors',
-                  viewMode === 'list'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <List className="size-4" />
-                <span className="sr-only">List view</span>
-              </button>
-            </div>
-
-            {/* Pipelines management moved to the "Pipelines" sub-tab
-                so this action rail stays lean — Filters / view /
-                Import / New. */}
-
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!currentPipelineId}
-              onClick={() => setImportOpen(true)}
-            >
-              <Upload className="size-4" />
-              Import
-            </Button>
-
-            <Button
-              onClick={() => openCreate()}
-              disabled={!currentPipelineId}
-              size="sm"
-            >
-              <Plus className="size-4" />
-              New opportunity
-            </Button>
+              <List className="size-4" />
+              <span className="sr-only">List view</span>
+            </button>
           </div>
-        }
-      />
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!currentPipelineId}
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="size-4" />
+            Import
+          </Button>
+
+          <Button
+            onClick={() => openCreate()}
+            disabled={!currentPipelineId}
+            size="sm"
+          >
+            <Plus className="size-4" />
+            New opportunity
+          </Button>
+        </div>
+      </div>
 
       <OpportunitiesTabs basePath={basePath} />
 
-      <OpportunitiesViewTabs
-        views={views}
-        activeViewId={activeViewId}
-        currentFilter={filter}
-        onSelect={(id, f) => {
-          setActiveViewId(id)
-          setFilter(f)
-        }}
-        onChanged={() => router.refresh()}
-      />
+      {/* Saved-view tab strip + Search — sits inside the toolbar rail
+          on the right, mirroring HL's layout. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <OpportunitiesViewTabs
+            views={views}
+            activeViewId={activeViewId}
+            currentFilter={filter}
+            onSelect={(id, f) => {
+              setActiveViewId(id)
+              setFilter(f)
+            }}
+            onChanged={() => router.refresh()}
+          />
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Search
+            aria-hidden
+            className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search opportunities"
+            className="pl-9"
+            aria-label="Search opportunities"
+          />
+        </div>
+      </div>
+
+      {/* Filter + Sort rail — left-aligned so it reads as a second
+          action line under the tabs. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFilterOpen(true)}
+          className={cn(
+            activeFilterCount > 0 && 'border-primary/50 text-primary',
+          )}
+        >
+          <Filter className="size-4" />
+          Advanced filters
+          {activeFilterCount > 0 ? (
+            <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
+              {activeFilterCount}
+            </span>
+          ) : null}
+        </Button>
+        {viewMode === 'list' ? (
+          <OpportunitiesSortMenu
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onChange={({ sortBy: nb, sortOrder: no }) => {
+              setSortBy(nb)
+              setSortOrder(no)
+            }}
+          />
+        ) : null}
+      </div>
 
       <OpportunitiesFilterChips
         filter={filter}
@@ -424,7 +441,16 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
       )}
 
       {(() => {
-        const filtered = applyOpportunityFilter(deals, filter)
+        const q = searchQuery.trim().toLowerCase()
+        const searchFiltered = q
+          ? deals.filter(
+              (d) =>
+                d.name.toLowerCase().includes(q) ||
+                (d.contactName?.toLowerCase().includes(q) ?? false) ||
+                (d.companyName?.toLowerCase().includes(q) ?? false),
+            )
+          : deals
+        const filtered = applyOpportunityFilter(searchFiltered, filter)
         return viewMode === 'board' ? (
           // Board is always visible in this mode so the stages read as
           // a pipeline even before the first deal lands.
