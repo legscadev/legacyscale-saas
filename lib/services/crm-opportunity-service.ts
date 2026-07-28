@@ -80,6 +80,9 @@ export interface OpportunityListItem {
   companyName: string | null
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
+  /** True when the deal has non-empty notes — powers the card's
+   *  note-indicator icon without shipping the full notes text. */
+  hasNotes: boolean
 }
 
 const CLOSER_SELECT = {
@@ -98,6 +101,7 @@ function toListItem(row: {
   companyName: string | null
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
+  notes: string | null
 }): OpportunityListItem {
   return {
     id: row.id,
@@ -113,6 +117,7 @@ function toListItem(row: {
     companyName: row.companyName,
     expectedCloseDate: row.expectedCloseDate,
     assignedCloser: row.assignedCloser,
+    hasNotes: row.notes !== null && row.notes.trim().length > 0,
   }
 }
 
@@ -162,6 +167,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        notes: true,
       },
     })
     return rows.map(toListItem)
@@ -263,6 +269,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        notes: true,
       },
     })
     return toListItem(created)
@@ -305,6 +312,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        notes: true,
       },
     })
     return toListItem(updated)
@@ -371,6 +379,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        notes: true,
       },
     })
     return toListItem(updated)

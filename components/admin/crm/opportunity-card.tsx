@@ -5,7 +5,12 @@
 // only has to spread ref + listeners onto the outer div.
 
 import { forwardRef } from 'react'
-import { Building2, CalendarDays, User as UserIcon } from 'lucide-react'
+import {
+  Building2,
+  CalendarDays,
+  StickyNote,
+  User as UserIcon,
+} from 'lucide-react'
 
 import { AvatarGroup } from '@/components/shared/avatar-group'
 import { fmtCalendarDateShort } from '@/lib/format'
@@ -88,6 +93,15 @@ export const OpportunityCard = forwardRef<HTMLDivElement, OpportunityCardProps>(
             ) : null}
             {opportunity.probability !== null ? (
               <span className="tabular-nums">{opportunity.probability}%</span>
+            ) : null}
+            {opportunity.hasNotes ? (
+              <span
+                aria-label="Has notes"
+                title="Has notes"
+                className="inline-flex size-4 items-center justify-center rounded bg-muted text-muted-foreground/80"
+              >
+                <StickyNote className="size-3" aria-hidden />
+              </span>
             ) : null}
           </div>
           {opportunity.assignedCloser ? (
