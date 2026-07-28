@@ -550,6 +550,8 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
 
       <EditOpportunityDialog
         opportunityId={editId}
+        pipelines={pipelines}
+        currentPipelineId={currentPipelineId}
         stages={stages}
         members={members}
         onOpenChange={(open) => !open && setEditId(null)}
