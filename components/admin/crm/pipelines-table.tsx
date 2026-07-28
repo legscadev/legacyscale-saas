@@ -54,7 +54,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -490,11 +489,6 @@ function SortableRow({
           {pipeline.name}
           <ExternalLink className="size-3 opacity-0 transition-opacity group-hover:opacity-70" />
         </Link>
-        {pipeline.isDefault ? (
-          <Badge variant="secondary" className="ml-2 text-[10px] uppercase">
-            Default
-          </Badge>
-        ) : null}
       </TableCell>
       <TableCell className="w-32 text-right tabular-nums">
         {pipeline.stageCount}

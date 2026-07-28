@@ -129,7 +129,6 @@ export async function seedDefaultPipeline(
       data: {
         name: DEFAULT_PIPELINE.name,
         slug: DEFAULT_PIPELINE.slug,
-        isDefault: true,
         orderIndex: 0,
         companyId,
         stages: {
@@ -163,7 +162,6 @@ export interface PipelineSummary {
   id: string
   name: string
   slug: string
-  isDefault: boolean
   orderIndex: number
 }
 
@@ -190,15 +188,15 @@ export interface PipelineListRow extends PipelineSummary {
 }
 
 class CrmPipelineService {
-  /** Every pipeline for the tenant, default first. */
+  /** Every pipeline for the tenant, ordered by user-defined
+   *  orderIndex. */
   async listPipelines(): Promise<PipelineSummary[]> {
     const rows = await prisma.crmPipeline.findMany({
-      orderBy: [{ isDefault: 'desc' }, { orderIndex: 'asc' }],
+      orderBy: { orderIndex: 'asc' },
       select: {
         id: true,
         name: true,
         slug: true,
-        isDefault: true,
         orderIndex: true,
       },
     })
@@ -209,12 +207,11 @@ class CrmPipelineService {
    *  powers the /pipelines management table. */
   async listPipelinesWithMeta(): Promise<PipelineListRow[]> {
     const rows = await prisma.crmPipeline.findMany({
-      orderBy: [{ isDefault: 'desc' }, { orderIndex: 'asc' }],
+      orderBy: { orderIndex: 'asc' },
       select: {
         id: true,
         name: true,
         slug: true,
-        isDefault: true,
         orderIndex: true,
         updatedAt: true,
         _count: {
@@ -229,7 +226,6 @@ class CrmPipelineService {
       id: r.id,
       name: r.name,
       slug: r.slug,
-      isDefault: r.isDefault,
       orderIndex: r.orderIndex,
       updatedAt: r.updatedAt,
       stageCount: r._count.stages,
@@ -252,8 +248,8 @@ class CrmPipelineService {
     )
   }
 
-  /** Resolve the pipeline to show: an explicit id, else the default,
-   *  else the first one. Returns null when the tenant has none. */
+  /** Resolve the pipeline to show: an explicit id, else the one with
+   *  the lowest orderIndex. Returns null when the tenant has none. */
   async resolvePipelineId(preferredId?: string): Promise<string | null> {
     if (preferredId) {
       const found = await prisma.crmPipeline.findFirst({
@@ -263,7 +259,7 @@ class CrmPipelineService {
       if (found) return found.id
     }
     const fallback = await prisma.crmPipeline.findFirst({
-      orderBy: [{ isDefault: 'desc' }, { orderIndex: 'asc' }],
+      orderBy: { orderIndex: 'asc' },
       select: { id: true },
     })
     return fallback?.id ?? null
@@ -321,7 +317,6 @@ class CrmPipelineService {
       data: {
         name: input.name.trim(),
         slug,
-        isDefault: false,
         orderIndex: (lastOrder?.orderIndex ?? -1) + 1,
         companyId,
         stages: {
@@ -344,7 +339,6 @@ class CrmPipelineService {
         id: true,
         name: true,
         slug: true,
-        isDefault: true,
         orderIndex: true,
       },
     })
@@ -400,7 +394,6 @@ class CrmPipelineService {
       data: {
         name: cleanName,
         slug,
-        isDefault: false,
         orderIndex: (lastOrder?.orderIndex ?? -1) + 1,
         companyId,
         stages: {
@@ -411,7 +404,6 @@ class CrmPipelineService {
         id: true,
         name: true,
         slug: true,
-        isDefault: true,
         orderIndex: true,
       },
     })
@@ -427,7 +419,6 @@ class CrmPipelineService {
         id: true,
         name: true,
         slug: true,
-        isDefault: true,
         orderIndex: true,
       },
     })
@@ -437,14 +428,13 @@ class CrmPipelineService {
   /**
    * Delete a pipeline. Blocked when it's the tenant's last one or
    * still holds (non-deleted) deals — the FK cascade would wipe those
-   * deals, so we force the operator to move/close them first. If the
-   * deleted pipeline was the default, the next one is promoted.
+   * deals, so we force the operator to move/close them first.
    */
   async deletePipeline(id: string): Promise<void> {
     const [pipeline, total] = await Promise.all([
       prisma.crmPipeline.findFirst({
         where: { id },
-        select: { id: true, isDefault: true },
+        select: { id: true },
       }),
       prisma.crmPipeline.count(),
     ])
@@ -457,19 +447,6 @@ class CrmPipelineService {
     if (dealCount > 0) throw new PipelineInUseError()
 
     await prisma.crmPipeline.delete({ where: { id } })
-
-    if (pipeline.isDefault) {
-      const next = await prisma.crmPipeline.findFirst({
-        orderBy: { orderIndex: 'asc' },
-        select: { id: true },
-      })
-      if (next) {
-        await prisma.crmPipeline.update({
-          where: { id: next.id },
-          data: { isDefault: true },
-        })
-      }
-    }
   }
 
   // ============================================
