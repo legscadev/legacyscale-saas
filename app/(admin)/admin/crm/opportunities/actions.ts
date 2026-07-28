@@ -39,7 +39,9 @@ import {
 import {
   addStageSchema,
   bulkActionHistoryFilterSchema,
+  bulkAssignCloserSchema,
   bulkDeleteOpportunitiesSchema,
+  bulkMoveOpportunitiesSchema,
   createOpportunitySchema,
   createPipelineSchema,
   moveOpportunitySchema,
@@ -519,6 +521,54 @@ export async function bulkDeleteOpportunitiesAction(
     return { ok: true, data: log }
   } catch (err) {
     return toMutationErr(err, 'Could not delete deals')
+  }
+}
+
+/** Bulk move-to-stage. Same shape + logging as bulkDelete. */
+export async function bulkMoveOpportunitiesToStageAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<BulkActionLogRow>> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = bulkMoveOpportunitiesSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const log = await crmBulkActionService.bulkMoveOpportunitiesToStage({
+      opportunityIds: parsed.data.opportunityIds,
+      stageId: parsed.data.stageId,
+      actorId: user.id,
+    })
+    revalidateAll()
+    revalidatePath('/admin/crm/opportunities/bulk-actions')
+    revalidatePath('/team/crm/opportunities/bulk-actions')
+    return { ok: true, data: log }
+  } catch (err) {
+    return toMutationErr(err, 'Could not move deals')
+  }
+}
+
+/** Bulk assign-closer. Pass closerId=null to unassign. */
+export async function bulkAssignCloserAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<BulkActionLogRow>> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = bulkAssignCloserSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const log = await crmBulkActionService.bulkAssignCloser({
+      opportunityIds: parsed.data.opportunityIds,
+      closerId: parsed.data.closerId,
+      actorId: user.id,
+    })
+    revalidateAll()
+    revalidatePath('/admin/crm/opportunities/bulk-actions')
+    revalidatePath('/team/crm/opportunities/bulk-actions')
+    return { ok: true, data: log }
+  } catch (err) {
+    return toMutationErr(err, 'Could not assign closer')
   }
 }
 

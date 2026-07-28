@@ -171,6 +171,24 @@ export const bulkDeleteOpportunitiesSchema = z.object({
     .max(500, 'You can delete at most 500 deals at once'),
 })
 
+/** Bulk move-to-stage — same 500 cap as delete. */
+export const bulkMoveOpportunitiesSchema = z.object({
+  opportunityIds: z
+    .array(z.string().uuid())
+    .min(1, 'Select at least one deal')
+    .max(500, 'You can move at most 500 deals at once'),
+  stageId: z.string().uuid('Pick a destination stage'),
+})
+
+/** Bulk assign-closer — closerId nullable for the "unassign all" case. */
+export const bulkAssignCloserSchema = z.object({
+  opportunityIds: z
+    .array(z.string().uuid())
+    .min(1, 'Select at least one deal')
+    .max(500, 'You can assign at most 500 deals at once'),
+  closerId: z.string().uuid().nullable(),
+})
+
 export const bulkActionHistoryFilterSchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),

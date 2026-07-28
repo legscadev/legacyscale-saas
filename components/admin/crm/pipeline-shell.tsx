@@ -54,7 +54,9 @@ import { Label } from '@/components/ui/label'
 import type { OpportunityListItem } from '@/lib/services/crm-opportunity-service'
 
 import {
+  bulkAssignCloserAction,
   bulkDeleteOpportunitiesAction,
+  bulkMoveOpportunitiesToStageAction,
   deletePipelineAction,
   renamePipelineAction,
   type PipelineWorkspacePayload,
@@ -149,6 +151,22 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
     setSelectedIds(next ? new Set(deals.map((d) => d.id)) : new Set())
   }
 
+  /** Shared toast helper — every bulk action turns its log row into
+   *  the same success / partial / failure message shape. */
+  function surfaceBulkResult(
+    verb: string,
+    log: { successCount: number; failureCount: number; targetCount: number },
+  ) {
+    const { successCount, failureCount, targetCount } = log
+    if (failureCount === 0) {
+      toast.success(`${verb} ${successCount} ${successCount === 1 ? 'deal' : 'deals'}`)
+    } else if (successCount === 0) {
+      toast.error(`Bulk action failed for all ${targetCount} deals`)
+    } else {
+      toast.warning(`${verb} ${successCount} deals — ${failureCount} failed`)
+    }
+  }
+
   function runBulkDelete() {
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return
@@ -158,20 +176,46 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         toast.error(res.error ?? 'Could not delete deals')
         return
       }
-      const { successCount, failureCount, targetCount } = res.data
-      if (failureCount === 0) {
-        toast.success(`Deleted ${successCount} deals`)
-      } else if (successCount === 0) {
-        toast.error(`Delete failed for all ${targetCount} deals`)
-      } else {
-        toast.warning(
-          `Deleted ${successCount} deals — ${failureCount} failed`,
-        )
-      }
-      // Local optimistic pull so the removed cards vanish instantly.
+      surfaceBulkResult('Deleted', res.data)
       setDeals((prev) => prev.filter((d) => !selectedIds.has(d.id)))
       setSelectedIds(new Set())
       setBulkConfirmOpen(false)
+      router.refresh()
+    })
+  }
+
+  function runBulkMove(stageId: string) {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    startBulkOp(async () => {
+      const res = await bulkMoveOpportunitiesToStageAction({
+        opportunityIds: ids,
+        stageId,
+      })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not move deals')
+        return
+      }
+      surfaceBulkResult('Moved', res.data)
+      setSelectedIds(new Set())
+      router.refresh()
+    })
+  }
+
+  function runBulkAssign(closerId: string | null) {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    startBulkOp(async () => {
+      const res = await bulkAssignCloserAction({
+        opportunityIds: ids,
+        closerId,
+      })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not assign closer')
+        return
+      }
+      surfaceBulkResult(closerId ? 'Assigned' : 'Unassigned', res.data)
+      setSelectedIds(new Set())
       router.refresh()
     })
   }
@@ -431,7 +475,11 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
 
       <BulkSelectToolbar
         selectedCount={selectedIds.size}
+        stages={stages}
+        members={members}
         onClear={() => setSelectedIds(new Set())}
+        onMoveToStage={runBulkMove}
+        onAssignCloser={runBulkAssign}
         onDelete={() => setBulkConfirmOpen(true)}
         disabled={bulkPending}
       />
