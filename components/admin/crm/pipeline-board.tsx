@@ -44,7 +44,7 @@ import { cn } from '@/lib/utils'
 import type { OpportunityListItem } from '@/lib/services/crm-opportunity-service'
 import type { PipelineStage } from '@/lib/services/crm-pipeline-service'
 
-import { moveOpportunityAction } from '@/app/(admin)/admin/crm/pipeline/actions'
+import { moveOpportunityAction } from '@/app/(admin)/admin/crm/opportunities/actions'
 
 import { OpportunityCard, formatDealValue } from './opportunity-card'
 

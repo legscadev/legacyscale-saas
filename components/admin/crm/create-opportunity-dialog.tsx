@@ -22,10 +22,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
-import { createOpportunityAction } from '@/app/(admin)/admin/crm/pipeline/actions'
+import { createOpportunityAction } from '@/app/(admin)/admin/crm/opportunities/actions'
 import type { OpportunityListItem } from '@/lib/services/crm-opportunity-service'
 import type { PipelineStage } from '@/lib/services/crm-pipeline-service'
-import type { CrmTeamMember } from '@/app/(admin)/admin/crm/pipeline/actions'
+import type { CrmTeamMember } from '@/app/(admin)/admin/crm/opportunities/actions'
 
 interface CreateOpportunityDialogProps {
   open: boolean

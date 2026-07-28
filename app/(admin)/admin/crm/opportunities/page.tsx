@@ -5,10 +5,10 @@ import { PipelineShell } from '@/components/admin/crm/pipeline-shell'
 
 import { fetchPipelineWorkspaceAction } from './actions'
 
-// Admin surface for the CRM pipeline. TEAM users have their own view
-// at /team/crm/pipeline — bounce them there with query params intact
-// so inbound /admin/crm links still land somewhere useful. ADMIN sees
-// every deal in the tenant.
+// Admin surface for the CRM opportunities board. TEAM users have their
+// own view at /team/crm/opportunities — bounce them there with query
+// params intact so inbound /admin/crm links still land somewhere useful.
+// ADMIN sees every deal in the tenant.
 
 export const dynamic = 'force-dynamic'
 
@@ -29,17 +29,22 @@ export default async function AdminPipelinePage({
       else qs.set(key, value)
     }
     const suffix = qs.toString()
-    redirect(suffix ? `/team/crm/pipeline?${suffix}` : '/team/crm/pipeline')
+    redirect(
+      suffix ? `/team/crm/opportunities?${suffix}` : '/team/crm/opportunities'
+    )
   }
 
   const pipelineId = Array.isArray(raw.pipeline) ? raw.pipeline[0] : raw.pipeline
   const result = await fetchPipelineWorkspaceAction({ pipelineId })
   if (!result.ok) {
-    if (result.fieldErrors) redirect('/admin/crm/pipeline')
+    if (result.fieldErrors) redirect('/admin/crm/opportunities')
     throw new Error(result.error ?? 'Could not load pipeline')
   }
 
   return (
-    <PipelineShell initialData={result.data} basePath="/admin/crm/pipeline" />
+    <PipelineShell
+      initialData={result.data}
+      basePath="/admin/crm/opportunities"
+    />
   )
 }

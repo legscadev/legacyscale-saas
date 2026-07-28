@@ -94,8 +94,8 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
 /** Revalidate both surfaces so an admin edit shows on the team board
  *  and vice-versa. */
 function revalidateAll(): void {
-  revalidatePath('/admin/crm/pipeline')
-  revalidatePath('/team/crm/pipeline')
+  revalidatePath('/admin/crm/opportunities')
+  revalidatePath('/team/crm/opportunities')
 }
 
 // ============================================

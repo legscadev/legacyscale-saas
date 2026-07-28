@@ -81,7 +81,7 @@ export const adminNav: NavSection[] = [
     label: 'Sales',
     items: [
       { label: 'Contacts', href: '/admin/crm/leads', icon: Inbox, moduleKey: 'crm-leads' },
-      { label: 'Opportunities', href: '/admin/crm/pipeline', icon: KanbanSquare, moduleKey: 'crm-pipeline' },
+      { label: 'Opportunities', href: '/admin/crm/opportunities', icon: KanbanSquare, moduleKey: 'crm-pipeline' },
     ],
   },
   {
@@ -162,7 +162,7 @@ export const memberNav: NavSection[] = [
     items: [
       { label: 'Team', href: '/team', icon: Users, visibleTo: ['TEAM'], moduleKey: 'team' },
       { label: 'Contacts', href: '/team/crm/leads', icon: Inbox, visibleTo: ['TEAM'], moduleKey: 'crm-leads' },
-      { label: 'Opportunities', href: '/team/crm/pipeline', icon: KanbanSquare, visibleTo: ['TEAM'], moduleKey: 'crm-pipeline' },
+      { label: 'Opportunities', href: '/team/crm/opportunities', icon: KanbanSquare, visibleTo: ['TEAM'], moduleKey: 'crm-pipeline' },
       { label: 'Task Tracker', href: '/team/tasks', icon: CheckSquare, visibleTo: ['TEAM'], moduleKey: 'tasks' },
       { label: 'Policies', href: '/team/policies', icon: BookText, visibleTo: ['TEAM'], moduleKey: 'policies' },
       { label: 'Trainings', href: '/team/trainings', icon: GraduationCap, visibleTo: ['TEAM'], moduleKey: 'trainings' },

@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
-import { createPipelineAction } from '@/app/(admin)/admin/crm/pipeline/actions'
+import { createPipelineAction } from '@/app/(admin)/admin/crm/opportunities/actions'
 import type { PipelineSummary } from '@/lib/services/crm-pipeline-service'
 
 // Kept in sync with DEFAULT_STAGE_NAMES in crm-pipeline-service.ts.

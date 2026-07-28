@@ -30,8 +30,8 @@ import {
   fetchOpportunityAction,
   moveOpportunityAction,
   updateOpportunityAction,
-} from '@/app/(admin)/admin/crm/pipeline/actions'
-import type { CrmTeamMember } from '@/app/(admin)/admin/crm/pipeline/actions'
+} from '@/app/(admin)/admin/crm/opportunities/actions'
+import type { CrmTeamMember } from '@/app/(admin)/admin/crm/opportunities/actions'
 import type { PipelineStage } from '@/lib/services/crm-pipeline-service'
 
 const SELECT_CLASS =

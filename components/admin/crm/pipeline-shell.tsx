@@ -47,7 +47,7 @@ import {
   deletePipelineAction,
   renamePipelineAction,
   type PipelineWorkspacePayload,
-} from '@/app/(admin)/admin/crm/pipeline/actions'
+} from '@/app/(admin)/admin/crm/opportunities/actions'
 
 import { CreateOpportunityDialog } from './create-opportunity-dialog'
 import { CreatePipelineDialog } from './create-pipeline-dialog'
@@ -58,8 +58,8 @@ import { formatDealValue } from './opportunity-card'
 
 interface PipelineShellProps {
   initialData: PipelineWorkspacePayload
-  /** URL base for the pipeline switcher — '/admin/crm/pipeline' or
-   *  '/team/crm/pipeline'. Keeps the two surfaces on their own URLs. */
+  /** URL base for the board — '/admin/crm/opportunities' or
+   *  '/team/crm/opportunities'. Keeps the two surfaces on separate URLs. */
   basePath: string
 }
 

@@ -35,7 +35,7 @@ import {
   reorderStagesAction,
   updateStageAction,
   type StageWithCount,
-} from '@/app/(admin)/admin/crm/pipeline/actions'
+} from '@/app/(admin)/admin/crm/opportunities/actions'
 
 interface ManageStagesDialogProps {
   open: boolean

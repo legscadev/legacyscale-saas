@@ -160,7 +160,7 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
     key: 'crm-pipeline',
     section: 'Sales',
     label: 'Opportunities',
-    href: '/admin/crm/pipeline',
+    href: '/admin/crm/opportunities',
     icon: KanbanSquare,
     description:
       'Kanban sales board — drag opportunities through stages to close.',
