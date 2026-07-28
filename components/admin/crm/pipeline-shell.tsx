@@ -8,7 +8,16 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { KanbanSquare, ListChecks, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
+import {
+  KanbanSquare,
+  LayoutGrid,
+  List,
+  ListChecks,
+  Pencil,
+  Plus,
+  Settings2,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/page-header'
@@ -49,12 +58,15 @@ import {
   type PipelineWorkspacePayload,
 } from '@/app/(admin)/admin/crm/opportunities/actions'
 
+import { BulkSelectToolbar } from './bulk-select-toolbar'
 import { CreateOpportunityDialog } from './create-opportunity-dialog'
 import { CreatePipelineDialog } from './create-pipeline-dialog'
 import { EditOpportunityDialog } from './edit-opportunity-dialog'
 import { ManageStagesDialog } from './manage-stages-dialog'
+import { OpportunitiesListView } from './opportunities-list-view'
 import { OpportunitiesTabs } from './opportunities-tabs'
 import { PipelineBoard } from './pipeline-board'
+import { cn } from '@/lib/utils'
 import { formatDealValue } from './opportunity-card'
 
 interface PipelineShellProps {
@@ -93,6 +105,14 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   const [createStageId, setCreateStageId] = useState<string | undefined>()
   const [editId, setEditId] = useState<string | null>(null)
 
+  // View toggle — 'board' (Kanban) vs 'list' (compact table). Local
+  // state for now; a future revision can persist the choice per user.
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
+
+  // Multi-select — used by both the board (Phase 3) and the list view.
+  // Shell owns the state so switching views doesn't drop selection.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
   // Pipeline management
   const [createPipelineOpen, setCreatePipelineOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
@@ -100,6 +120,19 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [stagesOpen, setStagesOpen] = useState(false)
   const [pipelinePending, startPipelineOp] = useTransition()
+
+  function toggleSelect(id: string, next: boolean) {
+    setSelectedIds((prev) => {
+      const s = new Set(prev)
+      if (next) s.add(id)
+      else s.delete(id)
+      return s
+    })
+  }
+
+  function toggleAll(next: boolean) {
+    setSelectedIds(next ? new Set(deals.map((d) => d.id)) : new Set())
+  }
 
   const currentPipeline = pipelines.find((p) => p.id === currentPipelineId)
 
@@ -190,6 +223,44 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
               </select>
             ) : null}
 
+            {/* View toggle — board vs list. Segmented pair sits on its
+                own rail so the Pipelines dropdown + New deal buttons
+                keep their existing prominence. */}
+            <div
+              role="group"
+              aria-label="View mode"
+              className="inline-flex h-9 items-center rounded-md border border-input bg-transparent p-0.5"
+            >
+              <button
+                type="button"
+                onClick={() => setViewMode('board')}
+                aria-pressed={viewMode === 'board'}
+                className={cn(
+                  'inline-flex size-8 items-center justify-center rounded transition-colors',
+                  viewMode === 'board'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <LayoutGrid className="size-4" />
+                <span className="sr-only">Board view</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
+                className={cn(
+                  'inline-flex size-8 items-center justify-center rounded transition-colors',
+                  viewMode === 'list'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <List className="size-4" />
+                <span className="sr-only">List view</span>
+              </button>
+            </div>
+
             {/* Manage pipelines */}
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -275,14 +346,34 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         </p>
       )}
 
-      {/* The Kanban board is always visible so the stages read as a
-          pipeline even before the first deal lands. */}
-      <PipelineBoard
-        stages={stages}
-        opportunities={deals}
-        onOpen={setEditId}
-        onCreate={openCreate}
-        onChanged={() => router.refresh()}
+      {viewMode === 'board' ? (
+        // Board is always visible in this mode so the stages read as
+        // a pipeline even before the first deal lands.
+        <PipelineBoard
+          stages={stages}
+          opportunities={deals}
+          onOpen={setEditId}
+          onCreate={openCreate}
+          onChanged={() => router.refresh()}
+        />
+      ) : (
+        <OpportunitiesListView
+          stages={stages}
+          opportunities={deals}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleAll={toggleAll}
+          onOpen={setEditId}
+        />
+      )}
+
+      <BulkSelectToolbar
+        selectedCount={selectedIds.size}
+        onClear={() => setSelectedIds(new Set())}
+        onDelete={() => {
+          // Wired up in Phase 3 alongside the real bulk-delete action.
+          toast('Bulk delete arrives with Phase 3 — coming next.')
+        }}
       />
 
       {currentPipelineId ? (
