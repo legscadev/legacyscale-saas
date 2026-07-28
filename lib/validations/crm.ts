@@ -150,6 +150,11 @@ export const reorderPipelinesSchema = z.object({
   pipelineIds: z.array(z.string().uuid()).min(1),
 })
 
+export const duplicatePipelineSchema = z.object({
+  sourcePipelineId: z.string().uuid(),
+  name: z.string().trim().min(1, 'Pipeline name is required').max(100),
+})
+
 // ---- Bulk actions ----
 
 export const crmBulkActionStatusSchema = z.enum([

@@ -51,6 +51,7 @@ import {
   createOpportunitySchema,
   createOpportunityViewSchema,
   createPipelineSchema,
+  duplicatePipelineSchema,
   importOpportunitiesSchema,
   moveOpportunitySchema,
   opportunityFilterSchema,
@@ -390,6 +391,27 @@ export async function deletePipelineAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not delete pipeline')
+  }
+}
+
+/** Clone a pipeline + its stages under a new name. */
+export async function duplicatePipelineAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<PipelineSummary>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = duplicatePipelineSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmPipelineService.duplicatePipeline({
+      sourcePipelineId: parsed.data.sourcePipelineId,
+      name: parsed.data.name,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not duplicate pipeline')
   }
 }
 

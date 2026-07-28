@@ -351,6 +351,73 @@ class CrmPipelineService {
     return created
   }
 
+  /**
+   * Clone a pipeline together with its stages (colours, probability,
+   * won/lost flags — but no deals). Returns the newly created
+   * pipeline. Slug is derived from `name` with the usual per-tenant
+   * uniqueness guard.
+   */
+  async duplicatePipeline(input: {
+    sourcePipelineId: string
+    name: string
+  }): Promise<PipelineSummary> {
+    const companyId = await requireCompanyId()
+    const source = await prisma.crmPipeline.findFirst({
+      where: { id: input.sourcePipelineId },
+      select: {
+        id: true,
+        stages: {
+          orderBy: { orderIndex: 'asc' },
+          select: {
+            name: true,
+            slug: true,
+            color: true,
+            orderIndex: true,
+            probability: true,
+            isWon: true,
+            isLost: true,
+            wipLimit: true,
+          },
+        },
+      },
+    })
+    if (!source) throw new PipelineNotFoundError()
+
+    const cleanName = input.name.trim()
+    const slug = await this.uniqueSlug(
+      companyId,
+      slugify(cleanName) || 'pipeline',
+    )
+    const lastOrder = await prisma.crmPipeline.findFirst({
+      orderBy: { orderIndex: 'desc' },
+      select: { orderIndex: true },
+    })
+
+    // Nested stage create — stage slugs are unique-per-pipeline, so
+    // copying the source slugs verbatim is safe (they live under the
+    // new pipeline id).
+    const created = await prisma.crmPipeline.create({
+      data: {
+        name: cleanName,
+        slug,
+        isDefault: false,
+        orderIndex: (lastOrder?.orderIndex ?? -1) + 1,
+        companyId,
+        stages: {
+          create: source.stages.map((s) => ({ ...s, companyId })),
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isDefault: true,
+        orderIndex: true,
+      },
+    })
+    return created
+  }
+
   async renamePipeline(id: string, name: string): Promise<PipelineSummary> {
     await this.assertPipelineExists(id)
     const row = await prisma.crmPipeline.update({

@@ -29,9 +29,11 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
+  Copy,
   ExternalLink,
   GripVertical,
   KanbanSquare,
+  Link2,
   ListChecks,
   MoreVertical,
   Pencil,
@@ -83,6 +85,7 @@ import { cn } from '@/lib/utils'
 
 import {
   deletePipelineAction,
+  duplicatePipelineAction,
   renamePipelineAction,
   reorderPipelinesAction,
 } from '@/app/(admin)/admin/crm/opportunities/actions'
@@ -214,6 +217,34 @@ export function PipelinesTable({
     })
   }
 
+  function duplicate(pipeline: PipelineListRow) {
+    const proposed = `${pipeline.name} copy`
+    startTransition(async () => {
+      const res = await duplicatePipelineAction({
+        sourcePipelineId: pipeline.id,
+        name: proposed,
+      })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not duplicate pipeline')
+        return
+      }
+      toast.success(`Duplicated as “${res.data.name}”`)
+      router.refresh()
+    })
+  }
+
+  function copyLink(pipeline: PipelineListRow) {
+    // Absolute so the copied link works when pasted into email / chat.
+    const url =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}${boardBasePath}?pipeline=${pipeline.id}`
+        : `${boardBasePath}?pipeline=${pipeline.id}`
+    void navigator.clipboard
+      .writeText(url)
+      .then(() => toast.success('Link copied'))
+      .catch(() => toast.error('Could not copy link'))
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -285,6 +316,8 @@ export function PipelinesTable({
                         setRenameValue(pipeline.name)
                         setRenameFor(pipeline)
                       }}
+                      onDuplicate={() => duplicate(pipeline)}
+                      onCopyLink={() => copyLink(pipeline)}
                       onDelete={() => setDeleteFor(pipeline)}
                     />
                   ))}
@@ -383,6 +416,8 @@ interface SortableRowProps {
   dragDisabled: boolean
   onManageStages: () => void
   onRename: () => void
+  onDuplicate: () => void
+  onCopyLink: () => void
   onDelete: () => void
 }
 
@@ -393,6 +428,8 @@ function SortableRow({
   dragDisabled,
   onManageStages,
   onRename,
+  onDuplicate,
+  onCopyLink,
   onDelete,
 }: SortableRowProps) {
   const {
@@ -462,14 +499,22 @@ function SortableRow({
               </Button>
             }
           />
-          <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={onManageStages}>
-              <ListChecks className="size-4" />
-              Manage stages
+              <Pencil className="size-4" />
+              Edit
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onRename}>
-              <Pencil className="size-4" />
+              <ListChecks className="size-4" />
               Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDuplicate}>
+              <Copy className="size-4" />
+              Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onCopyLink}>
+              <Link2 className="size-4" />
+              Copy link
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
