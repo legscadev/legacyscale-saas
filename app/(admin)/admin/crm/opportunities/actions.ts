@@ -23,6 +23,7 @@ import {
   PipelineNotFoundError,
   StageInUseError,
   StageNotFoundError as PipelineStageNotFoundError,
+  type PipelineListRow,
   type PipelineStage,
   type PipelineSummary,
 } from '@/lib/services/crm-pipeline-service'
@@ -37,6 +38,7 @@ import {
   moveOpportunitySchema,
   opportunityFilterSchema,
   renamePipelineSchema,
+  reorderPipelinesSchema,
   reorderStagesSchema,
   updateOpportunitySchema,
   updateStageSchema,
@@ -361,6 +363,39 @@ export async function deletePipelineAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not delete pipeline')
+  }
+}
+
+/** Powers the /pipelines management table. Returns every pipeline with
+ *  its stage + open-deal counts and last-updated timestamp. */
+export async function fetchPipelinesForManagementAction(): Promise<
+  MutationResult<PipelineListRow[]>
+> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const companyId = await getRequestCompanyId()
+    if (companyId) await ensurePipelineReady(companyId)
+    const data = await crmPipelineService.listPipelinesWithMeta()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load pipelines')
+  }
+}
+
+export async function reorderPipelinesAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = reorderPipelinesSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await crmPipelineService.reorderPipelines(parsed.data.pipelineIds)
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not reorder pipelines')
   }
 }
 

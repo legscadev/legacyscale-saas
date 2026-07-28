@@ -145,6 +145,10 @@ export const renamePipelineSchema = z.object({
   name: z.string().trim().min(1, 'Pipeline name is required').max(100),
 })
 
+export const reorderPipelinesSchema = z.object({
+  pipelineIds: z.array(z.string().uuid()).min(1),
+})
+
 // ---- Stage editor ----
 
 const hexColor = z

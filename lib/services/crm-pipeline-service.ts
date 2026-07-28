@@ -182,6 +182,13 @@ export interface PipelineStage {
   wipLimit: number | null
 }
 
+/** Row shape for the /pipelines management table. */
+export interface PipelineListRow extends PipelineSummary {
+  stageCount: number
+  dealCount: number
+  updatedAt: Date
+}
+
 class CrmPipelineService {
   /** Every pipeline for the tenant, default first. */
   async listPipelines(): Promise<PipelineSummary[]> {
@@ -196,6 +203,53 @@ class CrmPipelineService {
       },
     })
     return rows
+  }
+
+  /** Pipelines + per-pipeline stage and (non-deleted) deal counts —
+   *  powers the /pipelines management table. */
+  async listPipelinesWithMeta(): Promise<PipelineListRow[]> {
+    const rows = await prisma.crmPipeline.findMany({
+      orderBy: [{ isDefault: 'desc' }, { orderIndex: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isDefault: true,
+        orderIndex: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            stages: true,
+            opportunities: { where: { deletedAt: null } },
+          },
+        },
+      },
+    })
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      slug: r.slug,
+      isDefault: r.isDefault,
+      orderIndex: r.orderIndex,
+      updatedAt: r.updatedAt,
+      stageCount: r._count.stages,
+      dealCount: r._count.opportunities,
+    }))
+  }
+
+  /** Rewrite orderIndex for every pipeline in the tenant from the given
+   *  ordered id array (drag-drop reorder in the management table).
+   *  Any id not listed keeps its existing orderIndex. */
+  async reorderPipelines(pipelineIds: string[]): Promise<void> {
+    if (pipelineIds.length === 0) return
+    await prisma.$transaction(
+      pipelineIds.map((id, index) =>
+        prisma.crmPipeline.update({
+          where: { id },
+          data: { orderIndex: index },
+        }),
+      ),
+    )
   }
 
   /** Resolve the pipeline to show: an explicit id, else the default,

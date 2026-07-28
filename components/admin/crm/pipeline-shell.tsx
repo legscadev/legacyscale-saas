@@ -53,6 +53,7 @@ import { CreateOpportunityDialog } from './create-opportunity-dialog'
 import { CreatePipelineDialog } from './create-pipeline-dialog'
 import { EditOpportunityDialog } from './edit-opportunity-dialog'
 import { ManageStagesDialog } from './manage-stages-dialog'
+import { OpportunitiesTabs } from './opportunities-tabs'
 import { PipelineBoard } from './pipeline-board'
 import { formatDealValue } from './opportunity-card'
 
@@ -245,6 +246,8 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
           </div>
         }
       />
+
+      <OpportunitiesTabs basePath={basePath} />
 
       {deals.length > 0 ? (
         // Summary strip only once there are deals — a bare "$0 / $0 /
