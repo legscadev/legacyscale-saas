@@ -45,6 +45,27 @@ export class PipelineNotFoundError extends Error {
   }
 }
 
+export class StageNotFoundError extends Error {
+  constructor(message = 'Stage not found') {
+    super(message)
+    this.name = 'StageNotFoundError'
+  }
+}
+
+/** Column selection for a PipelineStage row. */
+const STAGE_SELECT = {
+  id: true,
+  pipelineId: true,
+  name: true,
+  slug: true,
+  color: true,
+  orderIndex: true,
+  probability: true,
+  isWon: true,
+  isLost: true,
+  wipLimit: true,
+} as const
+
 /** The default pipeline every tenant gets on first CRM visit. */
 const DEFAULT_PIPELINE = { name: 'Sales Pipeline', slug: 'sales' } as const
 
@@ -328,6 +349,190 @@ class CrmPipelineService {
         })
       }
     }
+  }
+
+  // ============================================
+  // STAGE EDITOR
+  // ============================================
+
+  /** Stages for a pipeline with each stage's open-deal count — powers
+   *  the manage-stages editor + its delete guard. */
+  async listStagesWithCounts(
+    pipelineId: string,
+  ): Promise<Array<PipelineStage & { dealCount: number }>> {
+    const rows = await prisma.crmPipelineStage.findMany({
+      where: { pipelineId },
+      orderBy: { orderIndex: 'asc' },
+      select: {
+        id: true,
+        pipelineId: true,
+        name: true,
+        slug: true,
+        color: true,
+        orderIndex: true,
+        probability: true,
+        isWon: true,
+        isLost: true,
+        wipLimit: true,
+        _count: {
+          select: { opportunities: { where: { deletedAt: null } } },
+        },
+      },
+    })
+    return rows.map((r) => ({
+      id: r.id,
+      pipelineId: r.pipelineId,
+      name: r.name,
+      slug: r.slug,
+      color: r.color,
+      orderIndex: r.orderIndex,
+      probability: r.probability,
+      isWon: r.isWon,
+      isLost: r.isLost,
+      wipLimit: r.wipLimit,
+      dealCount: r._count.opportunities,
+    }))
+  }
+
+  /** Append a new stage to the end of a pipeline. */
+  async addStage(
+    pipelineId: string,
+    input: {
+      name: string
+      color?: string
+      probability?: number | null
+      isWon?: boolean
+      isLost?: boolean
+    },
+  ): Promise<PipelineStage> {
+    const companyId = await requireCompanyId()
+    await this.assertPipelineExists(pipelineId)
+
+    const [last, count] = await Promise.all([
+      prisma.crmPipelineStage.findFirst({
+        where: { pipelineId },
+        orderBy: { orderIndex: 'desc' },
+        select: { orderIndex: true },
+      }),
+      prisma.crmPipelineStage.count({ where: { pipelineId } }),
+    ])
+    const slug = await this.uniqueStageSlug(
+      pipelineId,
+      slugify(input.name) || `stage-${count + 1}`,
+    )
+
+    const row = await prisma.crmPipelineStage.create({
+      data: {
+        pipelineId,
+        name: input.name.trim(),
+        slug,
+        color: input.color ?? STAGE_PALETTE[count % STAGE_PALETTE.length]!,
+        orderIndex: (last?.orderIndex ?? -1) + 1,
+        probability: input.probability ?? null,
+        isWon: input.isWon ?? false,
+        isLost: input.isLost ?? false,
+        companyId,
+      },
+      select: STAGE_SELECT,
+    })
+    return row
+  }
+
+  /** Partial update of a stage's editable fields. */
+  async updateStage(
+    stageId: string,
+    input: {
+      name?: string
+      color?: string
+      probability?: number | null
+      isWon?: boolean
+      isLost?: boolean
+      wipLimit?: number | null
+    },
+  ): Promise<PipelineStage> {
+    const existing = await prisma.crmPipelineStage.findFirst({
+      where: { id: stageId },
+      select: { id: true },
+    })
+    if (!existing) throw new StageNotFoundError()
+
+    const row = await prisma.crmPipelineStage.update({
+      where: { id: stageId },
+      data: {
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.color !== undefined ? { color: input.color } : {}),
+        ...(input.probability !== undefined ? { probability: input.probability } : {}),
+        ...(input.isWon !== undefined ? { isWon: input.isWon } : {}),
+        ...(input.isLost !== undefined ? { isLost: input.isLost } : {}),
+        ...(input.wipLimit !== undefined ? { wipLimit: input.wipLimit } : {}),
+      },
+      select: STAGE_SELECT,
+    })
+    return row
+  }
+
+  /** Rewrite orderIndex for a pipeline's stages from an ordered id
+   *  array (drag-drop reorder in the editor). */
+  async reorderStages(pipelineId: string, stageIds: string[]): Promise<void> {
+    await prisma.$transaction(
+      stageIds.map((id, index) =>
+        prisma.crmPipelineStage.update({
+          where: { id },
+          data: { orderIndex: index },
+        }),
+      ),
+    )
+  }
+
+  /**
+   * Delete a stage. Blocked when it still holds (non-deleted) deals
+   * (the Restrict FK would throw anyway; we give a friendly error) or
+   * when it's the pipeline's last stage.
+   */
+  async deleteStage(stageId: string): Promise<void> {
+    const stage = await prisma.crmPipelineStage.findFirst({
+      where: { id: stageId },
+      select: { id: true, pipelineId: true },
+    })
+    if (!stage) throw new StageNotFoundError()
+
+    const [dealCount, stageCount] = await Promise.all([
+      prisma.crmOpportunity.count({
+        where: { stageId, deletedAt: null },
+      }),
+      prisma.crmPipelineStage.count({
+        where: { pipelineId: stage.pipelineId },
+      }),
+    ])
+    if (dealCount > 0) throw new StageInUseError()
+    if (stageCount <= 1) {
+      throw new StageInUseError('A pipeline must keep at least one stage')
+    }
+    // Soft-deleted opportunities still hold the (Restrict) stage FK, so
+    // the stage delete would fail on them even though they're archived.
+    // The guard above already blocked *active* deals; purge the
+    // archived ones here so the stage can go.
+    await prisma.crmOpportunity.deleteMany({
+      where: { stageId, deletedAt: { not: null } },
+    })
+    await prisma.crmPipelineStage.delete({ where: { id: stageId } })
+  }
+
+  private async uniqueStageSlug(
+    pipelineId: string,
+    base: string,
+  ): Promise<string> {
+    let candidate = base
+    let n = 2
+    while (
+      await prisma.crmPipelineStage.findFirst({
+        where: { pipelineId, slug: candidate },
+        select: { id: true },
+      })
+    ) {
+      candidate = `${base}-${n++}`
+    }
+    return candidate
   }
 
   private async assertPipelineExists(id: string): Promise<void> {

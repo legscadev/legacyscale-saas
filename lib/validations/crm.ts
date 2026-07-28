@@ -145,6 +145,47 @@ export const renamePipelineSchema = z.object({
   name: z.string().trim().min(1, 'Pipeline name is required').max(100),
 })
 
+// ---- Stage editor ----
+
+const hexColor = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex colour like #3b82f6')
+
+const stageProbability = z
+  .number()
+  .int()
+  .min(0)
+  .max(100)
+  .nullable()
+  .optional()
+
+export const addStageSchema = z.object({
+  pipelineId: z.string().uuid(),
+  name: z.string().trim().min(1, 'Stage name is required').max(60),
+  color: hexColor.optional(),
+  probability: stageProbability,
+  isWon: z.boolean().optional(),
+  isLost: z.boolean().optional(),
+})
+export type AddStageInput = z.input<typeof addStageSchema>
+
+export const updateStageSchema = z.object({
+  stageId: z.string().uuid(),
+  name: z.string().trim().min(1).max(60).optional(),
+  color: hexColor.optional(),
+  probability: stageProbability,
+  isWon: z.boolean().optional(),
+  isLost: z.boolean().optional(),
+  wipLimit: z.number().int().min(0).max(9999).nullable().optional(),
+})
+export type UpdateStageInput = z.input<typeof updateStageSchema>
+
+export const reorderStagesSchema = z.object({
+  pipelineId: z.string().uuid(),
+  stageIds: z.array(z.string().uuid()).min(1),
+})
+
 // ============================================
 // FILTERS (URL-encoded on the board page)
 // ============================================

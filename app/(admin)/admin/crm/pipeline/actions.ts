@@ -21,6 +21,8 @@ import {
   LastPipelineError,
   PipelineInUseError,
   PipelineNotFoundError,
+  StageInUseError,
+  StageNotFoundError as PipelineStageNotFoundError,
   type PipelineStage,
   type PipelineSummary,
 } from '@/lib/services/crm-pipeline-service'
@@ -29,15 +31,20 @@ import {
   memberTenantScope,
 } from '@/lib/tenancy/request-company'
 import {
+  addStageSchema,
   createOpportunitySchema,
   createPipelineSchema,
   moveOpportunitySchema,
   opportunityFilterSchema,
   renamePipelineSchema,
+  reorderStagesSchema,
   updateOpportunitySchema,
+  updateStageSchema,
+  type AddStageInput,
   type CreateOpportunityInput,
   type CreatePipelineInput,
   type UpdateOpportunityInput,
+  type UpdateStageInput,
 } from '@/lib/validations/crm'
 
 // ============================================
@@ -71,9 +78,11 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
   if (
     err instanceof OpportunityNotFoundError ||
     err instanceof StageNotFoundError ||
+    err instanceof PipelineStageNotFoundError ||
     err instanceof PipelineNotFoundError ||
     err instanceof LastPipelineError ||
-    err instanceof PipelineInUseError
+    err instanceof PipelineInUseError ||
+    err instanceof StageInUseError
   ) {
     return { ok: false, error: err.message }
   }
@@ -352,5 +361,92 @@ export async function deletePipelineAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not delete pipeline')
+  }
+}
+
+// ============================================
+// STAGE EDITOR
+// ============================================
+
+export type StageWithCount = PipelineStage & { dealCount: number }
+
+export async function fetchPipelineStagesAction(
+  pipelineId: string,
+): Promise<MutationResult<StageWithCount[]>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const data = await crmPipelineService.listStagesWithCounts(pipelineId)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load stages')
+  }
+}
+
+export async function addStageAction(
+  input: AddStageInput,
+): Promise<MutationResult<PipelineStage>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = addStageSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const { pipelineId, ...rest } = parsed.data
+    const data = await crmPipelineService.addStage(pipelineId, rest)
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not add stage')
+  }
+}
+
+export async function updateStageAction(
+  input: UpdateStageInput,
+): Promise<MutationResult<PipelineStage>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = updateStageSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const { stageId, ...rest } = parsed.data
+    const data = await crmPipelineService.updateStage(stageId, rest)
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not update stage')
+  }
+}
+
+export async function reorderStagesAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = reorderStagesSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await crmPipelineService.reorderStages(
+      parsed.data.pipelineId,
+      parsed.data.stageIds,
+    )
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not reorder stages')
+  }
+}
+
+export async function deleteStageAction(
+  stageId: string,
+): Promise<MutationResult> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    await crmPipelineService.deleteStage(stageId)
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete stage')
   }
 }

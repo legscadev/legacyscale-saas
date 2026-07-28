@@ -8,7 +8,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { KanbanSquare, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
+import { KanbanSquare, ListChecks, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/page-header'
@@ -52,6 +52,7 @@ import {
 import { CreateOpportunityDialog } from './create-opportunity-dialog'
 import { CreatePipelineDialog } from './create-pipeline-dialog'
 import { EditOpportunityDialog } from './edit-opportunity-dialog'
+import { ManageStagesDialog } from './manage-stages-dialog'
 import { PipelineBoard } from './pipeline-board'
 import { formatDealValue } from './opportunity-card'
 
@@ -96,6 +97,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [stagesOpen, setStagesOpen] = useState(false)
   const [pipelinePending, startPipelineOp] = useTransition()
 
   const currentPipeline = pipelines.find((p) => p.id === currentPipelineId)
@@ -205,6 +207,13 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!currentPipeline}
+                  onClick={() => setStagesOpen(true)}
+                >
+                  <ListChecks className="size-4" />
+                  Manage stages
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!currentPipeline}
                   onClick={() => {
                     setRenameValue(currentPipeline?.name ?? '')
                     setRenameOpen(true)
@@ -297,6 +306,14 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         open={createPipelineOpen}
         onOpenChange={setCreatePipelineOpen}
         onCreated={(pipeline) => router.push(`${basePath}?pipeline=${pipeline.id}`)}
+      />
+
+      <ManageStagesDialog
+        open={stagesOpen}
+        pipelineId={currentPipelineId}
+        pipelineName={currentPipeline?.name ?? 'Pipeline'}
+        onOpenChange={setStagesOpen}
+        onChanged={() => router.refresh()}
       />
 
       {/* Rename current pipeline */}
