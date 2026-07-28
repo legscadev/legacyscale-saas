@@ -367,8 +367,8 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
             ) : null}
 
             {/* View toggle — board vs list. Segmented pair sits on its
-                own rail so the Pipelines dropdown + New deal buttons
-                keep their existing prominence. */}
+                own rail so the Pipelines dropdown + New opportunity
+                buttons keep their existing prominence. */}
             <div
               role="group"
               aria-label="View mode"
@@ -465,7 +465,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
               size="sm"
             >
               <Plus className="size-4" />
-              New deal
+              New opportunity
             </Button>
           </div>
         }
@@ -617,6 +617,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           pipelineId={currentPipelineId}
+          pipelines={pipelines}
           stages={stages}
           members={members}
           defaultStageId={createStageId}

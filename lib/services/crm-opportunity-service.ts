@@ -245,6 +245,10 @@ class CrmOpportunityService {
         name: input.name,
         pipelineId,
         stageId: stage.id,
+        // Status defaults OPEN at the DB level; only stamp the field
+        // when the caller wants a non-default (rare — typically only
+        // used when importing already-closed historical deals).
+        ...(input.status ? { status: input.status } : {}),
         contactName: input.contactName ?? null,
         contactEmail: input.contactEmail ?? null,
         contactPhone: input.contactPhone ?? null,

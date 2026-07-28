@@ -125,12 +125,12 @@ export function EditOpportunityDialog({
     e.preventDefault()
     if (!form || !opportunityId) return
     if (!form.name.trim()) {
-      toast.error('Deal name is required')
+      toast.error('Opportunity name is required')
       return
     }
     const parsedValue = form.value.trim() === '' ? null : Number(form.value)
     if (parsedValue !== null && Number.isNaN(parsedValue)) {
-      toast.error('Deal value must be a number')
+      toast.error('Value must be a number')
       return
     }
     const parsedProb =
@@ -154,7 +154,7 @@ export function EditOpportunityDialog({
         notes: form.notes.trim() || null,
       })
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not save deal')
+        toast.error(res.error ?? 'Could not save opportunity')
         return
       }
       // Stage change routes through the move path so WON/LOST + close
@@ -171,7 +171,7 @@ export function EditOpportunityDialog({
           return
         }
       }
-      toast.success('Deal updated')
+      toast.success('Opportunity updated')
       onChanged()
       onOpenChange(false)
     })
@@ -182,10 +182,10 @@ export function EditOpportunityDialog({
     startTransition(async () => {
       const res = await deleteOpportunityAction(opportunityId)
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not delete deal')
+        toast.error(res.error ?? 'Could not delete opportunity')
         return
       }
-      toast.success('Deal deleted')
+      toast.success('Opportunity deleted')
       onChanged()
       onOpenChange(false)
     })
@@ -195,9 +195,10 @@ export function EditOpportunityDialog({
     <Dialog open={!!opportunityId} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit deal</DialogTitle>
+          <DialogTitle>Edit opportunity</DialogTitle>
           <DialogDescription>
-            Update the deal, move it to another stage, or delete it.
+            Update the opportunity, move it to another stage, or delete
+            it.
           </DialogDescription>
         </DialogHeader>
 
@@ -210,7 +211,7 @@ export function EditOpportunityDialog({
           <form onSubmit={handleSave}>
             <div className="grid gap-4 py-4">
               <div className="grid gap-1.5">
-                <Label htmlFor="edit-name">Deal name</Label>
+                <Label htmlFor="edit-name">Opportunity name</Label>
                 <Input
                   id="edit-name"
                   value={form.name}

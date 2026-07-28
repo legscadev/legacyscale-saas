@@ -62,9 +62,10 @@ const optionalProbability = z
  * omitted, so a quick-add form only needs a name.
  */
 export const createOpportunitySchema = z.object({
-  name: z.string().trim().min(1, 'Deal name is required').max(200),
+  name: z.string().trim().min(1, 'Opportunity name is required').max(200),
   pipelineId: z.string().uuid().optional(),
   stageId: z.string().uuid().optional(),
+  status: crmOpportunityStatusSchema.optional(),
   contactName: z.string().trim().max(200).nullable().optional(),
   contactEmail: z
     .string()
