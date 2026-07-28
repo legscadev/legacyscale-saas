@@ -67,6 +67,12 @@ import { EditOpportunityDialog } from './edit-opportunity-dialog'
 import { ManageStagesDialog } from './manage-stages-dialog'
 import { OpportunitiesListView } from './opportunities-list-view'
 import { OpportunitiesTabs } from './opportunities-tabs'
+import {
+  OpportunitiesSortMenu,
+  sortOpportunities,
+  type OpportunitySortBy,
+  type OpportunitySortOrder,
+} from './opportunities-sort-menu'
 import { PipelineBoard } from './pipeline-board'
 import { cn } from '@/lib/utils'
 import { formatDealValue } from './opportunity-card'
@@ -110,6 +116,11 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   // View toggle — 'board' (Kanban) vs 'list' (compact table). Local
   // state for now; a future revision can persist the choice per user.
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
+
+  // Sort — only meaningful in list view (board relies on orderIndex
+  // for drag-drop). Default 'orderIndex' means "use the pinned order".
+  const [sortBy, setSortBy] = useState<OpportunitySortBy>('orderIndex')
+  const [sortOrder, setSortOrder] = useState<OpportunitySortOrder>('asc')
 
   // Multi-select — used by both the board (Phase 3) and the list view.
   // Shell owns the state so switching views doesn't drop selection.
@@ -254,6 +265,20 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
               </select>
             ) : null}
 
+            {/* Sort — only meaningful in list view (Kanban is
+                manually ordered via drag). Hide in board mode so
+                the toolbar doesn't dangle a no-op control. */}
+            {viewMode === 'list' ? (
+              <OpportunitiesSortMenu
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onChange={({ sortBy: nb, sortOrder: no }) => {
+                  setSortBy(nb)
+                  setSortOrder(no)
+                }}
+              />
+            ) : null}
+
             {/* View toggle — board vs list. Segmented pair sits on its
                 own rail so the Pipelines dropdown + New deal buttons
                 keep their existing prominence. */}
@@ -396,7 +421,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
       ) : (
         <OpportunitiesListView
           stages={stages}
-          opportunities={deals}
+          opportunities={sortOpportunities(deals, sortBy, sortOrder)}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onToggleAll={toggleAll}
