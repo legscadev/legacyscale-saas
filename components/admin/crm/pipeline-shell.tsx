@@ -70,6 +70,7 @@ import { CreatePipelineDialog } from './create-pipeline-dialog'
 import { EditOpportunityDialog } from './edit-opportunity-dialog'
 import { ImportOpportunitiesDialog } from './import-opportunities-dialog'
 import { ManageStagesDialog } from './manage-stages-dialog'
+import { OpportunitiesViewTabs } from './opportunities-view-tabs'
 import { OpportunitiesFilterChips } from './opportunities-filter-chips'
 import {
   applyOpportunityFilter,
@@ -108,6 +109,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
     currentPipelineId,
     stages,
     members,
+    views,
   } = initialData
 
   const [deals, setDeals] = useState<OpportunityListItem[]>(
@@ -140,6 +142,10 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   const [filterOpen, setFilterOpen] = useState(false)
   const [filter, setFilter] = useState<OpportunityFilterState>(EMPTY_FILTER)
   const activeFilterCount = countActiveFilters(filter)
+
+  // Which saved view (if any) is the current filter mirroring.
+  // Null = the "All" tab. Applying a view sets both this and `filter`.
+  const [activeViewId, setActiveViewId] = useState<string | null>(null)
 
   // Multi-select — used by both the board (Phase 3) and the list view.
   // Shell owns the state so switching views doesn't drop selection.
@@ -467,11 +473,25 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
 
       <OpportunitiesTabs basePath={basePath} />
 
+      <OpportunitiesViewTabs
+        views={views}
+        activeViewId={activeViewId}
+        currentFilter={filter}
+        onSelect={(id, f) => {
+          setActiveViewId(id)
+          setFilter(f)
+        }}
+        onChanged={() => router.refresh()}
+      />
+
       <OpportunitiesFilterChips
         filter={filter}
         stages={stages}
         members={members}
-        onChange={setFilter}
+        onChange={(next) => {
+          setFilter(next)
+          setActiveViewId(null) // manual edit → drops back to "All"
+        }}
       />
 
       {deals.length > 0 ? (
@@ -536,7 +556,10 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         value={filter}
         stages={stages}
         members={members}
-        onApply={setFilter}
+        onApply={(next) => {
+          setFilter(next)
+          setActiveViewId(null) // manual apply → drops back to "All"
+        }}
       />
 
       {currentPipelineId ? (

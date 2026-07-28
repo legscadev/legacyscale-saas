@@ -315,6 +315,10 @@ model User {
   // pipeline).
   crmBulkActionsRun CrmBulkAction[] @relation("CrmBulkActionActor")
 
+  // CRM — saved filter views on the Opportunities board (one per
+  // user; the user owns their private views).
+  crmOpportunityViews CrmOpportunityView[] @relation("CrmOpportunityViewOwner")
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -2581,4 +2585,35 @@ model CrmBulkAction {
   @@index([companyId, operation])
   @@index([companyId, status])
   @@map("crm_bulk_actions")
+}
+
+// ============================================
+// CRM — SAVED FILTER VIEWS
+// ============================================
+
+/// A saved filter set on the Opportunities board — the "smart lists"
+/// pattern from HighLevel. Each view is private to its owner for
+/// P0; a later phase can add tenant-shared views by flipping
+/// isShared to true. The full filter shape (stageIds, statuses,
+/// assigneeIds, value range, close-date range, etc.) is persisted
+/// as JSON so schema doesn't need to change every time a facet is
+/// added or renamed.
+model CrmOpportunityView {
+  id         String   @id @default(uuid())
+  name       String
+  /// Owner — SetNull on user delete so shared/legacy views survive.
+  ownerId    String?  @map("owner_id")
+  owner      User?    @relation("CrmOpportunityViewOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  /// Serialised OpportunityFilterState — shape is validated on write
+  /// (crmOpportunityViewSchema) so bad data can't reach the client.
+  filterJson Json     @map("filter_json")
+  /// Sort order across all views for one owner — powers drag-reorder
+  /// of tabs in a later phase.
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  companyId  String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, ownerId, orderIndex])
+  @@map("crm_opportunity_views")
 }

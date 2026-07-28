@@ -225,6 +225,38 @@ export const importOpportunitiesSchema = z.object({
   assignedCloserId: z.string().uuid().nullable().optional(),
 })
 
+// ---- Saved filter views ----
+
+/** Shape of a persisted filter set. Kept permissive — the client
+ *  passes the full OpportunityFilterState in and we hand it back
+ *  as-is when the view is loaded. Bad fields are silently dropped. */
+export const opportunityViewFilterSchema = z
+  .object({
+    stageIds: z.array(z.string()).default([]),
+    statuses: z.array(z.enum(['OPEN', 'WON', 'LOST'])).default([]),
+    assigneeIds: z.array(z.string()).default([]),
+    valueMin: z.string().default(''),
+    valueMax: z.string().default(''),
+    closeDateFrom: z.string().default(''),
+    closeDateTo: z.string().default(''),
+  })
+  .passthrough()
+
+export const createOpportunityViewSchema = z.object({
+  name: z.string().trim().min(1, 'View name is required').max(80),
+  filter: opportunityViewFilterSchema,
+})
+
+export const renameOpportunityViewSchema = z.object({
+  viewId: z.string().uuid(),
+  name: z.string().trim().min(1, 'View name is required').max(80),
+})
+
+export const updateOpportunityViewFilterSchema = z.object({
+  viewId: z.string().uuid(),
+  filter: opportunityViewFilterSchema,
+})
+
 export const bulkActionHistoryFilterSchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),

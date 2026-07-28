@@ -6,6 +6,7 @@
 // fieldErrors}. Same shape + conventions as the Task Tracker actions.
 
 import { revalidatePath } from 'next/cache'
+import type { Prisma } from '@prisma/client'
 
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
@@ -14,6 +15,11 @@ import {
   type BulkActionListFilters,
   type BulkActionLogRow,
 } from '@/lib/services/crm-bulk-action-service'
+import {
+  crmOpportunityViewService,
+  OpportunityViewNotFoundError,
+  type OpportunityViewRow,
+} from '@/lib/services/crm-opportunity-view-service'
 import {
   crmOpportunityService,
   OpportunityNotFoundError,
@@ -43,14 +49,17 @@ import {
   bulkDeleteOpportunitiesSchema,
   bulkMoveOpportunitiesSchema,
   createOpportunitySchema,
+  createOpportunityViewSchema,
   createPipelineSchema,
   importOpportunitiesSchema,
   moveOpportunitySchema,
   opportunityFilterSchema,
+  renameOpportunityViewSchema,
   renamePipelineSchema,
   reorderPipelinesSchema,
   reorderStagesSchema,
   updateOpportunitySchema,
+  updateOpportunityViewFilterSchema,
   updateStageSchema,
   type AddStageInput,
   type CreateOpportunityInput,
@@ -95,7 +104,8 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
     err instanceof PipelineNotFoundError ||
     err instanceof LastPipelineError ||
     err instanceof PipelineInUseError ||
-    err instanceof StageInUseError
+    err instanceof StageInUseError ||
+    err instanceof OpportunityViewNotFoundError
   ) {
     return { ok: false, error: err.message }
   }
@@ -130,6 +140,9 @@ export interface PipelineWorkspacePayload {
   members: CrmTeamMember[]
   currentUserId: string
   companyId: string | null
+  /** Every saved view owned by the viewer. Powers the sub-tab row
+   *  above the board. Empty on tenants that haven't saved any. */
+  views: OpportunityViewRow[]
 }
 
 /** Sole entry point for the pipeline board's first render. */
@@ -176,12 +189,13 @@ export async function fetchPipelineWorkspaceAction(
           members: [],
           currentUserId: currentUser.id,
           companyId,
+          views: [],
         },
       }
     }
 
     const tenantScope = await memberTenantScope()
-    const [pipelines, stages, opportunities, members] = await Promise.all([
+    const [pipelines, stages, opportunities, members, views] = await Promise.all([
       crmPipelineService.listPipelines(),
       crmPipelineService.listStages(pipelineId),
       crmOpportunityService.list(pipelineId, parsed.data),
@@ -195,6 +209,7 @@ export async function fetchPipelineWorkspaceAction(
         select: { id: true, name: true, email: true, avatarUrl: true },
         orderBy: [{ name: 'asc' }, { email: 'asc' }],
       }),
+      crmOpportunityViewService.list(currentUser.id),
     ])
 
     return {
@@ -207,6 +222,7 @@ export async function fetchPipelineWorkspaceAction(
         members,
         currentUserId: currentUser.id,
         companyId,
+        views,
       },
     }
   } catch (err) {
@@ -617,5 +633,97 @@ export async function fetchBulkActionsHistoryAction(
     }
   } catch (err) {
     return toMutationErr(err, 'Could not load bulk action history')
+  }
+}
+
+// ============================================
+// SAVED FILTER VIEWS
+// ============================================
+
+export async function fetchOpportunityViewsAction(): Promise<
+  MutationResult<OpportunityViewRow[]>
+> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const data = await crmOpportunityViewService.list(user.id)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load saved views')
+  }
+}
+
+export async function createOpportunityViewAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<OpportunityViewRow>> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = createOpportunityViewSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmOpportunityViewService.create({
+      name: parsed.data.name,
+      filter: parsed.data.filter as Prisma.InputJsonValue,
+      ownerId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not save view')
+  }
+}
+
+export async function renameOpportunityViewAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = renameOpportunityViewSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await crmOpportunityViewService.rename({
+      viewId: parsed.data.viewId,
+      name: parsed.data.name,
+      ownerId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not rename view')
+  }
+}
+
+export async function updateOpportunityViewFilterAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = updateOpportunityViewFilterSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await crmOpportunityViewService.updateFilter({
+      viewId: parsed.data.viewId,
+      filter: parsed.data.filter as Prisma.InputJsonValue,
+      ownerId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not update view')
+  }
+}
+
+export async function deleteOpportunityViewAction(
+  viewId: string,
+): Promise<MutationResult> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  try {
+    await crmOpportunityViewService.delete({ viewId, ownerId: user.id })
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete view')
   }
 }
