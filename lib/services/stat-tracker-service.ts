@@ -656,6 +656,46 @@ export async function deleteDataPoint(
   return { ok: true }
 }
 
+/**
+ * Rewrite orderIndex for every metric in `metricIds` from the array
+ * position (drag-drop reorder in the stats views). Cross-division
+ * reorders are supported — the caller only decides display order,
+ * we don't touch the metric's division.
+ *
+ * Runs as a single SQL statement (UPDATE ... SET order_index = CASE
+ * id WHEN uuid THEN n ...). One round-trip instead of N sequential
+ * updates, which matters once a tenant has ~10+ metrics — the
+ * sequential-transaction version blew the default 5s Prisma
+ * timeout at 30 metrics against Supabase's pooled connection.
+ */
+export async function reorderMetrics(metricIds: string[]): Promise<void> {
+  if (metricIds.length === 0) return
+
+  // Build a single UPDATE with CASE mapping id → orderIndex. The
+  // ids are bound as parameters (safe against injection); the
+  // integer positions are inlined via Prisma.raw because Postgres
+  // would otherwise infer the CASE expression's type as TEXT (all
+  // THEN branches must share a type, and mixed parameters default
+  // to text). The values come from `array.forEach(index)` so
+  // they're always safe integers.
+  //
+  // Prisma maps `id String` to Postgres TEXT, not UUID — no cast.
+  const cases = Prisma.join(
+    metricIds.map(
+      (id, index) =>
+        Prisma.sql`WHEN ${id} THEN ${Prisma.raw(String(index))}`,
+    ),
+    ' ',
+  )
+  const idList = Prisma.join(metricIds)
+
+  await prisma.$executeRaw`
+    UPDATE stat_metrics
+    SET order_index = CASE id ${cases} END
+    WHERE id IN (${idList})
+  `
+}
+
 // ============================================================
 // INTERNALS
 // ============================================================

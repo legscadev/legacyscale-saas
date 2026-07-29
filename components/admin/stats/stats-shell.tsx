@@ -2,6 +2,21 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 import { BarChart3, Check, LayoutGrid, MoreVertical, Pencil, Plus, Search, Table as TableIcon, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -31,11 +46,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { EmptyState, PageHeader } from '@/components/shared'
-import { deleteDivisionAction } from '@/app/(admin)/admin/stats/actions'
+import {
+  deleteDivisionAction,
+  reorderMetricsAction,
+} from '@/app/(admin)/admin/stats/actions'
 import { DivisionDialog } from './division-dialog'
 import { MetricDialog } from './metric-dialog'
 import { MetricCard } from './metric-card'
 import { MetricsTableView } from './metrics-table-view'
+import { SortableMetric } from './sortable-metric'
 import type {
   AssigneePickerOption,
 } from '@/app/(admin)/admin/stats/actions'
@@ -74,11 +93,30 @@ export function StatsShell({
   divisions,
   initialDivisionId,
   initialAssigneeIds,
-  metrics,
+  metrics: initialMetrics,
   assignees,
 }: StatsShellProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // Local mirror so drag-drop can reorder optimistically. Re-syncs
+  // whenever the server payload changes (create / archive / restore
+  // / router.refresh() after any mutation) via a signature diff.
+  const [metrics, setMetrics] = useState<StatMetricRow[]>(initialMetrics)
+  const incomingSignature = initialMetrics.map((m) => m.id).join('|')
+  const [lastSignature, setLastSignature] = useState(incomingSignature)
+  if (incomingSignature !== lastSignature) {
+    setLastSignature(incomingSignature)
+    setMetrics(initialMetrics)
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+  const [reorderPending, startReorder] = useTransition()
   // Preserve the current route (/admin/stats vs /team/stats) when
   // syncing filter state to the URL — hard-coding /admin/stats
   // would bounce TEAM viewers back through the admin gate.
@@ -235,6 +273,41 @@ export function StatsShell({
       return true
     })
   }, [metrics, selectedGroupId, selectedAssigneeIds, onlyMine, search, currentUserId])
+
+  // ─── DRAG-REORDER ───────────────────────────────────────────
+  // Reorder only makes sense when the view is showing the full,
+  // unfiltered set — otherwise a drop between two visible items
+  // has an ambiguous meaning for the metrics filtered out in
+  // between. Cheaper to disable the handle than reason about it.
+  const canReorder =
+    search.trim() === '' &&
+    selectedAssigneeIds.length === 0 &&
+    !onlyMine &&
+    selectedGroupId === ALL_GROUPS
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = metrics.findIndex((m) => m.id === active.id)
+    const newIndex = metrics.findIndex((m) => m.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const next = metrics.slice()
+    const [moved] = next.splice(oldIndex, 1)
+    if (!moved) return
+    next.splice(newIndex, 0, moved)
+    setMetrics(next)
+
+    startReorder(async () => {
+      const res = await reorderMetricsAction(next.map((m) => m.id))
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not save order')
+        setMetrics(initialMetrics)
+        return
+      }
+      router.refresh()
+    })
+  }
 
   // ─── DELETE HANDLER ─────────────────────────────────────────
   function handleDeleteDivision() {
@@ -516,29 +589,60 @@ export function StatsShell({
               }
             />
           ) : view === 'table' ? (
-            <MetricsTableView
-              metrics={filteredMetrics}
-              currentUserId={currentUserId}
-              currentUserIsAdmin={currentUserIsAdmin}
-              onChanged={() => router.refresh()}
-            />
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredMetrics.map((m) => (
-                <MetricCard
-                  key={m.id}
-                  metric={m}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={filteredMetrics.map((m) => m.id)}
+                strategy={verticalListSortingStrategy}
+                disabled={!canReorder || reorderPending}
+              >
+                <MetricsTableView
+                  metrics={filteredMetrics}
                   currentUserId={currentUserId}
                   currentUserIsAdmin={currentUserIsAdmin}
-                  divisions={divisions}
-                  assignees={assignees}
-                  showGroupBadge={selectedGroupId === ALL_GROUPS}
-                  fromDate={fromDate || null}
-                  toDate={toDate || null}
-                  rangeLabel={rangeLabel}
+                  reorderDisabled={!canReorder || reorderPending}
+                  onChanged={() => router.refresh()}
                 />
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={filteredMetrics.map((m) => m.id)}
+                strategy={rectSortingStrategy}
+                disabled={!canReorder || reorderPending}
+              >
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {filteredMetrics.map((m) => (
+                    <SortableMetric
+                      key={m.id}
+                      id={m.id}
+                      disabled={!canReorder || reorderPending}
+                      positionLabel={m.name}
+                    >
+                      <MetricCard
+                        metric={m}
+                        currentUserId={currentUserId}
+                        currentUserIsAdmin={currentUserIsAdmin}
+                        divisions={divisions}
+                        assignees={assignees}
+                        showGroupBadge={selectedGroupId === ALL_GROUPS}
+                        fromDate={fromDate || null}
+                        toDate={toDate || null}
+                        rangeLabel={rangeLabel}
+                      />
+                    </SortableMetric>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       )}

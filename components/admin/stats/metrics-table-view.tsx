@@ -24,7 +24,9 @@ import {
   useState,
   useTransition,
 } from 'react'
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { ChevronLeft, ChevronRight, GripVertical, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -40,6 +42,9 @@ interface MetricsTableViewProps {
   metrics: StatMetricRow[]
   currentUserId: string
   currentUserIsAdmin: boolean
+  /** When true (search/filter active or reorder in flight), the
+   *  per-row drag handle is hidden. */
+  reorderDisabled?: boolean
   /** Fires after any cell mutation succeeds so the shell can
    *  reconcile its own state (division counts, sparkline data). */
   onChanged?: () => void
@@ -94,6 +99,7 @@ export function MetricsTableView({
   metrics,
   currentUserId,
   currentUserIsAdmin,
+  reorderDisabled = false,
   onChanged,
 }: MetricsTableViewProps) {
   const now = new Date()
@@ -365,7 +371,12 @@ export function MetricsTableView({
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 z-20 min-w-[16rem] border-b bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                aria-label="Reorder"
+                className="sticky left-0 z-20 w-8 border-b bg-muted"
+              />
+              <th
+                scope="col"
+                className="sticky left-8 z-20 min-w-[16rem] border-b bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
                 Metric
               </th>
@@ -388,44 +399,19 @@ export function MetricsTableView({
             </tr>
           </thead>
           <tbody>
-            {metrics.map((m) => {
-              const editable = canEditMetric(m)
-              return (
-                <tr key={m.id} className="group border-b last:border-0">
-                  <th
-                    scope="row"
-                    className="sticky left-0 z-10 min-w-[16rem] border-r bg-card px-3 py-2 text-left font-normal group-hover:bg-muted"
-                  >
-                    <div className="flex flex-col">
-                      <span className="truncate text-sm font-medium">
-                        {m.name}
-                      </span>
-                      <span className="truncate text-[11px] text-muted-foreground">
-                        {m.division.shortLabel ?? m.division.name}
-                        {' · '}
-                        {m.assignedTo ? m.assignedTo.name : 'Unassigned'}
-                      </span>
-                    </div>
-                  </th>
-                  {days.map((d) => {
-                    const iso = toIsoDate(month.year, month.month, d)
-                    const value = readCell(m.id, iso)
-                    return (
-                      <td
-                        key={d}
-                        className="border-r p-0 text-center last:border-r-0"
-                      >
-                        <MetricCell
-                          value={value}
-                          disabled={!editable}
-                          onCommit={(next) => commit(m.id, iso, next)}
-                        />
-                      </td>
-                    )
-                  })}
-                </tr>
-              )
-            })}
+            {metrics.map((m) => (
+              <SortableMetricRow
+                key={m.id}
+                metric={m}
+                editable={canEditMetric(m)}
+                reorderDisabled={reorderDisabled}
+                days={days}
+                month={month}
+                todayIso={todayIso}
+                readCell={readCell}
+                commit={commit}
+              />
+            ))}
           </tbody>
         </table>
       </div>
@@ -513,6 +499,103 @@ function MetricCell({ value, disabled, onCommit }: MetricCellProps) {
         '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
       )}
     />
+  )
+}
+
+// ============================================
+// Sortable row — wraps a metric's table row in useSortable so the
+// parent's DndContext can reorder without changing every cell's
+// keying. Leading cell hosts the drag handle (hidden when the row
+// isn't sortable, e.g. when a search filter is active).
+// ============================================
+interface SortableMetricRowProps {
+  metric: StatMetricRow
+  editable: boolean
+  reorderDisabled: boolean
+  days: number[]
+  month: { year: number; month: number }
+  todayIso: string
+  readCell: (metricId: string, iso: string) => number | null
+  commit: (metricId: string, iso: string, next: number | null) => void
+}
+
+function SortableMetricRow({
+  metric,
+  editable,
+  reorderDisabled,
+  days,
+  month,
+  readCell,
+  commit,
+}: SortableMetricRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: metric.id, disabled: reorderDisabled })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className="group border-b last:border-0"
+    >
+      <td
+        className={cn(
+          'sticky left-0 z-10 w-8 border-r bg-card p-0 text-center align-middle group-hover:bg-muted',
+        )}
+      >
+        {!reorderDisabled ? (
+          <button
+            type="button"
+            aria-label={`Reorder ${metric.name}`}
+            {...attributes}
+            {...listeners}
+            className="inline-flex h-9 w-8 cursor-grab items-center justify-center text-muted-foreground transition-colors hover:text-foreground active:cursor-grabbing"
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+        ) : null}
+      </td>
+      <th
+        scope="row"
+        className="sticky left-8 z-10 min-w-[16rem] border-r bg-card px-3 py-2 text-left font-normal group-hover:bg-muted"
+      >
+        <div className="flex flex-col">
+          <span className="truncate text-sm font-medium">{metric.name}</span>
+          <span className="truncate text-[11px] text-muted-foreground">
+            {metric.division.shortLabel ?? metric.division.name}
+            {' · '}
+            {metric.assignedTo ? metric.assignedTo.name : 'Unassigned'}
+          </span>
+        </div>
+      </th>
+      {days.map((d) => {
+        const iso = toIsoDate(month.year, month.month, d)
+        const value = readCell(metric.id, iso)
+        return (
+          <td
+            key={d}
+            className="border-r p-0 text-center last:border-r-0"
+          >
+            <MetricCell
+              value={value}
+              disabled={!editable}
+              onCommit={(next) => commit(metric.id, iso, next)}
+            />
+          </td>
+        )
+      })}
+    </tr>
   )
 }
 

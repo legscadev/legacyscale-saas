@@ -18,6 +18,7 @@ import {
   listDataPointsInMonth,
   listDivisions,
   listMetricsForDivision,
+  reorderMetrics,
   updateDivision,
   updateMetric,
   upsertDataPoint,
@@ -172,6 +173,30 @@ export async function updateMetricAction(
     revalidatePath('/admin/stats')
   }
   return result
+}
+
+/** Drag-drop reorder — bulk-updates orderIndex from the given
+ *  array position. */
+export async function reorderMetricsAction(
+  metricIds: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const actor = await requireTeamModuleAccess('stats')
+  try {
+    await reorderMetrics(metricIds)
+    await writeAuditLog({
+      actorId: actor.id,
+      action: 'stats.metric.reorder',
+      resourceType: 'statMetric',
+      resourceId: 'bulk',
+      summary: `Reordered ${metricIds.length} metrics`,
+    })
+    revalidatePath('/admin/stats')
+    return { ok: true }
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Could not reorder metrics'
+    return { ok: false, error: message }
+  }
 }
 
 export async function archiveMetricAction(
