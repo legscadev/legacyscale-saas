@@ -73,7 +73,7 @@ export function CreateOpportunityDialog({
     setContactEmail('')
     setContactPhone('')
     setPipelineId(initialPipelineId)
-    setStageId(defaultStageId ?? '')
+    setStageId(defaultStageId ?? stages[0]?.id ?? '')
     setStatus('OPEN')
     setValue('')
     setAssignedCloserId('')
@@ -234,14 +234,19 @@ export function CreateOpportunityDialog({
                           : undefined
                       }
                     >
-                      <option value="">First stage</option>
-                      {pipelineId === initialPipelineId
-                        ? stages.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))
-                        : null}
+                      {pipelineId === initialPipelineId ? (
+                        stages.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))
+                      ) : (
+                        // Different pipeline picked — we don't have
+                        // its stages loaded, so surface a single
+                        // placeholder and let the server drop the
+                        // deal into that pipeline's first stage.
+                        <option value="">First stage of selected pipeline</option>
+                      )}
                     </select>
                   </Field>
                 </div>
