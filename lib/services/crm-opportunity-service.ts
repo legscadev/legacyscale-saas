@@ -80,6 +80,9 @@ export interface OpportunityListItem {
   companyName: string | null
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
+  /** True when the deal has non-empty notes — powers the card's
+   *  note-indicator icon without shipping the full notes text. */
+  hasNotes: boolean
 }
 
 const CLOSER_SELECT = {
@@ -98,6 +101,7 @@ function toListItem(row: {
   companyName: string | null
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
+  notes: string | null
 }): OpportunityListItem {
   return {
     id: row.id,
@@ -113,6 +117,7 @@ function toListItem(row: {
     companyName: row.companyName,
     expectedCloseDate: row.expectedCloseDate,
     assignedCloser: row.assignedCloser,
+    hasNotes: row.notes !== null && row.notes.trim().length > 0,
   }
 }
 
@@ -162,6 +167,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        notes: true,
       },
     })
     return rows.map(toListItem)
@@ -239,6 +245,10 @@ class CrmOpportunityService {
         name: input.name,
         pipelineId,
         stageId: stage.id,
+        // Status defaults OPEN at the DB level; only stamp the field
+        // when the caller wants a non-default (rare — typically only
+        // used when importing already-closed historical deals).
+        ...(input.status ? { status: input.status } : {}),
         contactName: input.contactName ?? null,
         contactEmail: input.contactEmail ?? null,
         contactPhone: input.contactPhone ?? null,
@@ -263,6 +273,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        notes: true,
       },
     })
     return toListItem(created)
@@ -305,6 +316,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        notes: true,
       },
     })
     return toListItem(updated)
@@ -371,9 +383,94 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        notes: true,
       },
     })
     return toListItem(updated)
+  }
+
+  /**
+   * Bulk-insert opportunities parsed from a CSV. Each row's stageName
+   * is resolved case-insensitively against the target pipeline's
+   * stages; unknown / missing stages fall back to the pipeline's
+   * first stage. Returns per-row created count so the dialog can toast.
+   */
+  async importFromCsv(input: {
+    pipelineId: string
+    rows: Array<{
+      name: string
+      contactName?: string | null
+      contactEmail?: string | null
+      contactPhone?: string | null
+      companyName?: string | null
+      value?: number | null
+      probability?: number | null
+      stageName?: string | null
+    }>
+    assignedCloserId?: string | null
+    actorId: string | null
+  }): Promise<{ created: number; skipped: number }> {
+    const companyId = await requireCompanyId()
+
+    const stages = await prisma.crmPipelineStage.findMany({
+      where: { pipelineId: input.pipelineId },
+      orderBy: { orderIndex: 'asc' },
+      select: { id: true, name: true, slug: true, probability: true },
+    })
+    if (stages.length === 0) {
+      throw new StageNotFoundError('Pipeline has no stages')
+    }
+    const defaultStage = stages[0]!
+    const stageByKey = new Map<string, (typeof stages)[number]>()
+    for (const s of stages) {
+      stageByKey.set(s.name.toLowerCase(), s)
+      stageByKey.set(s.slug.toLowerCase(), s)
+    }
+
+    // Pull the current tail orderIndex per stage so imports don't
+    // collide with existing cards, then bump as we insert.
+    const nextOrderPerStage = new Map<string, number>()
+    for (const s of stages) {
+      const last = await prisma.crmOpportunity.findFirst({
+        where: { stageId: s.id, deletedAt: null },
+        orderBy: { orderIndex: 'desc' },
+        select: { orderIndex: true },
+      })
+      nextOrderPerStage.set(s.id, (last?.orderIndex ?? 0) + 100)
+    }
+
+    let created = 0
+    let skipped = 0
+    for (const row of input.rows) {
+      const key = row.stageName?.toLowerCase().trim()
+      const stage = (key && stageByKey.get(key)) || defaultStage
+      const orderIndex = nextOrderPerStage.get(stage.id)!
+      nextOrderPerStage.set(stage.id, orderIndex + 100)
+
+      try {
+        await prisma.crmOpportunity.create({
+          data: {
+            name: row.name,
+            pipelineId: input.pipelineId,
+            stageId: stage.id,
+            contactName: row.contactName ?? null,
+            contactEmail: row.contactEmail ?? null,
+            contactPhone: row.contactPhone ?? null,
+            companyName: row.companyName ?? null,
+            value: row.value ?? null,
+            probability: row.probability ?? stage.probability ?? null,
+            assignedCloserId: input.assignedCloserId ?? null,
+            orderIndex,
+            createdById: input.actorId,
+            companyId,
+          },
+        })
+        created++
+      } catch {
+        skipped++
+      }
+    }
+    return { created, skipped }
   }
 
   /** Soft-delete (archive) a deal off the board. */

@@ -186,7 +186,7 @@ function LeadRow({
       <TableCell>
         {isConverted && lead.convertedOpportunityId ? (
           <Link
-            href="/admin/crm/pipeline"
+            href="/admin/crm/opportunities"
             className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline"
           >
             {CRM_LEAD_STATUS_LABELS.CONVERTED}

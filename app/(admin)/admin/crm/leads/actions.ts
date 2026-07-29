@@ -73,8 +73,8 @@ function revalidateAll(): void {
   revalidatePath('/admin/crm/leads')
   revalidatePath('/team/crm/leads')
   // Conversions add a pipeline card — keep the board fresh too.
-  revalidatePath('/admin/crm/pipeline')
-  revalidatePath('/team/crm/pipeline')
+  revalidatePath('/admin/crm/opportunities')
+  revalidatePath('/team/crm/opportunities')
 }
 
 // ============================================

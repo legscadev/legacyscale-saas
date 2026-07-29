@@ -84,7 +84,7 @@ export function LeadsShell({ initialData, basePath, teamSurface }: LeadsShellPro
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Leads"
+        title="Contacts"
         description={`${leads.total} lead${leads.total === 1 ? '' : 's'} in the inbox`}
         actions={
           <div className="flex items-center gap-2">

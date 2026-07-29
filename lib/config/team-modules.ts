@@ -150,20 +150,20 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
   {
     key: 'crm-leads',
     section: 'Sales',
-    label: 'Leads',
+    label: 'Contacts',
     href: '/admin/crm/leads',
     icon: Inbox,
     description:
-      'Lead inbox — capture, qualify, assign to setters, and convert to deals.',
+      'Contact inbox — capture, qualify, assign to setters, and convert to deals.',
   },
   {
     key: 'crm-pipeline',
     section: 'Sales',
-    label: 'Pipeline',
-    href: '/admin/crm/pipeline',
+    label: 'Opportunities',
+    href: '/admin/crm/opportunities',
     icon: KanbanSquare,
     description:
-      'Kanban sales pipeline — drag deals through stages from lead to close.',
+      'Kanban sales board — drag opportunities through stages to close.',
   },
   // Internal ─────────────────────────────
   {

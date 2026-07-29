@@ -238,7 +238,7 @@ export function DailyEntryGrid({
                           defaultValue={value ?? ''}
                           onBlur={(e) => commitCell(entry.date, k, e.target.value)}
                           className={cn(
-                            'h-8 text-right tabular-nums [field-sizing:content] min-w-16',
+                            'no-spinner h-8 text-right tabular-nums [field-sizing:content] min-w-16',
                             savingCell === cellId && 'ring-1 ring-primary',
                           )}
                         />
@@ -297,7 +297,7 @@ export function DailyEntryGrid({
                       step={CURRENCY_METRICS.has(k) ? '0.01' : '1'}
                       defaultValue={targets[k] ?? ''}
                       onBlur={(e) => commitTarget(k, e.target.value)}
-                      className="h-8 text-right tabular-nums [field-sizing:content] min-w-16"
+                      className="no-spinner h-8 text-right tabular-nums [field-sizing:content] min-w-16"
                       placeholder="—"
                       key={`${targets.id ?? 'new'}:${year}-${month}:${k}`}
                     />
