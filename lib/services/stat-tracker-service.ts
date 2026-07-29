@@ -656,6 +656,24 @@ export async function deleteDataPoint(
   return { ok: true }
 }
 
+/**
+ * Rewrite orderIndex for every metric in `metricIds` from the array
+ * position (drag-drop reorder in the stats views). Cross-division
+ * reorders are supported — the caller only decides display order,
+ * we don't touch the metric's division.
+ */
+export async function reorderMetrics(metricIds: string[]): Promise<void> {
+  if (metricIds.length === 0) return
+  await prisma.$transaction(
+    metricIds.map((id, index) =>
+      prisma.statMetric.update({
+        where: { id },
+        data: { orderIndex: index },
+      }),
+    ),
+  )
+}
+
 // ============================================================
 // INTERNALS
 // ============================================================
