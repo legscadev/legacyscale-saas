@@ -17,7 +17,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { BarChart3, Check, LayoutGrid, MoreVertical, Pencil, Plus, Search, Table as TableIcon, Trash2 } from 'lucide-react'
+import { BarChart3, Check, LayoutGrid, Loader2, MoreVertical, Pencil, Plus, Search, Table as TableIcon, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -507,11 +507,14 @@ export function StatsShell({
             {activeDivision ? (
               <div className="flex items-start justify-between gap-4 border-b pb-3">
                 <div className="min-w-0">
-                  <h2 className="truncate text-lg font-semibold tracking-tight">
-                    {activeDivision.shortLabel
-                      ? `${activeDivision.shortLabel} — ${activeDivision.name}`
-                      : activeDivision.name}
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="truncate text-lg font-semibold tracking-tight">
+                      {activeDivision.shortLabel
+                        ? `${activeDivision.shortLabel} — ${activeDivision.name}`
+                        : activeDivision.name}
+                    </h2>
+                    <SavingOrderPill visible={reorderPending} />
+                  </div>
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     {activeDivision.description ??
                       `${activeDivision.metricCount} ${activeDivision.metricCount === 1 ? 'metric' : 'metrics'}`}
@@ -555,9 +558,12 @@ export function StatsShell({
             ) : (
               <div className="flex items-center justify-between border-b pb-3">
                 <div>
-                  <h2 className="text-lg font-semibold tracking-tight">
-                    All metrics
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold tracking-tight">
+                      All metrics
+                    </h2>
+                    <SavingOrderPill visible={reorderPending} />
+                  </div>
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     {filteredMetrics.length} of {totals.metrics} shown
                   </p>
@@ -1147,4 +1153,20 @@ function toIsoDate(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+/** Small in-header status pill — shows a spinner + "Saving order…"
+ *  while a drag-drop reorder is being persisted to the server. */
+function SavingOrderPill({ visible }: { visible: boolean }) {
+  if (!visible) return null
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+    >
+      <Loader2 className="size-3 animate-spin" aria-hidden />
+      Saving order…
+    </span>
+  )
 }
