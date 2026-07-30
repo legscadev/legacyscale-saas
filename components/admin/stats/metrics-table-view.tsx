@@ -276,8 +276,12 @@ export function MetricsTableView({
           return
         }
 
-        // Reconcile the authoritative month map, then drop the overlay
-        // so the cell reads straight from persisted state.
+        // Reconcile the authoritative month map. On upsert we can
+        // drop the overlay since monthData now owns the truth; on
+        // delete we KEEP the overlay set to null — otherwise
+        // valuesByMetric (from the capped initial page payload) can
+        // resurface a stale point, making the cell repopulate and
+        // any second delete attempt hit "not found".
         const savedId = 'id' in res ? res.id : undefined
         setMonthData((prev) => {
           const nextMap: MonthMap = new Map(prev)
@@ -293,7 +297,7 @@ export function MetricsTableView({
           nextMap.set(metricId, perMetric)
           return nextMap
         })
-        clearOverlayCell(metricId, iso)
+        if (next !== null) clearOverlayCell(metricId, iso)
         onChanged?.()
       })
     },
