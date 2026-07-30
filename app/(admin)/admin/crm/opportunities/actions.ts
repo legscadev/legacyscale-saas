@@ -631,7 +631,7 @@ export async function bulkAssignCloserAction(
     revalidatePath('/team/crm/opportunities/bulk-actions')
     return { ok: true, data: log }
   } catch (err) {
-    return toMutationErr(err, 'Could not assign closer')
+    return toMutationErr(err, 'Could not assign')
   }
 }
 

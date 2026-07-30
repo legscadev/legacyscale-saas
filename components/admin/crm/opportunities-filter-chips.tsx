@@ -78,7 +78,7 @@ export function OpportunitiesFilterChips({
         return (
           <Chip
             key={`ass-${id}`}
-            label={`Closer: ${m?.name ?? m?.email ?? id}`}
+            label={`Assigned: ${m?.name ?? m?.email ?? id}`}
             onClear={() =>
               onChange({
                 ...filter,

@@ -58,7 +58,9 @@ function generateLabel(operation: string, when: Date): string {
 const OPERATION_LABELS = {
   DELETE: 'Delete',
   MOVE_STAGE: 'Move stage',
-  ASSIGN_CLOSER: 'Assign closer',
+  // Enum key stays ASSIGN_CLOSER (schema); label is role-agnostic
+  // — either a setter or a closer can be assigned to a deal.
+  ASSIGN_CLOSER: 'Assign',
 } as const
 
 class CrmBulkActionService {

@@ -426,7 +426,7 @@ export function EditOpportunityDialog({
                       />
                     </Field>
                   </div>
-                  <Field id="edit-closer" label="Assigned closer">
+                  <Field id="edit-closer" label="Assigned to">
                     <select
                       id="edit-closer"
                       value={form.assignedCloserId}

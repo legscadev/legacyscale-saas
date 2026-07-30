@@ -166,7 +166,7 @@ export function OpportunitiesFilterDrawer({
           </FilterGroup>
 
           {/* Assignee */}
-          <FilterGroup title="Assigned closer">
+          <FilterGroup title="Assigned to">
             <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
               {members.length === 0 ? (
                 <p className="text-xs text-muted-foreground">

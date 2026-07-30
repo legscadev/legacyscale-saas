@@ -211,7 +211,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         closerId,
       })
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not assign closer')
+        toast.error(res.error ?? 'Could not assign')
         return
       }
       surfaceBulkResult(closerId ? 'Assigned' : 'Unassigned', res.data)

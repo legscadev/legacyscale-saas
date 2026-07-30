@@ -2,7 +2,7 @@
 
 // Floating toolbar that appears when one or more deals are selected.
 // Exposes bulk operations that map 1:1 to CrmBulkAction operations:
-// Move to stage, Assign closer, Delete. Every action is dispatched
+// Move to stage, Assign, Delete. Every action is dispatched
 // via a small popover so the toolbar itself stays compact.
 
 import { ArrowRight, MoveRight, Trash2, User as UserIcon, X } from 'lucide-react'
@@ -80,17 +80,17 @@ export function BulkSelectToolbar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Assign closer */}
+      {/* Assign to a setter / closer / anyone else on the team */}
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label="Assign a closer to selected deals"
+          aria-label="Assign selected deals to a team member"
           render={<Button variant="ghost" size="sm" disabled={disabled} />}
         >
           <UserIcon className="size-4" />
           Assign
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center" className="max-h-72 w-56 overflow-y-auto">
-          <DropdownMenuLabel>Assign closer</DropdownMenuLabel>
+          <DropdownMenuLabel>Assign to</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => onAssignCloser(null)}>
             <span className="text-muted-foreground">— Unassign —</span>
           </DropdownMenuItem>

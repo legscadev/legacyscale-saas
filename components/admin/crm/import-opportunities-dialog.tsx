@@ -287,7 +287,7 @@ Beta pilot,Bob Smith,bob@beta.co,5000,Contacted"
             {members.length > 0 ? (
               <div className="space-y-1.5">
                 <Label htmlFor="opp-import-assign">
-                  Assign all to closer (optional)
+                  Assign all to (optional)
                 </Label>
                 <select
                   id="opp-import-assign"
