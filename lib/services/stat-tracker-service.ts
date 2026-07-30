@@ -640,7 +640,10 @@ export async function deleteDataPoint(
       },
     },
   })
-  if (!point) return { ok: false, error: 'Data point not found' }
+  // Idempotent: emptying a cell whose data point is already gone
+  // (stale client cache, concurrent edit) should look successful to
+  // the caller — the desired end state is "no value there" either way.
+  if (!point) return { ok: true }
 
   // Symmetric with upsertDataPoint: assignee-User or any admin.
   const assigneeUserId = point.metric.assignedTo?.userId ?? null
