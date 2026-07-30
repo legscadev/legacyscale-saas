@@ -206,6 +206,7 @@ export function ImportOpportunitiesDialog({
 }: ImportOpportunitiesDialogProps) {
   const [pending, startTransition] = useTransition()
   const [text, setText] = useState('')
+  const [file, setFile] = useState<{ name: string; size: number } | null>(null)
   const [assignedCloserId, setAssignedCloserId] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -213,7 +214,9 @@ export function ImportOpportunitiesDialog({
 
   function reset() {
     setText('')
+    setFile(null)
     setAssignedCloserId('')
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   function handleOpenChange(next: boolean) {
@@ -222,10 +225,17 @@ export function ImportOpportunitiesDialog({
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const content = await file.text()
+    const chosen = e.target.files?.[0]
+    if (!chosen) return
+    const content = await chosen.text()
     setText(content)
+    setFile({ name: chosen.name, size: chosen.size })
+  }
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -261,12 +271,15 @@ export function ImportOpportunitiesDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <form onSubmit={handleSubmit}>
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-xl">
+        <form
+          onSubmit={handleSubmit}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           <DialogHeader>
             <DialogTitle>Import opportunities</DialogTitle>
             <DialogDescription>
-              Paste CSV or upload a .csv file. Recognised columns:
+              Upload a .csv or paste CSV text. Recognised columns:
               name (aka “opportunity name”), contact, email, phone,
               company, value (aka “lead value”), probability, stage,
               notes. GHL exports work as-is — extra columns like
@@ -274,50 +287,94 @@ export function ImportOpportunitiesDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            <div className="flex items-center justify-between gap-2">
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleFile}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileRef.current?.click()}
-              >
-                <Upload className="size-4" />
-                Choose .csv
-              </Button>
-              {parsed.rows.length > 0 || parsed.skipped > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {parsed.rows.length} row
-                  {parsed.rows.length === 1 ? '' : 's'} ready
-                  {parsed.skipped > 0 ? (
-                    <span className="ml-1 text-amber-600">
-                      · {parsed.skipped} skipped (missing name)
-                    </span>
-                  ) : null}
-                </p>
-              ) : null}
-            </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFile}
+              className="hidden"
+            />
 
-            <div className="space-y-1.5">
-              <Label htmlFor="opp-import-text">CSV content</Label>
-              <Textarea
-                id="opp-import-text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={8}
-                placeholder="name,contact,email,value,stage
-Acme upgrade,Jane Doe,jane@acme.com,25000,Proposal Sent
-Beta pilot,Bob Smith,bob@beta.co,5000,Contacted"
-                className="font-mono text-xs"
-              />
-            </div>
+            {file ? (
+              /* File-mode summary — hide the raw CSV textarea to
+                 avoid the visual explosion when a large export is
+                 pasted into a small dialog. */
+              <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <Upload className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {file.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatBytes(file.size)} ·{' '}
+                    {parsed.rows.length} row
+                    {parsed.rows.length === 1 ? '' : 's'} ready
+                    {parsed.skipped > 0 ? (
+                      <span className="ml-1 text-amber-600">
+                        · {parsed.skipped} skipped
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={reset}
+                  disabled={pending}
+                >
+                  Change file
+                </Button>
+              </div>
+            ) : (
+              /* No-file mode — button + collapsible paste box. */
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="size-4" />
+                    Choose .csv
+                  </Button>
+                  {parsed.rows.length > 0 || parsed.skipped > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {parsed.rows.length} row
+                      {parsed.rows.length === 1 ? '' : 's'} ready
+                      {parsed.skipped > 0 ? (
+                        <span className="ml-1 text-amber-600">
+                          · {parsed.skipped} skipped
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="opp-import-text">
+                    Or paste CSV content
+                  </Label>
+                  <Textarea
+                    id="opp-import-text"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    rows={6}
+                    placeholder={`name,contact,email,value,stage\nAcme upgrade,Jane Doe,jane@acme.com,25000,Proposal Sent\nBeta pilot,Bob Smith,bob@beta.co,5000,Contacted`}
+                    // Fixed height + horizontal scroll so a wide
+                    // paste doesn't stretch the dialog. `whitespace-pre`
+                    // + `overflow-auto` on Textarea would fight React;
+                    // Tailwind's `resize-y` lets the user grow it if
+                    // they want more room.
+                    className="max-h-48 resize-y font-mono text-xs"
+                  />
+                </div>
+              </>
+            )}
 
             {members.length > 0 ? (
               <div className="space-y-1.5">
