@@ -56,7 +56,14 @@ import {
 
 import { LeadSourceBadge, LeadStatusPill } from './lead-pills'
 
-type SortField = 'createdAt' | 'lastActivityAt' | 'fullName' | 'status'
+type SortField =
+  | 'createdAt'
+  | 'lastActivityAt'
+  | 'fullName'
+  | 'status'
+  | 'email'
+  | 'phone'
+  | 'companyName'
 type SortDir = 'asc' | 'desc'
 
 interface CrmMember {

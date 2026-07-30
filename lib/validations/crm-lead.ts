@@ -147,6 +147,19 @@ export type ConvertLeadOutput = z.output<typeof convertLeadSchema>
 
 const csv = (v: unknown) => (Array.isArray(v) ? v : v === undefined ? [] : [v])
 
+/** ISO date string / empty → Date | null. Used by the created/
+ *  lastActivity date-range filters below. */
+const optionalDateFilter = z
+  .string()
+  .trim()
+  .transform((v) => (v ? v : null))
+  .refine((v) => v === null || !Number.isNaN(new Date(v).getTime()), {
+    message: 'Invalid date',
+  })
+  .transform((v) => (v === null ? null : new Date(v)))
+  .nullable()
+  .optional()
+
 export const leadFilterSchema = z.object({
   search: z.string().trim().max(200).optional(),
   statuses: z.preprocess(csv, z.array(crmLeadStatusSchema)).optional().default([]),
@@ -161,8 +174,27 @@ export const leadFilterSchema = z.object({
    *  just non-converted (still-leads) when they want the pre-P0 #3
    *  inbox view. */
   includeConverted: z.boolean().optional().default(true),
+  /** Narrows to rows with (or without) contact channels — surfaces
+   *  the "cleanup: contacts missing email" view in GHL. */
+  hasEmail: z.boolean().optional(),
+  hasPhone: z.boolean().optional(),
+  /** Company-name substring; complementary to `search` which hits
+   *  many fields — this one is a single-field filter. */
+  companyName: z.string().trim().max(200).optional(),
+  createdFrom: optionalDateFilter,
+  createdTo: optionalDateFilter,
+  lastActivityFrom: optionalDateFilter,
+  lastActivityTo: optionalDateFilter,
   sortBy: z
-    .enum(['createdAt', 'lastActivityAt', 'fullName', 'status'])
+    .enum([
+      'createdAt',
+      'lastActivityAt',
+      'fullName',
+      'status',
+      'email',
+      'phone',
+      'companyName',
+    ])
     .optional()
     .default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
