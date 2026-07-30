@@ -294,14 +294,14 @@ function LeadRow({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
                     <UserCheck className="size-4" />
-                    Assign setter
+                    Assign to
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="max-h-64 overflow-y-auto">
                     <DropdownMenuItem
                       onClick={() =>
                         run(
                           () => assignLeadAction({ leadId: lead.id, setterId: null }),
-                          'Setter cleared',
+                          'Assignee cleared',
                         )
                       }
                     >
