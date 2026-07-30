@@ -21,6 +21,10 @@ import {
   type OpportunityViewRow,
 } from '@/lib/services/crm-opportunity-view-service'
 import {
+  crmLeadService,
+  type LeadListItem,
+} from '@/lib/services/crm-lead-service'
+import {
   crmOpportunityNoteService,
   OpportunityNoteNotFoundError,
   type OpportunityNoteItem,
@@ -351,14 +355,14 @@ export async function updateOpportunityAction(
   id: string,
   input: UpdateOpportunityInput,
 ): Promise<MutationResult<OpportunityListItem>> {
-  await requireTeamModuleAccess('crm-pipeline')
+  const user = await requireTeamModuleAccess('crm-pipeline')
   const parsed = updateOpportunitySchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
   }
 
   try {
-    const data = await crmOpportunityService.update(id, parsed.data)
+    const data = await crmOpportunityService.update(id, parsed.data, user.id)
     revalidateAll()
     return { ok: true, data }
   } catch (err) {
@@ -397,6 +401,21 @@ export async function fetchOpportunityAction(id: string): Promise<
     return { ok: true, data }
   } catch (err) {
     return toMutationErr(err, 'Could not load deal')
+  }
+}
+
+/** Search-as-you-type feed for the contact picker inside the
+ *  opportunity dialogs. Empty query returns the most-recent contacts
+ *  so the picker isn't blank when first opened. */
+export async function searchContactsForPickerAction(
+  query: string,
+): Promise<MutationResult<LeadListItem[]>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const data = await crmLeadService.searchForPicker(query, 10)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not search contacts')
   }
 }
 
@@ -642,7 +661,14 @@ export async function exportOpportunitiesAction(
 /** CSV import — bulk-inserts opportunities into a pipeline. */
 export async function importOpportunitiesAction(
   input: Record<string, unknown>,
-): Promise<MutationResult<{ created: number; skipped: number }>> {
+): Promise<
+  MutationResult<{
+    created: number
+    skipped: number
+    contactsCreated: number
+    contactsLinked: number
+  }>
+> {
   const user = await requireTeamModuleAccess('crm-pipeline')
   const parsed = importOpportunitiesSchema.safeParse(input)
   if (!parsed.success) {

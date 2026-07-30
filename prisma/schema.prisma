@@ -2411,6 +2411,11 @@ model CrmOpportunity {
   assignedCloserId String? @map("assigned_closer_id")
   /// Who created the row. SetNull on user delete.
   createdById      String? @map("created_by_id")
+  /// The contact (CrmLead) this deal hangs off — GHL model: every
+  /// opportunity belongs to a contact, one contact can own many
+  /// opportunities. Nullable while the P0 #3 backfill lands; the
+  /// service layer's find-or-create makes new writes always fill it.
+  contactId        String? @map("contact_id")
 
   status     CrmOpportunityStatus @default(OPEN)
   notes      String?              @db.Text
@@ -2432,7 +2437,10 @@ model CrmOpportunity {
   stage          CrmPipelineStage     @relation(fields: [stageId], references: [id], onDelete: Restrict)
   assignedCloser User?                @relation("CrmOpportunityCloser", fields: [assignedCloserId], references: [id], onDelete: SetNull)
   createdBy      User?                @relation("CrmOpportunityCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  // Leads that converted into this deal (usually 0 or 1).
+  contact        CrmLead?             @relation("CrmOpportunityContact", fields: [contactId], references: [id], onDelete: SetNull)
+  // Leads that converted into this deal (usually 0 or 1) — the
+  // legacy one-shot conversion pointer; distinct from `contact`
+  // above, which is the persistent GHL-style link.
   sourceLeads    CrmLead[]            @relation("CrmLeadConversion")
   tasks          CrmOpportunityTask[]
   noteEntries    CrmOpportunityNote[]
@@ -2442,6 +2450,7 @@ model CrmOpportunity {
   @@index([companyId, assignedCloserId])
   @@index([companyId, status])
   @@index([companyId, deletedAt])
+  @@index([companyId, contactId])
   @@map("crm_opportunities")
 }
 
@@ -2573,10 +2582,13 @@ model CrmLead {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  assignedSetter       User?           @relation("CrmLeadSetter", fields: [assignedSetterId], references: [id], onDelete: SetNull)
-  createdBy            User?           @relation("CrmLeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  convertedOpportunity CrmOpportunity? @relation("CrmLeadConversion", fields: [convertedOpportunityId], references: [id], onDelete: SetNull)
-  companyId            String          @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+  assignedSetter       User?            @relation("CrmLeadSetter", fields: [assignedSetterId], references: [id], onDelete: SetNull)
+  createdBy            User?            @relation("CrmLeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  convertedOpportunity CrmOpportunity?  @relation("CrmLeadConversion", fields: [convertedOpportunityId], references: [id], onDelete: SetNull)
+  /// Every deal (past + present) that hangs off this contact. GHL
+  /// model — one contact → many opportunities over time.
+  opportunities        CrmOpportunity[] @relation("CrmOpportunityContact")
+  companyId            String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([companyId, status])
   @@index([companyId, assignedSetterId])

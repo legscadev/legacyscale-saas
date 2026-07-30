@@ -24,6 +24,9 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 import { createOpportunityAction } from '@/app/(admin)/admin/crm/opportunities/actions'
+import type { LeadListItem } from '@/lib/services/crm-lead-service'
+
+import { ContactPicker, type InlineContactDraft } from './contact-picker'
 import type { OpportunityListItem } from '@/lib/services/crm-opportunity-service'
 import type {
   PipelineStage,
@@ -58,9 +61,9 @@ export function CreateOpportunityDialog({
 }: CreateOpportunityDialogProps) {
   const [pending, startTransition] = useTransition()
   const [name, setName] = useState('')
-  const [contactName, setContactName] = useState('')
-  const [contactEmail, setContactEmail] = useState('')
-  const [contactPhone, setContactPhone] = useState('')
+  const [contact, setContact] = useState<LeadListItem | null>(null)
+  const [contactDraft, setContactDraft] =
+    useState<InlineContactDraft | null>(null)
   const [pipelineId, setPipelineId] = useState(initialPipelineId)
   const [stageId, setStageId] = useState(defaultStageId ?? '')
   const [status, setStatus] = useState<'OPEN' | 'WON' | 'LOST'>('OPEN')
@@ -69,9 +72,8 @@ export function CreateOpportunityDialog({
 
   function reset() {
     setName('')
-    setContactName('')
-    setContactEmail('')
-    setContactPhone('')
+    setContact(null)
+    setContactDraft(null)
     setPipelineId(initialPipelineId)
     setStageId(defaultStageId ?? stages[0]?.id ?? '')
     setStatus('OPEN')
@@ -97,15 +99,31 @@ export function CreateOpportunityDialog({
       return
     }
 
+    // Contact resolution mirrors the edit dialog: picked > draft > none.
+    const contactPayload: {
+      contactId?: string | null
+      contactName?: string | null
+      contactEmail?: string | null
+      contactPhone?: string | null
+      companyName?: string | null
+    } = contact
+      ? { contactId: contact.id }
+      : contactDraft
+        ? {
+            contactName: contactDraft.fullName,
+            contactEmail: contactDraft.email,
+            contactPhone: contactDraft.phone,
+            companyName: contactDraft.companyName,
+          }
+        : {}
+
     startTransition(async () => {
       const res = await createOpportunityAction(pipelineId, {
         name: name.trim(),
         stageId: stageId || undefined,
         status,
         value: parsedValue,
-        contactName: contactName.trim() || null,
-        contactEmail: contactEmail.trim() || null,
-        contactPhone: contactPhone.trim() || null,
+        ...contactPayload,
         assignedCloserId: assignedCloserId || null,
       })
       if (!res.ok) {
@@ -156,37 +174,29 @@ export function CreateOpportunityDialog({
             <div className="min-w-0 flex-1 space-y-6">
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold">Contact details</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field
-                    id="opp-contact"
-                    label="Primary contact name"
-                    required
-                  >
-                    <Input
-                      id="opp-contact"
-                      value={contactName}
-                      onChange={(e) => setContactName(e.target.value)}
-                      placeholder="Select contact"
-                    />
-                  </Field>
-                  <Field id="opp-email" label="Primary email">
-                    <Input
-                      id="opp-email"
-                      type="email"
-                      value={contactEmail}
-                      onChange={(e) => setContactEmail(e.target.value)}
-                      placeholder="Enter email"
-                    />
-                  </Field>
-                </div>
-                <Field id="opp-phone" label="Primary phone">
-                  <Input
-                    id="opp-phone"
-                    value={contactPhone}
-                    onChange={(e) => setContactPhone(e.target.value)}
-                    placeholder="Enter phone"
-                  />
-                </Field>
+                <ContactPicker
+                  label="Contact"
+                  selectedContact={contact}
+                  onPick={(c) => {
+                    setContact(c)
+                    setContactDraft(null)
+                  }}
+                  onInlineCreate={(draft) => {
+                    setContact(null)
+                    setContactDraft(draft)
+                  }}
+                  onClear={() => {
+                    setContact(null)
+                    setContactDraft(null)
+                  }}
+                  disabled={pending}
+                />
+                {contactDraft ? (
+                  <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    New contact <b>{contactDraft.fullName}</b> will be created
+                    on save.
+                  </p>
+                ) : null}
               </section>
 
               <section className="space-y-3">

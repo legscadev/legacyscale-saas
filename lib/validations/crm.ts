@@ -83,6 +83,9 @@ export const createOpportunitySchema = z.object({
   assignedCloserId: z.string().uuid().nullable().optional(),
   notes: z.string().max(20000).nullable().optional(),
   source: z.string().trim().max(100).nullable().optional(),
+  /** Link to an existing contact (crm_leads.id). Falls back to
+   *  find-or-create by contactEmail/contactName when omitted. */
+  contactId: z.string().uuid().nullable().optional(),
 })
 export type CreateOpportunityInput = z.input<typeof createOpportunitySchema>
 export type CreateOpportunityOutput = z.output<typeof createOpportunitySchema>
@@ -114,6 +117,8 @@ export const updateOpportunitySchema = z.object({
    *  auto-flip so a user can mark a deal Lost while it still sits in
    *  a working column. */
   status: crmOpportunityStatusSchema.optional(),
+  /** Change the linked contact (picker). Null explicitly detaches. */
+  contactId: z.string().uuid().nullable().optional(),
 })
 export type UpdateOpportunityInput = z.input<typeof updateOpportunitySchema>
 export type UpdateOpportunityOutput = z.output<typeof updateOpportunitySchema>
