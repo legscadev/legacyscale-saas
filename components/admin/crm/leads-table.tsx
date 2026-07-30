@@ -240,24 +240,35 @@ function LeadRow({
   const subtitle = lead.companyName ?? lead.email
 
   return (
-    <TableRow className={cn(pending && 'opacity-60')}>
+    <TableRow
+      className={cn('transition-colors hover:bg-accent/30', pending && 'opacity-60')}
+    >
       <TableCell>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="truncate font-medium">{lead.fullName}</p>
-            {lead.opportunityCount > 0 ? (
-              <span
-                title={`${lead.opportunityCount} opportunit${lead.opportunityCount === 1 ? 'y' : 'ies'} linked`}
-                className="inline-flex items-center gap-0.5 rounded-full border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums"
-              >
-                {lead.opportunityCount} deal
-                {lead.opportunityCount === 1 ? '' : 's'}
-              </span>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <AvatarGroup
+            users={[{ name: lead.fullName, avatarUrl: null }]}
+            size="sm"
+            max={1}
+          />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="truncate font-medium">{lead.fullName}</p>
+              {lead.opportunityCount > 0 ? (
+                <span
+                  title={`${lead.opportunityCount} opportunit${lead.opportunityCount === 1 ? 'y' : 'ies'} linked`}
+                  className="inline-flex items-center gap-0.5 rounded-full border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums"
+                >
+                  {lead.opportunityCount} deal
+                  {lead.opportunityCount === 1 ? '' : 's'}
+                </span>
+              ) : null}
+            </div>
+            {subtitle ? (
+              <p className="truncate text-xs text-muted-foreground">
+                {subtitle}
+              </p>
             ) : null}
           </div>
-          {subtitle ? (
-            <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
-          ) : null}
         </div>
       </TableCell>
       {columns.map((col) => (
