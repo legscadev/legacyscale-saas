@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 
 import { requireTeamOrAdmin } from '@/lib/auth/get-user'
 import { ImportWizard } from '@/components/admin/crm/import-wizard'
+import { listAssignableSalesUsers } from '@/lib/services/crm-assignable-users'
+import { memberTenantScope } from '@/lib/tenancy/request-company'
 import { fetchPipelineWorkspaceAction } from '@/app/(admin)/admin/crm/opportunities/actions'
 import { fetchLeadsWorkspaceAction } from '@/app/(admin)/admin/crm/leads/actions'
 
@@ -27,12 +29,16 @@ export default async function AdminImportPage({
     params.object === 'opportunities' ? 'opportunities' : 'contacts'
 
   // Pull the workspace payloads for both objects — the wizard needs
-  // members (Contacts + Opportunities) and pipelines/stages
-  // (Opportunities) to render its dropdowns without a client round-
-  // trip after every step.
-  const [oppRes, leadRes] = await Promise.all([
+  // pipelines/stages (Opportunities) to render its dropdowns without
+  // a client round-trip after every step. Members are fetched
+  // separately in strict mode below so the import assignee picker
+  // only offers real setter/closer users regardless of tenant state.
+  const [oppRes, leadRes, strictMembers] = await Promise.all([
     fetchPipelineWorkspaceAction(),
     fetchLeadsWorkspaceAction(),
+    (async () => listAssignableSalesUsers(await memberTenantScope(), {
+      strict: true,
+    }))(),
   ])
   if (!oppRes.ok) throw new Error(oppRes.error ?? 'Could not load pipelines')
   if (!leadRes.ok) throw new Error(leadRes.error ?? 'Could not load contacts')
@@ -41,8 +47,8 @@ export default async function AdminImportPage({
     <ImportWizard
       preselectedObject={preselectedObject}
       pipelines={oppRes.data.pipelines}
-      contactMembers={leadRes.data.members}
-      opportunityMembers={oppRes.data.members}
+      contactMembers={strictMembers}
+      opportunityMembers={strictMembers}
     />
   )
 }

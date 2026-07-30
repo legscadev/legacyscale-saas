@@ -884,13 +884,14 @@ function VerifyStep({
         ) : null}
         <div className="grid gap-1.5">
           <Label htmlFor="import-assignee" className="text-xs">
-            Default {object === 'contacts' ? 'setter' : 'assignee'}
+            Default assignee
           </Label>
           <select
             id="import-assignee"
             value={assigneeId}
             onChange={(e) => onAssigneeChange(e.target.value)}
             className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+            disabled={members.length === 0}
           >
             <option value="">Unassigned</option>
             {members.map((m) => (
@@ -899,6 +900,16 @@ function VerifyStep({
               </option>
             ))}
           </select>
+          {members.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              No users with a Setter or Closer role yet. Assign a role in
+              /admin/team, or leave imports Unassigned.
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              Only users with a Setter or Closer role are eligible.
+            </p>
+          )}
         </div>
       </div>
 
