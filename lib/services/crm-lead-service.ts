@@ -126,8 +126,9 @@ function toListItem(row: LeadRow): LeadListItem {
 }
 
 class CrmLeadService {
-  /** Paginated lead inbox. Converted leads are hidden unless the
-   *  filter opts them in. */
+  /** Paginated contacts list. Converted contacts are hidden only if
+   *  the caller explicitly opts out (GHL model: Contacts is the
+   *  master list, everyone belongs by default). */
   async list(filters: LeadFilterOutput): Promise<LeadListResult> {
     const where: Prisma.CrmLeadWhereInput = { deletedAt: null }
 
@@ -143,6 +144,34 @@ class CrmLeadService {
     if (filters.assigneeIds.length > 0) {
       where.assignedSetterId = { in: filters.assigneeIds }
     }
+    if (filters.hasEmail === true) {
+      where.email = { not: null }
+    } else if (filters.hasEmail === false) {
+      where.email = null
+    }
+    if (filters.hasPhone === true) {
+      where.phone = { not: null }
+    } else if (filters.hasPhone === false) {
+      where.phone = null
+    }
+    if (filters.companyName) {
+      where.companyName = {
+        contains: filters.companyName,
+        mode: 'insensitive',
+      }
+    }
+    if (filters.createdFrom || filters.createdTo) {
+      where.createdAt = {
+        ...(filters.createdFrom ? { gte: filters.createdFrom } : {}),
+        ...(filters.createdTo ? { lte: filters.createdTo } : {}),
+      }
+    }
+    if (filters.lastActivityFrom || filters.lastActivityTo) {
+      where.lastActivityAt = {
+        ...(filters.lastActivityFrom ? { gte: filters.lastActivityFrom } : {}),
+        ...(filters.lastActivityTo ? { lte: filters.lastActivityTo } : {}),
+      }
+    }
     if (filters.search) {
       where.OR = [
         { fullName: { contains: filters.search, mode: 'insensitive' } },
@@ -152,14 +181,39 @@ class CrmLeadService {
       ]
     }
 
-    const orderBy: Prisma.CrmLeadOrderByWithRelationInput =
-      filters.sortBy === 'fullName'
-        ? { fullName: filters.sortOrder }
-        : filters.sortBy === 'status'
-          ? { status: filters.sortOrder }
-          : filters.sortBy === 'lastActivityAt'
-            ? { lastActivityAt: filters.sortOrder }
-            : { createdAt: filters.sortOrder }
+    // orderBy resolution — the added sort fields (email/phone/
+    // companyName) let column-header clicks work everywhere GHL does.
+    // `nulls: 'last'` isn't a Prisma default so we spell it out on
+    // nullable columns to keep empty cells at the bottom.
+    let orderBy: Prisma.CrmLeadOrderByWithRelationInput
+    switch (filters.sortBy) {
+      case 'fullName':
+        orderBy = { fullName: filters.sortOrder }
+        break
+      case 'status':
+        orderBy = { status: filters.sortOrder }
+        break
+      case 'lastActivityAt':
+        orderBy = {
+          lastActivityAt: { sort: filters.sortOrder, nulls: 'last' },
+        }
+        break
+      case 'email':
+        orderBy = { email: { sort: filters.sortOrder, nulls: 'last' } }
+        break
+      case 'phone':
+        orderBy = { phone: { sort: filters.sortOrder, nulls: 'last' } }
+        break
+      case 'companyName':
+        orderBy = {
+          companyName: { sort: filters.sortOrder, nulls: 'last' },
+        }
+        break
+      case 'createdAt':
+      default:
+        orderBy = { createdAt: filters.sortOrder }
+        break
+    }
 
     const [total, rows] = await Promise.all([
       prisma.crmLead.count({ where }),

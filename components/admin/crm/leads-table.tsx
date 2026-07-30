@@ -56,8 +56,53 @@ import {
 
 import { LeadSourceBadge, LeadStatusPill } from './lead-pills'
 
-type SortField = 'createdAt' | 'lastActivityAt' | 'fullName' | 'status'
+type SortField =
+  | 'createdAt'
+  | 'lastActivityAt'
+  | 'fullName'
+  | 'status'
+  | 'email'
+  | 'phone'
+  | 'companyName'
 type SortDir = 'asc' | 'desc'
+
+/** Which columns the picker can toggle. `contact` and `actions`
+ *  aren't in this list — they're always rendered. */
+export type OptionalColumnId =
+  | 'phone'
+  | 'email'
+  | 'companyName'
+  | 'source'
+  | 'status'
+  | 'setter'
+  | 'lastActivity'
+  | 'createdAt'
+
+export interface ColumnDefinition {
+  id: OptionalColumnId
+  label: string
+  sortField?: SortField
+}
+
+/** Column catalogue for the Manage-fields picker + table header
+ *  render. Order here defines display order. */
+export const OPTIONAL_COLUMNS: ColumnDefinition[] = [
+  { id: 'phone', label: 'Phone', sortField: 'phone' },
+  { id: 'email', label: 'Email', sortField: 'email' },
+  { id: 'companyName', label: 'Company', sortField: 'companyName' },
+  { id: 'source', label: 'Source' },
+  { id: 'status', label: 'Status', sortField: 'status' },
+  { id: 'setter', label: 'Assigned to' },
+  { id: 'lastActivity', label: 'Last activity', sortField: 'lastActivityAt' },
+  { id: 'createdAt', label: 'Created', sortField: 'createdAt' },
+]
+
+export const DEFAULT_VISIBLE_COLUMNS: OptionalColumnId[] = [
+  'source',
+  'status',
+  'setter',
+  'lastActivity',
+]
 
 interface CrmMember {
   id: string
@@ -74,6 +119,9 @@ interface LeadsTableProps {
   onSortChange: (field: SortField) => void
   onConvert: (lead: LeadListItem) => void
   onCreate?: () => void
+  /** Which optional columns the picker enabled. `contact` + `actions`
+   *  are always rendered and don't appear here. */
+  visibleColumns: OptionalColumnId[]
   /** Called after a row mutation so the shell can refresh. */
   onChanged: () => void
 }
@@ -93,8 +141,10 @@ export function LeadsTable({
   onSortChange,
   onConvert,
   onCreate,
+  visibleColumns,
   onChanged,
 }: LeadsTableProps) {
+  const columns = OPTIONAL_COLUMNS.filter((c) => visibleColumns.includes(c.id))
   if (items.length === 0) {
     return (
       <EmptyState
@@ -112,17 +162,29 @@ export function LeadsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <SortableHead field="fullName" current={sortBy} dir={sortOrder} onSortChange={onSortChange}>
-              Lead
+            <SortableHead
+              field="fullName"
+              current={sortBy}
+              dir={sortOrder}
+              onSortChange={onSortChange}
+            >
+              Contact
             </SortableHead>
-            <TableHead>Source</TableHead>
-            <SortableHead field="status" current={sortBy} dir={sortOrder} onSortChange={onSortChange}>
-              Status
-            </SortableHead>
-            <TableHead>Setter</TableHead>
-            <SortableHead field="lastActivityAt" current={sortBy} dir={sortOrder} onSortChange={onSortChange}>
-              Last activity
-            </SortableHead>
+            {columns.map((col) =>
+              col.sortField ? (
+                <SortableHead
+                  key={col.id}
+                  field={col.sortField}
+                  current={sortBy}
+                  dir={sortOrder}
+                  onSortChange={onSortChange}
+                >
+                  {col.label}
+                </SortableHead>
+              ) : (
+                <TableHead key={col.id}>{col.label}</TableHead>
+              ),
+            )}
             <TableHead className="w-12 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -133,6 +195,7 @@ export function LeadsTable({
               lead={lead}
               members={members}
               onConvert={onConvert}
+              columns={columns}
               onChanged={onChanged}
             />
           ))}
@@ -146,17 +209,23 @@ function LeadRow({
   lead,
   members,
   onConvert,
+  columns,
   onChanged,
 }: {
   lead: LeadListItem
   members: CrmMember[]
   onConvert: (lead: LeadListItem) => void
+  columns: ColumnDefinition[]
   onChanged: () => void
 }) {
   const [pending, startTransition] = useTransition()
-  const isConverted = lead.status === 'CONVERTED' || !!lead.convertedOpportunityId
+  const isConverted =
+    lead.status === 'CONVERTED' || !!lead.convertedOpportunityId
 
-  function run(fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string) {
+  function run(
+    fn: () => Promise<{ ok: boolean; error?: string }>,
+    okMsg: string,
+  ) {
     startTransition(async () => {
       const res = await fn()
       if (!res.ok) {
@@ -171,66 +240,42 @@ function LeadRow({
   const subtitle = lead.companyName ?? lead.email
 
   return (
-    <TableRow className={cn(pending && 'opacity-60')}>
+    <TableRow
+      className={cn('transition-colors hover:bg-accent/30', pending && 'opacity-60')}
+    >
       <TableCell>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="truncate font-medium">{lead.fullName}</p>
-            {lead.opportunityCount > 0 ? (
-              <span
-                title={`${lead.opportunityCount} opportunit${lead.opportunityCount === 1 ? 'y' : 'ies'} linked`}
-                className="inline-flex items-center gap-0.5 rounded-full border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums"
-              >
-                {lead.opportunityCount} deal
-                {lead.opportunityCount === 1 ? '' : 's'}
-              </span>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <AvatarGroup
+            users={[{ name: lead.fullName, avatarUrl: null }]}
+            size="sm"
+            max={1}
+          />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="truncate font-medium">{lead.fullName}</p>
+              {lead.opportunityCount > 0 ? (
+                <span
+                  title={`${lead.opportunityCount} opportunit${lead.opportunityCount === 1 ? 'y' : 'ies'} linked`}
+                  className="inline-flex items-center gap-0.5 rounded-full border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums"
+                >
+                  {lead.opportunityCount} deal
+                  {lead.opportunityCount === 1 ? '' : 's'}
+                </span>
+              ) : null}
+            </div>
+            {subtitle ? (
+              <p className="truncate text-xs text-muted-foreground">
+                {subtitle}
+              </p>
             ) : null}
           </div>
-          {subtitle ? (
-            <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
-          ) : null}
         </div>
       </TableCell>
-      <TableCell>
-        <LeadSourceBadge source={lead.source} />
-      </TableCell>
-      <TableCell>
-        {isConverted && lead.convertedOpportunityId ? (
-          <Link
-            href="/admin/crm/opportunities"
-            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline"
-          >
-            {CRM_LEAD_STATUS_LABELS.CONVERTED}
-            <ArrowRight className="size-3" />
-          </Link>
-        ) : (
-          <LeadStatusPill status={lead.status} />
-        )}
-      </TableCell>
-      <TableCell>
-        {lead.assignedSetter ? (
-          <div className="flex items-center gap-2">
-            <AvatarGroup
-              users={[
-                {
-                  name: lead.assignedSetter.name ?? lead.assignedSetter.email,
-                  avatarUrl: lead.assignedSetter.avatarUrl,
-                },
-              ]}
-              size="sm"
-              max={1}
-            />
-            <span className="truncate text-xs text-muted-foreground">
-              {lead.assignedSetter.name ?? lead.assignedSetter.email}
-            </span>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">Unassigned</span>
-        )}
-      </TableCell>
-      <TableCell className="text-xs text-muted-foreground tabular-nums">
-        {relativeTime(lead.lastActivityAt)}
-      </TableCell>
+      {columns.map((col) => (
+        <TableCell key={col.id}>
+          {renderOptionalCell(col.id, lead, isConverted)}
+        </TableCell>
+      ))}
       <TableCell className="text-right">
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -317,6 +362,87 @@ function LeadRow({
       </TableCell>
     </TableRow>
   )
+}
+
+/** Cell renderer for the optional columns the picker toggles.
+ *  Kept as a standalone function so both LeadRow and a future
+ *  saved-view preview can share the layout. */
+function renderOptionalCell(
+  id: OptionalColumnId,
+  lead: LeadListItem,
+  isConverted: boolean,
+): React.ReactNode {
+  switch (id) {
+    case 'phone':
+      return lead.phone ? (
+        <span className="text-sm tabular-nums">{lead.phone}</span>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      )
+    case 'email':
+      return lead.email ? (
+        <span className="truncate text-sm">{lead.email}</span>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      )
+    case 'companyName':
+      return lead.companyName ? (
+        <span className="truncate text-sm">{lead.companyName}</span>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      )
+    case 'source':
+      return <LeadSourceBadge source={lead.source} />
+    case 'status':
+      return isConverted && lead.convertedOpportunityId ? (
+        <Link
+          href="/admin/crm/opportunities"
+          className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline"
+        >
+          {CRM_LEAD_STATUS_LABELS.CONVERTED}
+          <ArrowRight className="size-3" />
+        </Link>
+      ) : (
+        <LeadStatusPill status={lead.status} />
+      )
+    case 'setter':
+      return lead.assignedSetter ? (
+        <div className="flex items-center gap-2">
+          <AvatarGroup
+            users={[
+              {
+                name:
+                  lead.assignedSetter.name ?? lead.assignedSetter.email,
+                avatarUrl: lead.assignedSetter.avatarUrl,
+              },
+            ]}
+            size="sm"
+            max={1}
+          />
+          <span className="truncate text-xs text-muted-foreground">
+            {lead.assignedSetter.name ?? lead.assignedSetter.email}
+          </span>
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground">Unassigned</span>
+      )
+    case 'lastActivity':
+      return (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {relativeTime(lead.lastActivityAt)}
+        </span>
+      )
+    case 'createdAt':
+      return (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {relativeTime(lead.createdAt)}
+        </span>
+      )
+    default: {
+      const _exhaustive: never = id
+      return _exhaustive
+    }
+  }
 }
 
 function SortableHead({

@@ -15,14 +15,36 @@ function parseFilters(
 ): Record<string, unknown> {
   const scalar = (v: string | string[] | undefined) =>
     v === undefined ? undefined : Array.isArray(v) ? v[0] : v
+  const csvList = (v: string | undefined): string[] | undefined =>
+    v ? v.split(',').filter(Boolean) : undefined
+  const bool = (v: string | undefined): boolean | undefined => {
+    if (v === '1' || v === 'true') return true
+    if (v === '0' || v === 'false') return false
+    return undefined
+  }
   return {
     search: scalar(raw.q),
-    statuses: scalar(raw.status) ? [scalar(raw.status)] : undefined,
-    sources: scalar(raw.source) ? [scalar(raw.source)] : undefined,
+    // Support both `?status=NEW` (legacy single) and `?statuses=NEW,CONTACTED`
+    // (drawer chip toggles).
+    statuses:
+      csvList(scalar(raw.statuses)) ??
+      (scalar(raw.status) ? [scalar(raw.status)] : undefined),
+    sources:
+      csvList(scalar(raw.sources)) ??
+      (scalar(raw.source) ? [scalar(raw.source)] : undefined),
+    assigneeIds: csvList(scalar(raw.assignees)),
     mine: scalar(raw.mine) === '1',
+    hasEmail: bool(scalar(raw.has_email)),
+    hasPhone: bool(scalar(raw.has_phone)),
+    companyName: scalar(raw.company),
+    createdFrom: scalar(raw.created_from),
+    createdTo: scalar(raw.created_to),
+    lastActivityFrom: scalar(raw.activity_from),
+    lastActivityTo: scalar(raw.activity_to),
     sortBy: scalar(raw.sort),
     sortOrder: scalar(raw.dir),
     page: scalar(raw.page),
+    limit: scalar(raw.per_page),
   }
 }
 
