@@ -358,6 +358,16 @@ class CrmOpportunityService {
         ...(input.assignedCloserId !== undefined ? { assignedCloserId: input.assignedCloserId } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.source !== undefined ? { source: input.source } : {}),
+        ...(input.status !== undefined
+          ? {
+              status: input.status,
+              // Keep wonAt/lostAt in sync with a manual status flip so
+              // the same reporting queries that read those stamps
+              // (Won-this-month, Lost-in-Q2 etc.) still line up.
+              wonAt: input.status === 'WON' ? new Date() : null,
+              lostAt: input.status === 'LOST' ? new Date() : null,
+            }
+          : {}),
       },
       select: {
         id: true,
@@ -407,20 +417,36 @@ class CrmOpportunityService {
     })
     if (!existing) throw new OpportunityNotFoundError()
 
+    // Look up the target stage without pinning it to the deal's
+    // current pipeline — this is the same write path used by
+    // Kanban drag-drop (same-pipeline) AND by the edit dialog when
+    // the user picks a different pipeline. Tenancy is enforced by
+    // the Prisma extension.
     const target = await prisma.crmPipelineStage.findFirst({
-      where: { id: stageId, pipelineId: existing.pipelineId },
-      select: { id: true, isWon: true, isLost: true, probability: true },
+      where: { id: stageId },
+      select: {
+        id: true,
+        pipelineId: true,
+        isWon: true,
+        isLost: true,
+        probability: true,
+      },
     })
     if (!target) throw new StageNotFoundError()
 
-    const finalOrderIndex =
-      orderIndex ?? (await nextOrderIndex(companyId, stageId))
+    const crossPipeline = target.pipelineId !== existing.pipelineId
+    // A cross-pipeline move always drops the card at the tail of its
+    // destination column — there's no drag position to honour.
+    const finalOrderIndex = crossPipeline
+      ? await nextOrderIndex(companyId, stageId)
+      : (orderIndex ?? (await nextOrderIndex(companyId, stageId)))
 
     const status = target.isWon ? 'WON' : target.isLost ? 'LOST' : 'OPEN'
 
     const updated = await prisma.crmOpportunity.update({
       where: { id },
       data: {
+        ...(crossPipeline ? { pipelineId: target.pipelineId } : {}),
         stageId,
         orderIndex: finalOrderIndex,
         status,

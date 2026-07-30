@@ -9,7 +9,7 @@
 // a stage change routes through moveOpportunityAction (so WON/LOST
 // status + close timestamps stay correct).
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import {
   Bookmark,
   Calendar,
@@ -41,6 +41,7 @@ import { cn } from '@/lib/utils'
 import {
   deleteOpportunityAction,
   fetchOpportunityAction,
+  fetchPipelineStagesAction,
   moveOpportunityAction,
   updateOpportunityAction,
 } from '@/app/(admin)/admin/crm/opportunities/actions'
@@ -84,6 +85,7 @@ interface FormState {
   notes: string
   source: string
   status: 'OPEN' | 'WON' | 'LOST'
+  pipelineId: string
   stageId: string
 }
 
@@ -105,9 +107,45 @@ export function EditOpportunityDialog({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [form, setForm] = useState<FormState | null>(null)
   const [initialStageId, setInitialStageId] = useState<string>('')
+  const [initialPipelineId, setInitialPipelineId] = useState<string>('')
+  const [initialStatus, setInitialStatus] =
+    useState<'OPEN' | 'WON' | 'LOST'>('OPEN')
   const [section, setSection] = useState<EditSection>('details')
+  /** Stages for the pipeline currently picked in the form — starts as
+   *  the loaded deal's pipeline stages, swapped when the user picks a
+   *  different pipeline from the dropdown. */
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(stages)
+  const [loadingStages, setLoadingStages] = useState(false)
 
   const loading = !!opportunityId && form?.id !== opportunityId
+
+  /** Swap the pipeline the deal belongs to. Fetches the target
+   *  pipeline's stages, defaults the stageId to the first stage, and
+   *  keeps the working form in sync. */
+  function handlePipelineChange(nextPipelineId: string) {
+    if (!form || nextPipelineId === form.pipelineId) return
+    setLoadingStages(true)
+    fetchPipelineStagesAction(nextPipelineId).then((res) => {
+      setLoadingStages(false)
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not load stages')
+        return
+      }
+      // StageWithCount is PipelineStage + dealCount; the extra field
+      // is harmless in the select-options render below.
+      const nextStages = res.data as PipelineStage[]
+      setPipelineStages(nextStages)
+      setForm((prev) =>
+        prev
+          ? {
+              ...prev,
+              pipelineId: nextPipelineId,
+              stageId: nextStages[0]?.id ?? '',
+            }
+          : prev,
+      )
+    })
+  }
 
   useEffect(() => {
     if (!opportunityId) return
@@ -121,8 +159,11 @@ export function EditOpportunityDialog({
       }
       const d = res.data
       setInitialStageId(d.stageId)
+      setInitialPipelineId(d.pipelineId)
+      setInitialStatus(d.status)
       setConfirmingDelete(false)
       setSection('details')
+      setPipelineStages(stages)
       setForm({
         id: d.id,
         name: d.name,
@@ -139,6 +180,7 @@ export function EditOpportunityDialog({
         notes: d.notes ?? '',
         source: d.source ?? '',
         status: d.status,
+        pipelineId: d.pipelineId,
         stageId: d.stageId,
       })
     })
@@ -150,11 +192,6 @@ export function EditOpportunityDialog({
   function set<K extends keyof FormState>(key: K, val: FormState[K]) {
     setForm((prev) => (prev ? { ...prev, [key]: val } : prev))
   }
-
-  const currentPipeline = useMemo(
-    () => pipelines.find((p) => p.id === currentPipelineId) ?? null,
-    [pipelines, currentPipelineId],
-  )
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -179,6 +216,26 @@ export function EditOpportunityDialog({
     }
 
     startTransition(async () => {
+      // Stage / pipeline change goes first so the stage-driven status
+      // auto-flip runs before we apply a manual status override below.
+      const stageOrPipelineChanged =
+        form.stageId !== initialStageId ||
+        form.pipelineId !== initialPipelineId
+      if (form.stageId && stageOrPipelineChanged) {
+        const moveRes = await moveOpportunityAction({
+          opportunityId,
+          stageId: form.stageId,
+        })
+        if (!moveRes.ok) {
+          toast.error(moveRes.error ?? 'Could not move stage')
+          return
+        }
+      }
+
+      // Only send status when the user actually changed it — the move
+      // above may have already flipped it, and passing it unchanged
+      // would re-stamp wonAt/lostAt for no reason.
+      const statusChanged = form.status !== initialStatus
       const res = await updateOpportunityAction(opportunityId, {
         name: form.name.trim(),
         value: parsedValue,
@@ -191,24 +248,11 @@ export function EditOpportunityDialog({
         assignedCloserId: form.assignedCloserId || null,
         notes: form.notes.trim() || null,
         source: form.source.trim() || null,
+        ...(statusChanged ? { status: form.status } : {}),
       })
       if (!res.ok) {
         toast.error(res.error ?? 'Could not save opportunity')
         return
-      }
-      // Stage change routes through the move path so WON/LOST + close
-      // timestamps update.
-      if (form.stageId && form.stageId !== initialStageId) {
-        const moveRes = await moveOpportunityAction({
-          opportunityId,
-          stageId: form.stageId,
-        })
-        if (!moveRes.ok) {
-          toast.error(moveRes.error ?? 'Saved, but could not move stage')
-          onChanged()
-          onOpenChange(false)
-          return
-        }
       }
       toast.success('Opportunity updated')
       onChanged()
@@ -398,22 +442,18 @@ export function EditOpportunityDialog({
                   </Field>
                   <div className="grid grid-cols-2 gap-3">
                     <Field id="edit-pipeline" label="Pipeline">
-                      {/* Moving a deal to another pipeline isn't wired
-                          yet — show the current pipeline read-only so
-                          the layout still matches HL. */}
                       <select
                         id="edit-pipeline"
-                        value={currentPipeline?.id ?? ''}
-                        disabled
+                        value={form.pipelineId}
+                        onChange={(e) => handlePipelineChange(e.target.value)}
+                        disabled={loadingStages || pending}
                         className={SELECT_CLASS}
                       >
-                        {currentPipeline ? (
-                          <option value={currentPipeline.id}>
-                            {currentPipeline.name}
+                        {pipelines.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
                           </option>
-                        ) : (
-                          <option value="">—</option>
-                        )}
+                        ))}
                       </select>
                     </Field>
                     <Field id="edit-stage" label="Stage">
@@ -421,9 +461,10 @@ export function EditOpportunityDialog({
                         id="edit-stage"
                         value={form.stageId}
                         onChange={(e) => set('stageId', e.target.value)}
+                        disabled={loadingStages || pending}
                         className={SELECT_CLASS}
                       >
-                        {stages.map((s) => (
+                        {pipelineStages.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.name}
                           </option>
@@ -436,8 +477,12 @@ export function EditOpportunityDialog({
                       <select
                         id="edit-status"
                         value={form.status}
-                        disabled
-                        title="Status flips automatically when the deal lands in a Won or Lost stage."
+                        onChange={(e) =>
+                          set(
+                            'status',
+                            e.target.value as 'OPEN' | 'WON' | 'LOST',
+                          )
+                        }
                         className={SELECT_CLASS}
                       >
                         <option value="OPEN">Open</option>

@@ -110,6 +110,10 @@ export const updateOpportunitySchema = z.object({
   assignedCloserId: z.string().uuid().nullable().optional(),
   notes: z.string().max(20000).nullable().optional(),
   source: z.string().trim().max(100).nullable().optional(),
+  /** Manual OPEN/WON/LOST override — bypasses the stage-terminality
+   *  auto-flip so a user can mark a deal Lost while it still sits in
+   *  a working column. */
+  status: crmOpportunityStatusSchema.optional(),
 })
 export type UpdateOpportunityInput = z.input<typeof updateOpportunitySchema>
 export type UpdateOpportunityOutput = z.output<typeof updateOpportunitySchema>
