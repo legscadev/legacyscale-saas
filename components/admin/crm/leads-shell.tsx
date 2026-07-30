@@ -44,6 +44,7 @@ import {
   countActiveContactFilters,
   parseContactsFilterFromParams,
 } from './contacts-filter-drawer'
+import { ContactsViewTabs } from './contacts-view-tabs'
 import { CreateLeadDialog } from './create-lead-dialog'
 import { ImportLeadsDialog } from './import-leads-dialog'
 import {
@@ -88,7 +89,7 @@ export function LeadsShell({
 }: LeadsShellProps) {
   const router = useRouter()
   const params = useSearchParams()
-  const { leads, members } = initialData
+  const { leads, members, views } = initialData
 
   const [createOpen, setCreateOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -107,6 +108,38 @@ export function LeadsShell({
     [params],
   )
   const activeFilterCount = countActiveContactFilters(filterState)
+  const activeViewId = params.get('view')
+
+  /** Snapshot of everything a smart list needs to fully restore the
+   *  surface — filter facets + free-text search + sort + per-page.
+   *  Extra keys are ignored by the parser but harmless. */
+  const currentFilterBlob = useMemo(
+    () => ({
+      ...filterState,
+      search: params.get('q') ?? '',
+      sortBy,
+      sortOrder,
+      perPage,
+    }),
+    [filterState, params, sortBy, sortOrder, perPage],
+  )
+  /** True when the URL carries any filter/sort/search that differs
+   *  from the built-in "All" view — powers the Save-as button
+   *  visibility in the tabs row. */
+  const isDirty = useMemo(() => {
+    if (activeFilterCount > 0) return true
+    if ((params.get('q') ?? '').trim().length > 0) return true
+    if (sortBy !== 'createdAt' || sortOrder !== 'desc') return true
+    return false
+  }, [activeFilterCount, params, sortBy, sortOrder])
+  /** Query string minus the tab-id + page, for the "Save as" button
+   *  visibility check. */
+  const currentQuery = useMemo(() => {
+    const qs = new URLSearchParams(params.toString())
+    qs.delete('view')
+    qs.delete('page')
+    return qs.toString()
+  }, [params])
 
   /** Push a new query string, resetting page unless paging. */
   function setParams(
@@ -156,6 +189,15 @@ export function LeadsShell({
             </Button>
           </div>
         }
+      />
+
+      <ContactsViewTabs
+        basePath={basePath}
+        views={views}
+        activeViewId={activeViewId}
+        currentFilter={currentFilterBlob as Record<string, unknown>}
+        currentQuery={currentQuery}
+        isDirty={isDirty}
       />
 
       {/* Toolbar */}

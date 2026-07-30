@@ -204,6 +204,46 @@ export const leadFilterSchema = z.object({
 export type LeadFilterInput = z.input<typeof leadFilterSchema>
 export type LeadFilterOutput = z.output<typeof leadFilterSchema>
 
+// ---- Smart Lists (saved contact views) ----
+
+/** Shape of a persisted Contacts smart-list filter blob. Kept
+ *  permissive — extra keys the client stores (per-page, column
+ *  visibility) round-trip untouched. Bad values are silently
+ *  dropped by passthrough. */
+export const contactViewFilterSchema = z
+  .object({
+    statuses: z.array(crmLeadStatusSchema).default([]),
+    sources: z.array(crmLeadSourceSchema).default([]),
+    assigneeIds: z.array(z.string()).default([]),
+    companyName: z.string().default(''),
+    hasEmail: z.union([z.boolean(), z.null()]).default(null),
+    hasPhone: z.union([z.boolean(), z.null()]).default(null),
+    createdFrom: z.string().default(''),
+    createdTo: z.string().default(''),
+    lastActivityFrom: z.string().default(''),
+    lastActivityTo: z.string().default(''),
+    search: z.string().default(''),
+    sortBy: z.string().default('createdAt'),
+    sortOrder: z.enum(['asc', 'desc']).default('desc'),
+    perPage: z.number().int().min(1).max(200).optional(),
+  })
+  .passthrough()
+
+export const createContactViewSchema = z.object({
+  name: z.string().trim().min(1, 'View name is required').max(80),
+  filter: contactViewFilterSchema,
+})
+
+export const renameContactViewSchema = z.object({
+  viewId: z.string().uuid(),
+  name: z.string().trim().min(1, 'View name is required').max(80),
+})
+
+export const updateContactViewFilterSchema = z.object({
+  viewId: z.string().uuid(),
+  filter: contactViewFilterSchema,
+})
+
 /** One parsed CSV row. Same permissive shape as a manual create,
  *  minus the fields a spreadsheet won't carry. */
 export const csvLeadRowSchema = z.object({

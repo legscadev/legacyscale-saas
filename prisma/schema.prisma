@@ -318,6 +318,8 @@ model User {
   // CRM — saved filter views on the Opportunities board (one per
   // user; the user owns their private views).
   crmOpportunityViews CrmOpportunityView[] @relation("CrmOpportunityViewOwner")
+  // CRM — same pattern for the Contacts inbox (GHL "Smart Lists").
+  crmContactViews     CrmContactView[]     @relation("CrmContactViewOwner")
 
   // CRM — opportunity task/note authorship + assignment. Tasks track
   // both who created the row and who's meant to complete it; notes
@@ -2696,4 +2698,23 @@ model CrmOpportunityView {
 
   @@index([companyId, ownerId, orderIndex])
   @@map("crm_opportunity_views")
+}
+
+/// Smart-list saved views on the Contacts inbox — GHL's "Smart
+/// Lists" tab row above the table. Private per owner. filterJson
+/// stores the serialised ContactsFilterState + sort + per-page
+/// so the tab restores the whole surface state on click.
+model CrmContactView {
+  id         String   @id @default(uuid())
+  name       String
+  ownerId    String?  @map("owner_id")
+  owner      User?    @relation("CrmContactViewOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  filterJson Json     @map("filter_json")
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  companyId  String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, ownerId, orderIndex])
+  @@map("crm_contact_views")
 }

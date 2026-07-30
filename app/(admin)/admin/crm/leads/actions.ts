@@ -5,9 +5,15 @@
 // {ok,...}. Same shape as the pipeline + task-tracker actions.
 
 import { revalidatePath } from 'next/cache'
+import type { Prisma } from '@prisma/client'
 
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { prisma } from '@/lib/prisma'
+import {
+  ContactViewNotFoundError,
+  crmContactViewService,
+  type ContactViewRow,
+} from '@/lib/services/crm-contact-view-service'
 import {
   crmLeadService,
   LeadAlreadyConvertedError,
@@ -23,9 +29,12 @@ import {
   assignLeadSchema,
   changeLeadStatusSchema,
   convertLeadSchema,
+  createContactViewSchema,
   createLeadSchema,
   importLeadsSchema,
   leadFilterSchema,
+  renameContactViewSchema,
+  updateContactViewFilterSchema,
   updateLeadSchema,
   type CreateLeadInput,
   type ImportLeadsInput,
@@ -64,6 +73,9 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
   if (err instanceof LeadAlreadyConvertedError) {
     return { ok: false, error: err.message }
   }
+  if (err instanceof ContactViewNotFoundError) {
+    return { ok: false, error: err.message }
+  }
   console.error('[crm/leads/actions]', fallback, err)
   const message = err instanceof Error ? err.message : fallback
   return { ok: false, error: message }
@@ -93,6 +105,9 @@ export interface LeadsWorkspacePayload {
   members: CrmTeamMember[]
   currentUserId: string
   companyId: string | null
+  /** Owner-scoped saved views (GHL "Smart Lists"). Empty on
+   *  tenants/users that haven't saved any. */
+  views: ContactViewRow[]
 }
 
 export async function fetchLeadsWorkspaceAction(
@@ -119,7 +134,7 @@ export async function fetchLeadsWorkspaceAction(
 
   try {
     const tenantScope = await memberTenantScope()
-    const [leads, members] = await Promise.all([
+    const [leads, members, views] = await Promise.all([
       crmLeadService.list(parsed.data),
       prisma.user.findMany({
         where: {
@@ -131,11 +146,18 @@ export async function fetchLeadsWorkspaceAction(
         select: { id: true, name: true, email: true, avatarUrl: true },
         orderBy: [{ name: 'asc' }, { email: 'asc' }],
       }),
+      crmContactViewService.list(currentUser.id),
     ])
 
     return {
       ok: true,
-      data: { leads, members, currentUserId: currentUser.id, companyId },
+      data: {
+        leads,
+        members,
+        currentUserId: currentUser.id,
+        companyId,
+        views,
+      },
     }
   } catch (err) {
     return toMutationErr(err, 'Could not load leads')
@@ -287,5 +309,100 @@ export async function deleteLeadAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not delete lead')
+  }
+}
+
+// ============================================
+// SMART LISTS  (saved views on the Contacts inbox)
+// ============================================
+
+export async function fetchContactViewsAction(): Promise<
+  MutationResult<ContactViewRow[]>
+> {
+  const user = await requireTeamModuleAccess('crm-leads')
+  try {
+    const data = await crmContactViewService.list(user.id)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load smart lists')
+  }
+}
+
+export async function createContactViewAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<ContactViewRow>> {
+  const user = await requireTeamModuleAccess('crm-leads')
+  const parsed = createContactViewSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmContactViewService.create({
+      name: parsed.data.name,
+      // Zod validated the shape; Prisma's InputJsonValue is a nominal
+      // type that objects with a permissive index signature don't
+      // structurally match, so we cast at the boundary.
+      filter: parsed.data.filter as unknown as Prisma.InputJsonValue,
+      ownerId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not save smart list')
+  }
+}
+
+export async function renameContactViewAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult> {
+  const user = await requireTeamModuleAccess('crm-leads')
+  const parsed = renameContactViewSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await crmContactViewService.rename({
+      viewId: parsed.data.viewId,
+      name: parsed.data.name,
+      ownerId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not rename smart list')
+  }
+}
+
+export async function updateContactViewFilterAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult> {
+  const user = await requireTeamModuleAccess('crm-leads')
+  const parsed = updateContactViewFilterSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await crmContactViewService.updateFilter({
+      viewId: parsed.data.viewId,
+      filter: parsed.data.filter as unknown as Prisma.InputJsonValue,
+      ownerId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not update smart list')
+  }
+}
+
+export async function deleteContactViewAction(
+  viewId: string,
+): Promise<MutationResult> {
+  const user = await requireTeamModuleAccess('crm-leads')
+  try {
+    await crmContactViewService.delete({ viewId, ownerId: user.id })
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete smart list')
   }
 }
