@@ -92,16 +92,24 @@ export interface OpportunityListItem {
   companyName: string | null
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
-  /** True when the deal has non-empty notes — powers the card's
-   *  note-indicator icon without shipping the full notes text. */
+  /** True when the free-text notes field on the row is populated —
+   *  legacy indicator kept for CSV-imported deals. The timeline count
+   *  below is what the card shows for new activity. */
   hasNotes: boolean
+  /** Free-text lead source (e.g. "Facebook", "Referral"). */
+  source: string | null
+  /** Total notes in the timeline table (0 when the tab hasn't been used). */
+  noteCount: number
+  /** Only tasks still open — the card badge is about outstanding work,
+   *  not completed history. */
+  openTaskCount: number
 }
 
 const CLOSER_SELECT = {
   select: { id: true, name: true, email: true, avatarUrl: true },
 } as const satisfies Prisma.UserDefaultArgs
 
-function toListItem(row: {
+interface ToListItemRow {
   id: string
   name: string
   stageId: string
@@ -114,7 +122,12 @@ function toListItem(row: {
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
   notes: string | null
-}): OpportunityListItem {
+  source: string | null
+  noteCount?: number
+  openTaskCount?: number
+}
+
+function toListItem(row: ToListItemRow): OpportunityListItem {
   return {
     id: row.id,
     name: row.name,
@@ -130,6 +143,9 @@ function toListItem(row: {
     expectedCloseDate: row.expectedCloseDate,
     assignedCloser: row.assignedCloser,
     hasNotes: row.notes !== null && row.notes.trim().length > 0,
+    source: row.source,
+    noteCount: row.noteCount ?? 0,
+    openTaskCount: row.openTaskCount ?? 0,
   }
 }
 
@@ -180,9 +196,22 @@ class CrmOpportunityService {
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
         notes: true,
+        source: true,
+        _count: {
+          select: {
+            noteEntries: true,
+            tasks: { where: { completedAt: null } },
+          },
+        },
       },
     })
-    return rows.map(toListItem)
+    return rows.map((row) =>
+      toListItem({
+        ...row,
+        noteCount: row._count.noteEntries,
+        openTaskCount: row._count.tasks,
+      }),
+    )
   }
 
   /** Full detail for one deal (drawer / edit form). */
@@ -209,12 +238,23 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         notes: true,
+        source: true,
         assignedCloser: CLOSER_SELECT,
+        _count: {
+          select: {
+            noteEntries: true,
+            tasks: { where: { completedAt: null } },
+          },
+        },
       },
     })
     if (!row) throw new OpportunityNotFoundError()
     return {
-      ...toListItem(row),
+      ...toListItem({
+        ...row,
+        noteCount: row._count.noteEntries,
+        openTaskCount: row._count.tasks,
+      }),
       contactEmail: row.contactEmail,
       contactPhone: row.contactPhone,
       notes: row.notes,
@@ -270,6 +310,7 @@ class CrmOpportunityService {
         expectedCloseDate: input.expectedCloseDate ?? null,
         assignedCloserId: input.assignedCloserId ?? null,
         notes: input.notes ?? null,
+        source: input.source ?? null,
         orderIndex,
         createdById: actorId,
       },
@@ -286,6 +327,7 @@ class CrmOpportunityService {
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
         notes: true,
+        source: true,
       },
     })
     return toListItem(created)
@@ -315,6 +357,7 @@ class CrmOpportunityService {
         ...(input.expectedCloseDate !== undefined ? { expectedCloseDate: input.expectedCloseDate } : {}),
         ...(input.assignedCloserId !== undefined ? { assignedCloserId: input.assignedCloserId } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(input.source !== undefined ? { source: input.source } : {}),
       },
       select: {
         id: true,
@@ -329,9 +372,20 @@ class CrmOpportunityService {
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
         notes: true,
+        source: true,
+        _count: {
+          select: {
+            noteEntries: true,
+            tasks: { where: { completedAt: null } },
+          },
+        },
       },
     })
-    return toListItem(updated)
+    return toListItem({
+      ...updated,
+      noteCount: updated._count.noteEntries,
+      openTaskCount: updated._count.tasks,
+    })
   }
 
   /**
@@ -396,9 +450,20 @@ class CrmOpportunityService {
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
         notes: true,
+        source: true,
+        _count: {
+          select: {
+            noteEntries: true,
+            tasks: { where: { completedAt: null } },
+          },
+        },
       },
     })
-    return toListItem(updated)
+    return toListItem({
+      ...updated,
+      noteCount: updated._count.noteEntries,
+      openTaskCount: updated._count.tasks,
+    })
   }
 
   /**

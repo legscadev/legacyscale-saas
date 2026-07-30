@@ -21,11 +21,21 @@ import {
   type OpportunityViewRow,
 } from '@/lib/services/crm-opportunity-view-service'
 import {
+  crmOpportunityNoteService,
+  OpportunityNoteNotFoundError,
+  type OpportunityNoteItem,
+} from '@/lib/services/crm-opportunity-note-service'
+import {
   crmOpportunityService,
   OpportunityNotFoundError,
   StageNotFoundError,
   type OpportunityListItem,
 } from '@/lib/services/crm-opportunity-service'
+import {
+  crmOpportunityTaskService,
+  OpportunityTaskNotFoundError,
+  type OpportunityTaskItem,
+} from '@/lib/services/crm-opportunity-task-service'
 import {
   crmPipelineService,
   ensurePipelineReady,
@@ -48,9 +58,13 @@ import {
   bulkAssignCloserSchema,
   bulkDeleteOpportunitiesSchema,
   bulkMoveOpportunitiesSchema,
+  createOpportunityNoteSchema,
   createOpportunitySchema,
+  createOpportunityTaskSchema,
   createOpportunityViewSchema,
   createPipelineSchema,
+  deleteOpportunityNoteSchema,
+  deleteOpportunityTaskSchema,
   duplicatePipelineSchema,
   importOpportunitiesSchema,
   moveOpportunitySchema,
@@ -59,11 +73,16 @@ import {
   renamePipelineSchema,
   reorderPipelinesSchema,
   reorderStagesSchema,
+  toggleOpportunityTaskSchema,
+  updateOpportunityNoteSchema,
   updateOpportunitySchema,
+  updateOpportunityTaskSchema,
   updateOpportunityViewFilterSchema,
   updateStageSchema,
   type AddStageInput,
   type CreateOpportunityInput,
+  type CreateOpportunityNoteInput,
+  type CreateOpportunityTaskInput,
   type CreatePipelineInput,
   type CsvOpportunityRow,
   type UpdateOpportunityInput,
@@ -106,7 +125,9 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
     err instanceof LastPipelineError ||
     err instanceof PipelineInUseError ||
     err instanceof StageInUseError ||
-    err instanceof OpportunityViewNotFoundError
+    err instanceof OpportunityViewNotFoundError ||
+    err instanceof OpportunityTaskNotFoundError ||
+    err instanceof OpportunityNoteNotFoundError
   ) {
     return { ok: false, error: err.message }
   }
@@ -762,5 +783,177 @@ export async function deleteOpportunityViewAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toMutationErr(err, 'Could not delete view')
+  }
+}
+
+// ============================================
+// OPPORTUNITY TASKS  (edit dialog → Tasks tab)
+// ============================================
+
+export async function fetchOpportunityTasksAction(
+  opportunityId: string,
+): Promise<MutationResult<OpportunityTaskItem[]>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const data = await crmOpportunityTaskService.list(opportunityId)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load tasks')
+  }
+}
+
+export async function createOpportunityTaskAction(
+  input: CreateOpportunityTaskInput,
+): Promise<MutationResult<OpportunityTaskItem>> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = createOpportunityTaskSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmOpportunityTaskService.create({
+      opportunityId: parsed.data.opportunityId,
+      title: parsed.data.title,
+      dueDate: parsed.data.dueDate ?? null,
+      assigneeId: parsed.data.assigneeId ?? null,
+      actorId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not create task')
+  }
+}
+
+export async function updateOpportunityTaskAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<OpportunityTaskItem>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = updateOpportunityTaskSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmOpportunityTaskService.update({
+      taskId: parsed.data.taskId,
+      title: parsed.data.title,
+      dueDate: parsed.data.dueDate,
+      assigneeId: parsed.data.assigneeId,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not update task')
+  }
+}
+
+export async function toggleOpportunityTaskAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<OpportunityTaskItem>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = toggleOpportunityTaskSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmOpportunityTaskService.toggle(
+      parsed.data.taskId,
+      parsed.data.completed,
+    )
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not update task')
+  }
+}
+
+export async function deleteOpportunityTaskAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = deleteOpportunityTaskSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await crmOpportunityTaskService.delete(parsed.data.taskId)
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete task')
+  }
+}
+
+// ============================================
+// OPPORTUNITY NOTES  (edit dialog → Notes tab)
+// ============================================
+
+export async function fetchOpportunityNotesAction(
+  opportunityId: string,
+): Promise<MutationResult<OpportunityNoteItem[]>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const data = await crmOpportunityNoteService.list(opportunityId)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load notes')
+  }
+}
+
+export async function createOpportunityNoteAction(
+  input: CreateOpportunityNoteInput,
+): Promise<MutationResult<OpportunityNoteItem>> {
+  const user = await requireTeamModuleAccess('crm-pipeline')
+  const parsed = createOpportunityNoteSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmOpportunityNoteService.create({
+      opportunityId: parsed.data.opportunityId,
+      body: parsed.data.body,
+      actorId: user.id,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not add note')
+  }
+}
+
+export async function updateOpportunityNoteAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<OpportunityNoteItem>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = updateOpportunityNoteSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmOpportunityNoteService.update({
+      noteId: parsed.data.noteId,
+      body: parsed.data.body,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not update note')
+  }
+}
+
+export async function deleteOpportunityNoteAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = deleteOpportunityNoteSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await crmOpportunityNoteService.delete(parsed.data.noteId)
+    revalidateAll()
+    return { ok: true, data: undefined }
+  } catch (err) {
+    return toMutationErr(err, 'Could not delete note')
   }
 }

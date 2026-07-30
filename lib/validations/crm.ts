@@ -82,6 +82,7 @@ export const createOpportunitySchema = z.object({
   expectedCloseDate: optionalDate.optional(),
   assignedCloserId: z.string().uuid().nullable().optional(),
   notes: z.string().max(20000).nullable().optional(),
+  source: z.string().trim().max(100).nullable().optional(),
 })
 export type CreateOpportunityInput = z.input<typeof createOpportunitySchema>
 export type CreateOpportunityOutput = z.output<typeof createOpportunitySchema>
@@ -108,6 +109,7 @@ export const updateOpportunitySchema = z.object({
   expectedCloseDate: optionalDate.optional(),
   assignedCloserId: z.string().uuid().nullable().optional(),
   notes: z.string().max(20000).nullable().optional(),
+  source: z.string().trim().max(100).nullable().optional(),
 })
 export type UpdateOpportunityInput = z.input<typeof updateOpportunitySchema>
 export type UpdateOpportunityOutput = z.output<typeof updateOpportunitySchema>
@@ -332,3 +334,51 @@ export const opportunityFilterSchema = z.object({
 })
 export type OpportunityFilterInput = z.input<typeof opportunityFilterSchema>
 export type OpportunityFilterOutput = z.output<typeof opportunityFilterSchema>
+
+// ============================================
+// OPPORTUNITY TASKS + NOTES  (activity timeline inside the edit dialog)
+// ============================================
+
+export const createOpportunityTaskSchema = z.object({
+  opportunityId: z.string().uuid(),
+  title: z.string().trim().min(1, 'Task title is required').max(200),
+  dueDate: optionalDate.optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
+})
+export type CreateOpportunityTaskInput = z.input<
+  typeof createOpportunityTaskSchema
+>
+
+export const updateOpportunityTaskSchema = z.object({
+  taskId: z.string().uuid(),
+  title: z.string().trim().min(1).max(200).optional(),
+  dueDate: optionalDate.optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
+})
+
+/** Toggle open/done. `completed=true` stamps completedAt=now(); false clears it. */
+export const toggleOpportunityTaskSchema = z.object({
+  taskId: z.string().uuid(),
+  completed: z.boolean(),
+})
+
+export const deleteOpportunityTaskSchema = z.object({
+  taskId: z.string().uuid(),
+})
+
+export const createOpportunityNoteSchema = z.object({
+  opportunityId: z.string().uuid(),
+  body: z.string().trim().min(1, 'Note is empty').max(20_000),
+})
+export type CreateOpportunityNoteInput = z.input<
+  typeof createOpportunityNoteSchema
+>
+
+export const updateOpportunityNoteSchema = z.object({
+  noteId: z.string().uuid(),
+  body: z.string().trim().min(1).max(20_000),
+})
+
+export const deleteOpportunityNoteSchema = z.object({
+  noteId: z.string().uuid(),
+})

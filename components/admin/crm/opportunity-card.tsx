@@ -8,7 +8,10 @@ import { forwardRef } from 'react'
 import {
   Building2,
   CalendarDays,
+  CheckSquare,
+  MessageSquare,
   StickyNote,
+  Tag,
   User as UserIcon,
 } from 'lucide-react'
 
@@ -83,6 +86,13 @@ export const OpportunityCard = forwardRef<HTMLDivElement, OpportunityCardProps>(
           </p>
         ) : null}
 
+        {opportunity.source ? (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Tag className="size-3 shrink-0" aria-hidden />
+            <span className="truncate">{opportunity.source}</span>
+          </p>
+        ) : null}
+
         <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2">
             {opportunity.expectedCloseDate ? (
@@ -94,10 +104,20 @@ export const OpportunityCard = forwardRef<HTMLDivElement, OpportunityCardProps>(
             {opportunity.probability !== null ? (
               <span className="tabular-nums">{opportunity.probability}%</span>
             ) : null}
+            <ActivityChip
+              icon={CheckSquare}
+              count={opportunity.openTaskCount}
+              label="open tasks"
+            />
+            <ActivityChip
+              icon={MessageSquare}
+              count={opportunity.noteCount}
+              label="notes"
+            />
             {opportunity.hasNotes ? (
               <span
-                aria-label="Has notes"
-                title="Has notes"
+                aria-label="Has description"
+                title="Has description"
                 className="inline-flex size-4 items-center justify-center rounded bg-muted text-muted-foreground/80"
               >
                 <StickyNote className="size-3" aria-hidden />
@@ -123,3 +143,27 @@ export const OpportunityCard = forwardRef<HTMLDivElement, OpportunityCardProps>(
     )
   },
 )
+
+/** Icon + numeric badge shown only when count > 0 — keeps the card
+ *  tidy for brand-new deals that have no activity yet. */
+function ActivityChip({
+  icon: Icon,
+  count,
+  label,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  count: number
+  label: string
+}) {
+  if (count <= 0) return null
+  return (
+    <span
+      aria-label={`${count} ${label}`}
+      title={`${count} ${label}`}
+      className="inline-flex items-center gap-0.5 tabular-nums"
+    >
+      <Icon className="size-3" aria-hidden />
+      {count}
+    </span>
+  )
+}

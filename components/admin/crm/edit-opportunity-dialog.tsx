@@ -50,6 +50,9 @@ import type {
   PipelineSummary,
 } from '@/lib/services/crm-pipeline-service'
 
+import { OpportunityNotesPanel } from './opportunity-notes-panel'
+import { OpportunityTasksPanel } from './opportunity-tasks-panel'
+
 const SELECT_CLASS =
   'h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
 
@@ -79,9 +82,15 @@ interface FormState {
   expectedCloseDate: string
   assignedCloserId: string
   notes: string
+  source: string
   status: 'OPEN' | 'WON' | 'LOST'
   stageId: string
 }
+
+/** Which section of the edit dialog is showing. Tasks + Notes are
+ *  live tabs backed by their own tables; Payments/Appointments/
+ *  Associated objects remain placeholders until those subsystems land. */
+type EditSection = 'details' | 'tasks' | 'notes'
 
 export function EditOpportunityDialog({
   opportunityId,
@@ -96,6 +105,7 @@ export function EditOpportunityDialog({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [form, setForm] = useState<FormState | null>(null)
   const [initialStageId, setInitialStageId] = useState<string>('')
+  const [section, setSection] = useState<EditSection>('details')
 
   const loading = !!opportunityId && form?.id !== opportunityId
 
@@ -112,6 +122,7 @@ export function EditOpportunityDialog({
       const d = res.data
       setInitialStageId(d.stageId)
       setConfirmingDelete(false)
+      setSection('details')
       setForm({
         id: d.id,
         name: d.name,
@@ -126,6 +137,7 @@ export function EditOpportunityDialog({
           : '',
         assignedCloserId: d.assignedCloser?.id ?? '',
         notes: d.notes ?? '',
+        source: d.source ?? '',
         status: d.status,
         stageId: d.stageId,
       })
@@ -178,6 +190,7 @@ export function EditOpportunityDialog({
         expectedCloseDate: form.expectedCloseDate || undefined,
         assignedCloserId: form.assignedCloserId || null,
         notes: form.notes.trim() || null,
+        source: form.source.trim() || null,
       })
       if (!res.ok) {
         toast.error(res.error ?? 'Could not save opportunity')
@@ -219,7 +232,7 @@ export function EditOpportunityDialog({
 
   return (
     <Dialog open={!!opportunityId} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>
             Edit {form?.name ? `“${form.name}”` : 'opportunity'}
@@ -236,39 +249,86 @@ export function EditOpportunityDialog({
             Loading…
           </div>
         ) : (
-          <form onSubmit={handleSave}>
-            <div className="mt-4 flex flex-col gap-6 sm:flex-row">
-              {/* Left rail — section navigation. Only "Opportunity
-                  details" is live; the rest are placeholders for
-                  tabs that ship in later phases. */}
-              <aside className="flex flex-row items-stretch gap-1 overflow-x-auto border-b pb-3 sm:w-56 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
-                <NavItem active label="Opportunity details" />
-                <NavItem
-                  disabled
-                  icon={Calendar}
-                  label="Book or update appointment"
-                />
-                <NavItem disabled icon={CheckSquare} label="Tasks" />
-                <NavItem disabled icon={StickyNote} label="Notes" />
-                <NavItem disabled icon={CreditCard} label="Payments" />
-                <NavItem
-                  disabled
-                  icon={Link2}
-                  label="Associated objects"
-                />
-                <button
-                  type="button"
-                  disabled
-                  title="Custom fields — coming soon"
-                  className="mt-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-left text-xs text-muted-foreground opacity-60"
-                >
-                  <Settings2 className="size-3" aria-hidden />
-                  Manage fields
-                </button>
-              </aside>
+          <div className="mt-4 flex flex-col gap-6 sm:flex-row">
+            {/* Left rail — section navigation. Details/Tasks/Notes are
+                live; the rest are placeholders for tabs that ship in
+                later phases. */}
+            <aside className="flex flex-row items-stretch gap-1 overflow-x-auto border-b pb-3 sm:w-56 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
+              <NavItem
+                active={section === 'details'}
+                onClick={() => setSection('details')}
+                label="Opportunity details"
+              />
+              <NavItem
+                disabled
+                icon={Calendar}
+                label="Book or update appointment"
+              />
+              <NavItem
+                active={section === 'tasks'}
+                onClick={() => setSection('tasks')}
+                icon={CheckSquare}
+                label="Tasks"
+              />
+              <NavItem
+                active={section === 'notes'}
+                onClick={() => setSection('notes')}
+                icon={StickyNote}
+                label="Notes"
+              />
+              <NavItem disabled icon={CreditCard} label="Payments" />
+              <NavItem
+                disabled
+                icon={Link2}
+                label="Associated objects"
+              />
+              <button
+                type="button"
+                disabled
+                title="Custom fields — coming soon"
+                className="mt-auto flex items-center gap-1.5 rounded-md px-3 py-2 text-left text-xs text-muted-foreground opacity-60"
+              >
+                <Settings2 className="size-3" aria-hidden />
+                Manage fields
+              </button>
+            </aside>
 
-              {/* Right pane */}
-              <div className="min-w-0 flex-1 space-y-6">
+            {/* Right pane */}
+            {section === 'tasks' ? (
+              <div className="min-w-0 flex-1">
+                <OpportunityTasksPanel
+                  opportunityId={form.id}
+                  members={members}
+                  onChanged={onChanged}
+                />
+                <div className="mt-6 flex justify-end border-t pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            ) : section === 'notes' ? (
+              <div className="min-w-0 flex-1">
+                <OpportunityNotesPanel
+                  opportunityId={form.id}
+                  onChanged={onChanged}
+                />
+                <div className="mt-6 flex justify-end border-t pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSave} className="min-w-0 flex-1 space-y-6">
                 <section className="space-y-3">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold">
@@ -426,22 +486,35 @@ export function EditOpportunityDialog({
                       />
                     </Field>
                   </div>
-                  <Field id="edit-closer" label="Assigned to">
-                    <select
-                      id="edit-closer"
-                      value={form.assignedCloserId}
-                      onChange={(e) => set('assignedCloserId', e.target.value)}
-                      className={SELECT_CLASS}
-                    >
-                      <option value="">Unassigned</option>
-                      {members.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name ?? m.email}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field id="edit-notes" label="Notes">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field id="edit-closer" label="Assigned to">
+                      <select
+                        id="edit-closer"
+                        value={form.assignedCloserId}
+                        onChange={(e) =>
+                          set('assignedCloserId', e.target.value)
+                        }
+                        className={SELECT_CLASS}
+                      >
+                        <option value="">Unassigned</option>
+                        {members.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name ?? m.email}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field id="edit-source" label="Source">
+                      <Input
+                        id="edit-source"
+                        value={form.source}
+                        onChange={(e) => set('source', e.target.value)}
+                        placeholder="e.g. Facebook, Referral"
+                        maxLength={100}
+                      />
+                    </Field>
+                  </div>
+                  <Field id="edit-notes" label="Description">
                     <Textarea
                       id="edit-notes"
                       value={form.notes}
@@ -451,64 +524,64 @@ export function EditOpportunityDialog({
                     />
                   </Field>
                 </section>
-              </div>
-            </div>
 
-            <div className="mt-6 flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-              {/* Left: delete affordance with inline confirm. */}
-              {confirmingDelete ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    Delete this opportunity?
-                  </span>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDelete}
-                    disabled={pending}
-                  >
-                    Confirm
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setConfirmingDelete(false)}
-                    disabled={pending}
-                  >
-                    Cancel
-                  </Button>
+                <div className="mt-6 flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  {/* Left: delete affordance with inline confirm. */}
+                  {confirmingDelete ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        Delete this opportunity?
+                      </span>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDelete}
+                        disabled={pending}
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmingDelete(false)}
+                        disabled={pending}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setConfirmingDelete(true)}
+                      disabled={pending}
+                      aria-label="Delete opportunity"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => onOpenChange(false)}
+                      disabled={pending}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={pending}>
+                      {pending ? 'Saving…' : 'Update'}
+                    </Button>
+                  </div>
                 </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setConfirmingDelete(true)}
-                  disabled={pending}
-                  aria-label="Delete opportunity"
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              )}
-
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                  disabled={pending}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={pending}>
-                  {pending ? 'Saving…' : 'Update'}
-                </Button>
-              </div>
-            </div>
-          </form>
+              </form>
+            )}
+          </div>
         )}
       </DialogContent>
     </Dialog>
@@ -546,16 +619,19 @@ function NavItem({
   disabled,
   icon: Icon,
   label,
+  onClick,
 }: {
   active?: boolean
   disabled?: boolean
   icon?: React.ComponentType<{ className?: string }>
   label: string
+  onClick?: () => void
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
+      onClick={onClick}
       title={disabled ? 'Coming soon' : undefined}
       className={cn(
         'inline-flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors',
