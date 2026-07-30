@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache'
 import type { Prisma } from '@prisma/client'
 
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
-import { prisma } from '@/lib/prisma'
+import { listAssignableSalesUsers } from '@/lib/services/crm-assignable-users'
 import {
   ContactViewNotFoundError,
   crmContactViewService,
@@ -136,16 +136,9 @@ export async function fetchLeadsWorkspaceAction(
     const tenantScope = await memberTenantScope()
     const [leads, members, views] = await Promise.all([
       crmLeadService.list(parsed.data),
-      prisma.user.findMany({
-        where: {
-          deletedAt: null,
-          isActive: true,
-          role: { in: ['ADMIN', 'TEAM'] },
-          ...tenantScope,
-        },
-        select: { id: true, name: true, email: true, avatarUrl: true },
-        orderBy: [{ name: 'asc' }, { email: 'asc' }],
-      }),
+      // Same rule as opportunities' Assigned to picker — narrow to
+      // users with a setter/closer role, fall back to all ADMIN/TEAM.
+      listAssignableSalesUsers(tenantScope),
       crmContactViewService.list(currentUser.id),
     ])
 
