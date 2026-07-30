@@ -363,10 +363,22 @@ export function MetricsTableView({
         <table
           aria-busy={monthLoading}
           className={cn(
-            'min-w-full border-collapse text-sm transition-opacity',
+            // table-fixed + explicit <colgroup> pins column widths;
+            // the inline width sums the col rems so browsers don't
+            // shrink the sticky Metric column under content pressure
+            // and let day 1 slide underneath it.
+            'table-fixed border-collapse text-sm transition-opacity',
             monthLoading && 'opacity-50',
           )}
+          style={{ width: `${2 + 16 + 4 * days.length}rem` }}
         >
+          <colgroup>
+            <col style={{ width: '2rem' }} />
+            <col style={{ width: '16rem' }} />
+            {days.map((d) => (
+              <col key={d} style={{ width: '4rem' }} />
+            ))}
+          </colgroup>
           <thead className="bg-muted">
             <tr>
               <th
