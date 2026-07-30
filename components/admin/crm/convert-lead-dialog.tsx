@@ -105,7 +105,7 @@ export function ConvertLeadDialog({
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="convert-closer">Assign closer</Label>
+              <Label htmlFor="convert-closer">Assign to</Label>
               <select
                 id="convert-closer"
                 value={assignedCloserId}

@@ -274,7 +274,13 @@ export function PipelineBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="-mx-2 overflow-x-auto pb-2">
+      {/* Board fills the viewport below the toolbar/stat strip; cards
+          scroll *inside* each column so the page itself never grows
+          past one screen. `dvh` handles mobile browser chrome; the
+          offset is a rough sum of TopBar + PageHeader + sub-tabs +
+          view-tab row + filter row + StatStrip + gaps. min-h keeps
+          the board usable if the viewport is tiny. */}
+      <div className="-mx-2 flex h-[calc(100dvh-300px)] min-h-[360px] overflow-x-auto pb-2">
         <div className="flex min-w-full gap-3 px-2">
           {columns.map((col) => (
             <BoardColumn
@@ -323,8 +329,10 @@ function BoardColumn({ column, onOpen, onCreate }: BoardColumnProps) {
     <section
       ref={setNodeRef}
       aria-label={`${column.name} column`}
+      // `h-full` + `min-h-0` on the body lets a tall stack of cards
+      // scroll inside the column instead of pushing the page taller.
       className={cn(
-        'flex w-72 shrink-0 flex-col rounded-xl border bg-muted/30 transition-colors',
+        'flex h-full w-72 shrink-0 flex-col rounded-xl border bg-muted/30 transition-colors',
         isOver && 'border-primary/40 bg-primary/5',
       )}
     >
@@ -356,7 +364,7 @@ function BoardColumn({ column, onOpen, onCreate }: BoardColumnProps) {
         ) : null}
       </header>
 
-      <div className="flex flex-1 flex-col gap-2 p-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
         <SortableContext
           items={column.deals.map((d) => d.id)}
           strategy={verticalListSortingStrategy}

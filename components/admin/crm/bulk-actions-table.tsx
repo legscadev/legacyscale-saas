@@ -26,7 +26,9 @@ import type { BulkActionLogRow } from '@/lib/services/crm-bulk-action-service'
 const OPERATION_LABELS: Record<BulkActionLogRow['operation'], string> = {
   DELETE: 'Delete',
   MOVE_STAGE: 'Move stage',
-  ASSIGN_CLOSER: 'Assign closer',
+  // Enum key stays ASSIGN_CLOSER (schema); label is role-agnostic
+  // since either a setter or a closer can be assigned.
+  ASSIGN_CLOSER: 'Assign',
 }
 
 const STATUS_STYLES: Record<BulkActionLogRow['status'], string> = {

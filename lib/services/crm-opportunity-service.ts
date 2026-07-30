@@ -44,6 +44,18 @@ async function requireCompanyId(): Promise<string> {
  *  neighbours. Matches the Kanban board + task-service constant. */
 const ORDER_STEP = 100
 
+/** RFC-4180-ish: wrap the field in quotes if it contains a comma,
+ *  double-quote, or line-break; double any embedded quotes. Every
+ *  other value passes through unchanged. Matches the parser in
+ *  import-opportunities-dialog so exports round-trip losslessly. */
+function csvEscape(v: string): string {
+  if (v === '') return ''
+  if (/[",\n\r]/.test(v)) {
+    return `"${v.replace(/"/g, '""')}"`
+  }
+  return v
+}
+
 async function nextOrderIndex(
   companyId: string,
   stageId: string,
@@ -80,16 +92,24 @@ export interface OpportunityListItem {
   companyName: string | null
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
-  /** True when the deal has non-empty notes — powers the card's
-   *  note-indicator icon without shipping the full notes text. */
+  /** True when the free-text notes field on the row is populated —
+   *  legacy indicator kept for CSV-imported deals. The timeline count
+   *  below is what the card shows for new activity. */
   hasNotes: boolean
+  /** Free-text lead source (e.g. "Facebook", "Referral"). */
+  source: string | null
+  /** Total notes in the timeline table (0 when the tab hasn't been used). */
+  noteCount: number
+  /** Only tasks still open — the card badge is about outstanding work,
+   *  not completed history. */
+  openTaskCount: number
 }
 
 const CLOSER_SELECT = {
   select: { id: true, name: true, email: true, avatarUrl: true },
 } as const satisfies Prisma.UserDefaultArgs
 
-function toListItem(row: {
+interface ToListItemRow {
   id: string
   name: string
   stageId: string
@@ -102,7 +122,12 @@ function toListItem(row: {
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
   notes: string | null
-}): OpportunityListItem {
+  source: string | null
+  noteCount?: number
+  openTaskCount?: number
+}
+
+function toListItem(row: ToListItemRow): OpportunityListItem {
   return {
     id: row.id,
     name: row.name,
@@ -118,6 +143,9 @@ function toListItem(row: {
     expectedCloseDate: row.expectedCloseDate,
     assignedCloser: row.assignedCloser,
     hasNotes: row.notes !== null && row.notes.trim().length > 0,
+    source: row.source,
+    noteCount: row.noteCount ?? 0,
+    openTaskCount: row.openTaskCount ?? 0,
   }
 }
 
@@ -168,9 +196,22 @@ class CrmOpportunityService {
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
         notes: true,
+        source: true,
+        _count: {
+          select: {
+            noteEntries: true,
+            tasks: { where: { completedAt: null } },
+          },
+        },
       },
     })
-    return rows.map(toListItem)
+    return rows.map((row) =>
+      toListItem({
+        ...row,
+        noteCount: row._count.noteEntries,
+        openTaskCount: row._count.tasks,
+      }),
+    )
   }
 
   /** Full detail for one deal (drawer / edit form). */
@@ -197,12 +238,23 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         notes: true,
+        source: true,
         assignedCloser: CLOSER_SELECT,
+        _count: {
+          select: {
+            noteEntries: true,
+            tasks: { where: { completedAt: null } },
+          },
+        },
       },
     })
     if (!row) throw new OpportunityNotFoundError()
     return {
-      ...toListItem(row),
+      ...toListItem({
+        ...row,
+        noteCount: row._count.noteEntries,
+        openTaskCount: row._count.tasks,
+      }),
       contactEmail: row.contactEmail,
       contactPhone: row.contactPhone,
       notes: row.notes,
@@ -258,6 +310,7 @@ class CrmOpportunityService {
         expectedCloseDate: input.expectedCloseDate ?? null,
         assignedCloserId: input.assignedCloserId ?? null,
         notes: input.notes ?? null,
+        source: input.source ?? null,
         orderIndex,
         createdById: actorId,
       },
@@ -274,6 +327,7 @@ class CrmOpportunityService {
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
         notes: true,
+        source: true,
       },
     })
     return toListItem(created)
@@ -303,6 +357,17 @@ class CrmOpportunityService {
         ...(input.expectedCloseDate !== undefined ? { expectedCloseDate: input.expectedCloseDate } : {}),
         ...(input.assignedCloserId !== undefined ? { assignedCloserId: input.assignedCloserId } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(input.source !== undefined ? { source: input.source } : {}),
+        ...(input.status !== undefined
+          ? {
+              status: input.status,
+              // Keep wonAt/lostAt in sync with a manual status flip so
+              // the same reporting queries that read those stamps
+              // (Won-this-month, Lost-in-Q2 etc.) still line up.
+              wonAt: input.status === 'WON' ? new Date() : null,
+              lostAt: input.status === 'LOST' ? new Date() : null,
+            }
+          : {}),
       },
       select: {
         id: true,
@@ -317,9 +382,20 @@ class CrmOpportunityService {
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
         notes: true,
+        source: true,
+        _count: {
+          select: {
+            noteEntries: true,
+            tasks: { where: { completedAt: null } },
+          },
+        },
       },
     })
-    return toListItem(updated)
+    return toListItem({
+      ...updated,
+      noteCount: updated._count.noteEntries,
+      openTaskCount: updated._count.tasks,
+    })
   }
 
   /**
@@ -341,20 +417,36 @@ class CrmOpportunityService {
     })
     if (!existing) throw new OpportunityNotFoundError()
 
+    // Look up the target stage without pinning it to the deal's
+    // current pipeline — this is the same write path used by
+    // Kanban drag-drop (same-pipeline) AND by the edit dialog when
+    // the user picks a different pipeline. Tenancy is enforced by
+    // the Prisma extension.
     const target = await prisma.crmPipelineStage.findFirst({
-      where: { id: stageId, pipelineId: existing.pipelineId },
-      select: { id: true, isWon: true, isLost: true, probability: true },
+      where: { id: stageId },
+      select: {
+        id: true,
+        pipelineId: true,
+        isWon: true,
+        isLost: true,
+        probability: true,
+      },
     })
     if (!target) throw new StageNotFoundError()
 
-    const finalOrderIndex =
-      orderIndex ?? (await nextOrderIndex(companyId, stageId))
+    const crossPipeline = target.pipelineId !== existing.pipelineId
+    // A cross-pipeline move always drops the card at the tail of its
+    // destination column — there's no drag position to honour.
+    const finalOrderIndex = crossPipeline
+      ? await nextOrderIndex(companyId, stageId)
+      : (orderIndex ?? (await nextOrderIndex(companyId, stageId)))
 
     const status = target.isWon ? 'WON' : target.isLost ? 'LOST' : 'OPEN'
 
     const updated = await prisma.crmOpportunity.update({
       where: { id },
       data: {
+        ...(crossPipeline ? { pipelineId: target.pipelineId } : {}),
         stageId,
         orderIndex: finalOrderIndex,
         status,
@@ -384,9 +476,20 @@ class CrmOpportunityService {
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
         notes: true,
+        source: true,
+        _count: {
+          select: {
+            noteEntries: true,
+            tasks: { where: { completedAt: null } },
+          },
+        },
       },
     })
-    return toListItem(updated)
+    return toListItem({
+      ...updated,
+      noteCount: updated._count.noteEntries,
+      openTaskCount: updated._count.tasks,
+    })
   }
 
   /**
@@ -406,6 +509,7 @@ class CrmOpportunityService {
       value?: number | null
       probability?: number | null
       stageName?: string | null
+      notes?: string | null
     }>
     assignedCloserId?: string | null
     actorId: string | null
@@ -460,6 +564,7 @@ class CrmOpportunityService {
             value: row.value ?? null,
             probability: row.probability ?? stage.probability ?? null,
             assignedCloserId: input.assignedCloserId ?? null,
+            notes: row.notes?.trim() ? row.notes.trim() : null,
             orderIndex,
             createdById: input.actorId,
             companyId,
@@ -471,6 +576,78 @@ class CrmOpportunityService {
       }
     }
     return { created, skipped }
+  }
+
+  /**
+   * Serialise every non-deleted opportunity in `pipelineId` as an
+   * RFC-4180-ish CSV whose column names match the importer's
+   * aliases (name, contact, email, phone, company, value,
+   * probability, stage, notes). Round-trip clean: export a
+   * pipeline, re-import the file, get the same shape back.
+   */
+  async exportToCsv(pipelineId: string): Promise<{
+    filename: string
+    csv: string
+  }> {
+    const [pipeline, rows] = await Promise.all([
+      prisma.crmPipeline.findFirst({
+        where: { id: pipelineId },
+        select: { name: true, slug: true },
+      }),
+      prisma.crmOpportunity.findMany({
+        where: { pipelineId, deletedAt: null },
+        orderBy: [{ stageId: 'asc' }, { orderIndex: 'asc' }],
+        select: {
+          name: true,
+          contactName: true,
+          contactEmail: true,
+          contactPhone: true,
+          companyName: true,
+          value: true,
+          probability: true,
+          notes: true,
+          stage: { select: { name: true } },
+        },
+      }),
+    ])
+
+    const header = [
+      'name',
+      'contact',
+      'email',
+      'phone',
+      'company',
+      'value',
+      'probability',
+      'stage',
+      'notes',
+    ]
+    const lines: string[] = [header.join(',')]
+    for (const r of rows) {
+      lines.push(
+        [
+          r.name,
+          r.contactName ?? '',
+          r.contactEmail ?? '',
+          r.contactPhone ?? '',
+          r.companyName ?? '',
+          r.value === null ? '' : String(r.value),
+          r.probability === null ? '' : String(r.probability),
+          r.stage.name,
+          r.notes ?? '',
+        ]
+          .map(csvEscape)
+          .join(','),
+      )
+    }
+
+    const date = new Date().toISOString().slice(0, 10)
+    const slug = pipeline?.slug ?? 'pipeline'
+    return {
+      filename: `opportunities-${slug}-${date}.csv`,
+      // Trailing newline keeps Excel + `wc -l` honest on the last row.
+      csv: lines.join('\n') + '\n',
+    }
   }
 
   /** Soft-delete (archive) a deal off the board. */

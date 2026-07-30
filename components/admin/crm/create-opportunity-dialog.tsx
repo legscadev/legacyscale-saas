@@ -286,7 +286,7 @@ export function CreateOpportunityDialog({
                   </Field>
                 </div>
                 {members.length > 0 ? (
-                  <Field id="opp-closer" label="Assigned closer">
+                  <Field id="opp-closer" label="Assigned to">
                     <select
                       id="opp-closer"
                       value={assignedCloserId}

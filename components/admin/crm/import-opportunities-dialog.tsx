@@ -36,6 +36,7 @@ interface CsvRow {
   value: number | null
   probability: number | null
   stageName: string | null
+  notes: string | null
 }
 
 interface ImportOpportunitiesDialogProps {
@@ -46,60 +47,92 @@ interface ImportOpportunitiesDialogProps {
   onImported: () => void
 }
 
-/** Same tolerant one-line CSV splitter used by the lead importer —
- *  handles quoted commas + escaped double-quotes. Not RFC-4180 strict
- *  but good enough for hand-rolled spreadsheets. */
-function splitCsvLine(line: string): string[] {
-  const out: string[] = []
-  let cur = ''
+/**
+ * RFC-4180-ish CSV parser that walks the whole document char-by-char
+ * so quoted fields with embedded newlines survive. Records are split
+ * only on newlines that occur *outside* a quoted field; each record
+ * is then split on commas outside quotes. Doubled quotes inside a
+ * quoted field ("") decode to a literal ".
+ */
+function parseCsvRecords(text: string): string[][] {
+  const records: string[][] = []
+  let field = ''
+  let record: string[] = []
   let inQuotes = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
     if (inQuotes) {
       if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"'
+        if (text[i + 1] === '"') {
+          field += '"'
           i++
         } else {
           inQuotes = false
         }
       } else {
-        cur += ch
+        field += ch
       }
     } else if (ch === '"') {
       inQuotes = true
     } else if (ch === ',') {
-      out.push(cur)
-      cur = ''
+      record.push(field)
+      field = ''
+    } else if (ch === '\n' || ch === '\r') {
+      // \r\n → treat as one break; skip the \n after \r.
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      record.push(field)
+      field = ''
+      if (record.length > 1 || record[0] !== '') records.push(record)
+      record = []
     } else {
-      cur += ch
+      field += ch
     }
   }
-  out.push(cur)
-  return out.map((s) => s.trim())
+  // Trailing field / record without a final newline.
+  if (field.length > 0 || record.length > 0) {
+    record.push(field)
+    if (record.length > 1 || record[0] !== '') records.push(record)
+  }
+  return records
 }
 
 const HEADER_ALIASES: Record<string, keyof CsvRow> = {
+  // Deal name
   name: 'name',
   'deal name': 'name',
   deal: 'name',
   opportunity: 'name',
+  'opportunity name': 'name',
+  title: 'name',
+  // Contact
   contact: 'contactName',
   'contact name': 'contactName',
   email: 'contactEmail',
   'contact email': 'contactEmail',
   phone: 'contactPhone',
   'contact phone': 'contactPhone',
+  // Company
   company: 'companyName',
   'company name': 'companyName',
   organization: 'companyName',
+  'business name': 'companyName',
+  // Value — GHL uses "Lead Value".
   value: 'value',
   amount: 'value',
   price: 'value',
+  'lead value': 'value',
+  // Probability — GHL uses "Forecast Probability".
   probability: 'probability',
   prob: 'probability',
+  'forecast probability': 'probability',
+  // Stage
   stage: 'stageName',
   'stage name': 'stageName',
+  // Notes — GHL exports a single free-text column that maps 1:1
+  // onto our CrmOpportunity.notes field.
+  notes: 'notes',
+  note: 'notes',
+  description: 'notes',
 }
 
 interface ParseResult {
@@ -108,35 +141,35 @@ interface ParseResult {
 }
 
 function parseCsv(text: string): ParseResult {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-  if (lines.length === 0) return { rows: [], skipped: 0 }
+  const records = parseCsvRecords(text)
+  if (records.length === 0) return { rows: [], skipped: 0 }
 
-  const firstCells = splitCsvLine(lines[0]!).map((c) => c.toLowerCase())
+  const firstCells = records[0]!.map((c) => c.trim().toLowerCase())
   const hasHeader = firstCells.some((c) => c in HEADER_ALIASES)
 
   let columnMap: (keyof CsvRow | null)[]
-  let dataLines: string[]
+  let dataRecords: string[][]
   if (hasHeader) {
     columnMap = firstCells.map((c) => HEADER_ALIASES[c] ?? null)
-    dataLines = lines.slice(1)
+    dataRecords = records.slice(1)
   } else {
     // Positional fallback: name, contactName, contactEmail, value, stage.
     columnMap = ['name', 'contactName', 'contactEmail', 'value', 'stageName']
-    dataLines = lines
+    dataRecords = records
   }
 
   const rows: CsvRow[] = []
   let skipped = 0
-  for (const line of dataLines) {
-    const cells = splitCsvLine(line)
+  for (const cells of dataRecords) {
     const row: Partial<Record<keyof CsvRow, string>> = {}
     columnMap.forEach((key, idx) => {
       if (!key) return
-      const val = cells[idx]?.trim()
-      if (val) row[key] = val
+      const raw = cells[idx]
+      if (raw === undefined) return
+      // Notes may span multiple lines and lead/trail whitespace is
+      // usually meaningful. For every other column trim aggressively.
+      const val = key === 'notes' ? raw : raw.trim()
+      if (val.length > 0) row[key] = val
     })
     if (!row.name) {
       skipped++
@@ -150,7 +183,7 @@ function parseCsv(text: string): ParseResult {
       return Number.isFinite(n) ? n : null
     }
     rows.push({
-      name: row.name,
+      name: row.name.trim(),
       contactName: row.contactName ?? null,
       contactEmail: row.contactEmail ?? null,
       contactPhone: row.contactPhone ?? null,
@@ -158,6 +191,7 @@ function parseCsv(text: string): ParseResult {
       value: parseNumber(row.value),
       probability: parseNumber(row.probability),
       stageName: row.stageName ?? null,
+      notes: row.notes ? row.notes.trim() || null : null,
     })
   }
   return { rows, skipped }
@@ -172,6 +206,7 @@ export function ImportOpportunitiesDialog({
 }: ImportOpportunitiesDialogProps) {
   const [pending, startTransition] = useTransition()
   const [text, setText] = useState('')
+  const [file, setFile] = useState<{ name: string; size: number } | null>(null)
   const [assignedCloserId, setAssignedCloserId] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -179,7 +214,9 @@ export function ImportOpportunitiesDialog({
 
   function reset() {
     setText('')
+    setFile(null)
     setAssignedCloserId('')
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   function handleOpenChange(next: boolean) {
@@ -188,10 +225,17 @@ export function ImportOpportunitiesDialog({
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const content = await file.text()
+    const chosen = e.target.files?.[0]
+    if (!chosen) return
+    const content = await chosen.text()
     setText(content)
+    setFile({ name: chosen.name, size: chosen.size })
+  }
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -227,67 +271,115 @@ export function ImportOpportunitiesDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <form onSubmit={handleSubmit}>
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-xl">
+        <form
+          onSubmit={handleSubmit}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           <DialogHeader>
             <DialogTitle>Import opportunities</DialogTitle>
             <DialogDescription>
-              Paste CSV or upload a .csv file. Recognised columns:
-              name, contact, email, phone, company, value, probability,
-              stage. First column with any known header is treated as
-              the header row.
+              Upload a .csv or paste CSV text. Recognised columns:
+              name (aka “opportunity name”), contact, email, phone,
+              company, value (aka “lead value”), probability, stage,
+              notes. GHL exports work as-is — extra columns like
+              assigned / tags / IDs are silently ignored.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            <div className="flex items-center justify-between gap-2">
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleFile}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileRef.current?.click()}
-              >
-                <Upload className="size-4" />
-                Choose .csv
-              </Button>
-              {parsed.rows.length > 0 || parsed.skipped > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {parsed.rows.length} row
-                  {parsed.rows.length === 1 ? '' : 's'} ready
-                  {parsed.skipped > 0 ? (
-                    <span className="ml-1 text-amber-600">
-                      · {parsed.skipped} skipped (missing name)
-                    </span>
-                  ) : null}
-                </p>
-              ) : null}
-            </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFile}
+              className="hidden"
+            />
 
-            <div className="space-y-1.5">
-              <Label htmlFor="opp-import-text">CSV content</Label>
-              <Textarea
-                id="opp-import-text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={8}
-                placeholder="name,contact,email,value,stage
-Acme upgrade,Jane Doe,jane@acme.com,25000,Proposal Sent
-Beta pilot,Bob Smith,bob@beta.co,5000,Contacted"
-                className="font-mono text-xs"
-              />
-            </div>
+            {file ? (
+              /* File-mode summary — hide the raw CSV textarea to
+                 avoid the visual explosion when a large export is
+                 pasted into a small dialog. */
+              <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <Upload className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {file.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatBytes(file.size)} ·{' '}
+                    {parsed.rows.length} row
+                    {parsed.rows.length === 1 ? '' : 's'} ready
+                    {parsed.skipped > 0 ? (
+                      <span className="ml-1 text-amber-600">
+                        · {parsed.skipped} skipped
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={reset}
+                  disabled={pending}
+                >
+                  Change file
+                </Button>
+              </div>
+            ) : (
+              /* No-file mode — button + collapsible paste box. */
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="size-4" />
+                    Choose .csv
+                  </Button>
+                  {parsed.rows.length > 0 || parsed.skipped > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {parsed.rows.length} row
+                      {parsed.rows.length === 1 ? '' : 's'} ready
+                      {parsed.skipped > 0 ? (
+                        <span className="ml-1 text-amber-600">
+                          · {parsed.skipped} skipped
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="opp-import-text">
+                    Or paste CSV content
+                  </Label>
+                  <Textarea
+                    id="opp-import-text"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    rows={6}
+                    placeholder={`name,contact,email,value,stage\nAcme upgrade,Jane Doe,jane@acme.com,25000,Proposal Sent\nBeta pilot,Bob Smith,bob@beta.co,5000,Contacted`}
+                    // Fixed height + horizontal scroll so a wide
+                    // paste doesn't stretch the dialog. `whitespace-pre`
+                    // + `overflow-auto` on Textarea would fight React;
+                    // Tailwind's `resize-y` lets the user grow it if
+                    // they want more room.
+                    className="max-h-48 resize-y font-mono text-xs"
+                  />
+                </div>
+              </>
+            )}
 
             {members.length > 0 ? (
               <div className="space-y-1.5">
                 <Label htmlFor="opp-import-assign">
-                  Assign all to closer (optional)
+                  Assign all to (optional)
                 </Label>
                 <select
                   id="opp-import-assign"

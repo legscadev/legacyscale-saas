@@ -9,6 +9,7 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  Download,
   Filter,
   KanbanSquare,
   LayoutGrid,
@@ -19,7 +20,6 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { StatStrip } from '@/components/shared/stat-strip'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +39,7 @@ import {
   bulkAssignCloserAction,
   bulkDeleteOpportunitiesAction,
   bulkMoveOpportunitiesToStageAction,
+  exportOpportunitiesAction,
   type PipelineWorkspacePayload,
 } from '@/app/(admin)/admin/crm/opportunities/actions'
 
@@ -65,7 +66,6 @@ import {
 } from './opportunities-sort-menu'
 import { PipelineBoard } from './pipeline-board'
 import { cn } from '@/lib/utils'
-import { formatDealValue } from './opportunity-card'
 
 interface PipelineShellProps {
   initialData: PipelineWorkspacePayload
@@ -137,6 +137,32 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
   const [bulkPending, startBulkOp] = useTransition()
   const [importOpen, setImportOpen] = useState(false)
+  const [exportPending, startExport] = useTransition()
+
+  function runExport() {
+    if (!currentPipelineId) return
+    startExport(async () => {
+      const res = await exportOpportunitiesAction(currentPipelineId)
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not export')
+        return
+      }
+      // Trigger a browser download without leaving the page. Blob
+      // + object URL is the standard client-side pattern; the URL
+      // is revoked once the anchor is clicked so we don't leak
+      // memory across repeated exports.
+      const blob = new Blob([res.data.csv], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.data.filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Export ready')
+    })
+  }
 
   function toggleSelect(id: string, next: boolean) {
     setSelectedIds((prev) => {
@@ -211,7 +237,7 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         closerId,
       })
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not assign closer')
+        toast.error(res.error ?? 'Could not assign')
         return
       }
       surfaceBulkResult(closerId ? 'Assigned' : 'Unassigned', res.data)
@@ -222,16 +248,8 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
 
   const currentPipeline = pipelines.find((p) => p.id === currentPipelineId)
 
-  // Summary — open pipeline value + probability-weighted forecast.
+  // Open-deal count powers the "N opportunities" pill in the header.
   const openDeals = deals.filter((d) => d.status === 'OPEN')
-  const openValue = openDeals.reduce((sum, d) => sum + (d.value ?? 0), 0)
-  const weighted = openDeals.reduce(
-    (sum, d) => sum + (d.value ?? 0) * ((d.probability ?? 0) / 100),
-    0,
-  )
-  const wonValue = deals
-    .filter((d) => d.status === 'WON')
-    .reduce((sum, d) => sum + (d.value ?? 0), 0)
 
   function openCreate(stageId?: string) {
     setCreateStageId(stageId)
@@ -313,6 +331,16 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
               <span className="sr-only">List view</span>
             </button>
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!currentPipelineId || exportPending}
+            onClick={runExport}
+          >
+            <Download className="size-4" />
+            {exportPending ? 'Exporting…' : 'Export'}
+          </Button>
 
           <Button
             variant="outline"
@@ -408,37 +436,13 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
         }}
       />
 
-      {deals.length > 0 ? (
-        // Summary strip only once there are deals — a bare "$0 / $0 /
-        // $0" reads as broken on an empty board.
-        <StatStrip
-          columns={3}
-          cells={[
-            {
-              label: 'Open value',
-              value: formatDealValue(openValue) ?? '—',
-            },
-            {
-              label: 'Weighted forecast',
-              value: formatDealValue(weighted) ?? '—',
-              description: 'Σ value × probability',
-            },
-            {
-              label: 'Won',
-              value: formatDealValue(wonValue) ?? '—',
-              valueClassName: 'text-emerald-600',
-            },
-          ]}
-        />
-      ) : (
-        // Empty board still shows its stages below — just nudge toward
-        // the first deal instead of a $0 strip.
+      {deals.length === 0 ? (
         <p className="flex items-center gap-2 rounded-xl border border-dashed bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           <KanbanSquare className="size-4 shrink-0" aria-hidden />
           No deals yet — add one to a stage below, or convert a qualified
           contact from Contacts.
         </p>
-      )}
+      ) : null}
 
       {(() => {
         const q = searchQuery.trim().toLowerCase()
