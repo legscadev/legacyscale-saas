@@ -222,6 +222,9 @@ export const csvOpportunitySchema = z.object({
    *  pipeline's stages (case-insensitive). Falls back to the first
    *  stage when omitted or unknown. */
   stageName: shortText(60),
+  /** Deal-level notes. GHL exports one long free-text field per
+   *  opportunity here; we store it as CrmOpportunity.notes. */
+  notes: z.string().trim().max(20_000).nullable().optional(),
 })
 export type CsvOpportunityRow = z.output<typeof csvOpportunitySchema>
 

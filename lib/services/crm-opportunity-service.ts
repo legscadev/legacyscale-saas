@@ -406,6 +406,7 @@ class CrmOpportunityService {
       value?: number | null
       probability?: number | null
       stageName?: string | null
+      notes?: string | null
     }>
     assignedCloserId?: string | null
     actorId: string | null
@@ -460,6 +461,7 @@ class CrmOpportunityService {
             value: row.value ?? null,
             probability: row.probability ?? stage.probability ?? null,
             assignedCloserId: input.assignedCloserId ?? null,
+            notes: row.notes?.trim() ? row.notes.trim() : null,
             orderIndex,
             createdById: input.actorId,
             companyId,
