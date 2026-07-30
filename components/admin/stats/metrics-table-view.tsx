@@ -376,7 +376,7 @@ export function MetricsTableView({
               />
               <th
                 scope="col"
-                className="sticky left-8 z-20 min-w-[16rem] border-b bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                className="sticky left-8 z-20 w-64 max-w-64 border-b bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
               >
                 Metric
               </th>
@@ -568,9 +568,11 @@ function SortableMetricRow({
       </td>
       <th
         scope="row"
-        className="sticky left-8 z-10 min-w-[16rem] border-r bg-card px-3 py-2 text-left font-normal group-hover:bg-muted"
+        className="sticky left-8 z-10 w-64 max-w-64 border-r bg-card px-3 py-2 text-left font-normal group-hover:bg-muted"
       >
-        <div className="flex flex-col">
+        {/* min-w-0 lets truncate clip long metric-name subtext instead
+            of pushing this sticky cell wider and covering day 1. */}
+        <div className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-medium">{metric.name}</span>
           <span className="truncate text-[11px] text-muted-foreground">
             {metric.division.shortLabel ?? metric.division.name}
