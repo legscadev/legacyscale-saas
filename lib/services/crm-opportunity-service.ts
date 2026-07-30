@@ -44,6 +44,18 @@ async function requireCompanyId(): Promise<string> {
  *  neighbours. Matches the Kanban board + task-service constant. */
 const ORDER_STEP = 100
 
+/** RFC-4180-ish: wrap the field in quotes if it contains a comma,
+ *  double-quote, or line-break; double any embedded quotes. Every
+ *  other value passes through unchanged. Matches the parser in
+ *  import-opportunities-dialog so exports round-trip losslessly. */
+function csvEscape(v: string): string {
+  if (v === '') return ''
+  if (/[",\n\r]/.test(v)) {
+    return `"${v.replace(/"/g, '""')}"`
+  }
+  return v
+}
+
 async function nextOrderIndex(
   companyId: string,
   stageId: string,
@@ -473,6 +485,78 @@ class CrmOpportunityService {
       }
     }
     return { created, skipped }
+  }
+
+  /**
+   * Serialise every non-deleted opportunity in `pipelineId` as an
+   * RFC-4180-ish CSV whose column names match the importer's
+   * aliases (name, contact, email, phone, company, value,
+   * probability, stage, notes). Round-trip clean: export a
+   * pipeline, re-import the file, get the same shape back.
+   */
+  async exportToCsv(pipelineId: string): Promise<{
+    filename: string
+    csv: string
+  }> {
+    const [pipeline, rows] = await Promise.all([
+      prisma.crmPipeline.findFirst({
+        where: { id: pipelineId },
+        select: { name: true, slug: true },
+      }),
+      prisma.crmOpportunity.findMany({
+        where: { pipelineId, deletedAt: null },
+        orderBy: [{ stageId: 'asc' }, { orderIndex: 'asc' }],
+        select: {
+          name: true,
+          contactName: true,
+          contactEmail: true,
+          contactPhone: true,
+          companyName: true,
+          value: true,
+          probability: true,
+          notes: true,
+          stage: { select: { name: true } },
+        },
+      }),
+    ])
+
+    const header = [
+      'name',
+      'contact',
+      'email',
+      'phone',
+      'company',
+      'value',
+      'probability',
+      'stage',
+      'notes',
+    ]
+    const lines: string[] = [header.join(',')]
+    for (const r of rows) {
+      lines.push(
+        [
+          r.name,
+          r.contactName ?? '',
+          r.contactEmail ?? '',
+          r.contactPhone ?? '',
+          r.companyName ?? '',
+          r.value === null ? '' : String(r.value),
+          r.probability === null ? '' : String(r.probability),
+          r.stage.name,
+          r.notes ?? '',
+        ]
+          .map(csvEscape)
+          .join(','),
+      )
+    }
+
+    const date = new Date().toISOString().slice(0, 10)
+    const slug = pipeline?.slug ?? 'pipeline'
+    return {
+      filename: `opportunities-${slug}-${date}.csv`,
+      // Trailing newline keeps Excel + `wc -l` honest on the last row.
+      csv: lines.join('\n') + '\n',
+    }
   }
 
   /** Soft-delete (archive) a deal off the board. */

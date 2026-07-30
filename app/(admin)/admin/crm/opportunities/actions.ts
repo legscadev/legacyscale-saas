@@ -564,6 +564,21 @@ export async function bulkDeleteOpportunitiesAction(
   }
 }
 
+/** CSV export — serialises every non-deleted opportunity in the
+ *  target pipeline. Columns match the importer's aliases so the
+ *  file round-trips through Import without hand-editing. */
+export async function exportOpportunitiesAction(
+  pipelineId: string,
+): Promise<MutationResult<{ filename: string; csv: string }>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const data = await crmOpportunityService.exportToCsv(pipelineId)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not export opportunities')
+  }
+}
+
 /** CSV import — bulk-inserts opportunities into a pipeline. */
 export async function importOpportunitiesAction(
   input: Record<string, unknown>,

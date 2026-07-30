@@ -9,6 +9,7 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  Download,
   Filter,
   KanbanSquare,
   LayoutGrid,
@@ -39,6 +40,7 @@ import {
   bulkAssignCloserAction,
   bulkDeleteOpportunitiesAction,
   bulkMoveOpportunitiesToStageAction,
+  exportOpportunitiesAction,
   type PipelineWorkspacePayload,
 } from '@/app/(admin)/admin/crm/opportunities/actions'
 
@@ -137,6 +139,32 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
   const [bulkPending, startBulkOp] = useTransition()
   const [importOpen, setImportOpen] = useState(false)
+  const [exportPending, startExport] = useTransition()
+
+  function runExport() {
+    if (!currentPipelineId) return
+    startExport(async () => {
+      const res = await exportOpportunitiesAction(currentPipelineId)
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not export')
+        return
+      }
+      // Trigger a browser download without leaving the page. Blob
+      // + object URL is the standard client-side pattern; the URL
+      // is revoked once the anchor is clicked so we don't leak
+      // memory across repeated exports.
+      const blob = new Blob([res.data.csv], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = res.data.filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Export ready')
+    })
+  }
 
   function toggleSelect(id: string, next: boolean) {
     setSelectedIds((prev) => {
@@ -313,6 +341,16 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
               <span className="sr-only">List view</span>
             </button>
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!currentPipelineId || exportPending}
+            onClick={runExport}
+          >
+            <Download className="size-4" />
+            {exportPending ? 'Exporting…' : 'Export'}
+          </Button>
 
           <Button
             variant="outline"
