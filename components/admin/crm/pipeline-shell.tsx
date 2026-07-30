@@ -346,7 +346,9 @@ export function PipelineShell({ initialData, basePath }: PipelineShellProps) {
             variant="outline"
             size="sm"
             disabled={!currentPipelineId}
-            onClick={() => setImportOpen(true)}
+            onClick={() =>
+              router.push('/admin/crm/import?object=opportunities')
+            }
           >
             <Upload className="size-4" />
             Import
