@@ -243,6 +243,12 @@ export const importOpportunitiesSchema = z.object({
   pipelineId: z.string().uuid(),
   rows: z.array(csvOpportunitySchema).min(1, 'No rows to import').max(2000),
   assignedCloserId: z.string().uuid().nullable().optional(),
+  mode: z
+    .enum(['CREATE_ONLY', 'CREATE_OR_UPDATE', 'UPDATE_ONLY'])
+    .optional()
+    .default('CREATE_ONLY'),
+  fileName: z.string().trim().max(200).optional(),
+  fileSize: z.number().int().min(0).optional(),
 })
 
 // ---- Saved filter views ----

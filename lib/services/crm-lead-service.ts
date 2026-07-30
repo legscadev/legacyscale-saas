@@ -422,33 +422,108 @@ class CrmLeadService {
   }
 
   /**
-   * Bulk-insert parsed CSV rows. Every row is tagged CSV_IMPORT and
-   * (optionally) routed to a single setter. Returns how many landed —
-   * createMany skips nothing app-side, so `created` is the row count.
+   * Bulk import parsed CSV rows. Supports three modes matching the
+   * GHL wizard:
+   *   - CREATE_ONLY (legacy): every row inserts a new lead; rows that
+   *     collide with an existing (companyId, email) row are still
+   *     inserted (dedupe is up to the caller).
+   *   - CREATE_OR_UPDATE: match by email → update in place if found,
+   *     otherwise insert.
+   *   - UPDATE_ONLY: match by email → update in place if found,
+   *     otherwise skip the row.
+   *
+   * Row-level counts (created/updated/skipped) drive the wizard's
+   * Verify screen + the import-history page.
    */
   async importCsv(
     input: ImportLeadsOutput,
     actorId: string | null,
-  ): Promise<{ created: number }> {
+    mode: 'CREATE_ONLY' | 'CREATE_OR_UPDATE' | 'UPDATE_ONLY' = 'CREATE_ONLY',
+  ): Promise<{ created: number; updated: number; skipped: number }> {
     const companyId = await requireCompanyId()
     const now = new Date()
-    const result = await prisma.crmLead.createMany({
-      data: input.rows.map((r) => ({
-        fullName: r.fullName,
-        email: r.email ?? null,
-        phone: r.phone ?? null,
-        companyName: r.companyName ?? null,
-        industry: r.industry ?? null,
-        campaign: r.campaign ?? null,
-        source: 'CSV_IMPORT' as const,
-        status: 'NEW' as const,
-        assignedSetterId: input.assignedSetterId ?? null,
-        createdById: actorId,
-        lastActivityAt: now,
-        companyId,
-      })),
-    })
-    return { created: result.count }
+
+    // Fast path — the legacy behaviour. createMany is one round-trip
+    // for the whole batch; anything with per-row logic (update /
+    // skip / upsert) has to loop.
+    if (mode === 'CREATE_ONLY') {
+      const result = await prisma.crmLead.createMany({
+        data: input.rows.map((r) => ({
+          fullName: r.fullName,
+          email: r.email ?? null,
+          phone: r.phone ?? null,
+          companyName: r.companyName ?? null,
+          industry: r.industry ?? null,
+          campaign: r.campaign ?? null,
+          source: 'CSV_IMPORT' as const,
+          status: 'NEW' as const,
+          assignedSetterId: input.assignedSetterId ?? null,
+          createdById: actorId,
+          lastActivityAt: now,
+          companyId,
+        })),
+      })
+      return { created: result.count, updated: 0, skipped: 0 }
+    }
+
+    let created = 0
+    let updated = 0
+    let skipped = 0
+
+    for (const r of input.rows) {
+      const email = r.email?.trim() || null
+      const existing = email
+        ? await prisma.crmLead.findFirst({
+            where: {
+              deletedAt: null,
+              email: { equals: email, mode: 'insensitive' },
+            },
+            select: { id: true },
+          })
+        : null
+
+      if (existing) {
+        // Update path — refresh non-empty fields, don't overwrite
+        // with blanks (import shouldn't destroy manual edits).
+        await prisma.crmLead.update({
+          where: { id: existing.id },
+          data: {
+            ...(r.fullName ? { fullName: r.fullName } : {}),
+            ...(r.phone ? { phone: r.phone } : {}),
+            ...(r.companyName ? { companyName: r.companyName } : {}),
+            ...(r.industry ? { industry: r.industry } : {}),
+            ...(r.campaign ? { campaign: r.campaign } : {}),
+            ...(input.assignedSetterId !== undefined
+              ? { assignedSetterId: input.assignedSetterId ?? null }
+              : {}),
+            lastActivityAt: now,
+          },
+        })
+        updated++
+      } else if (mode === 'UPDATE_ONLY') {
+        skipped++
+      } else {
+        await prisma.crmLead.create({
+          data: {
+            fullName: r.fullName,
+            email,
+            phone: r.phone ?? null,
+            companyName: r.companyName ?? null,
+            industry: r.industry ?? null,
+            campaign: r.campaign ?? null,
+            source: 'CSV_IMPORT',
+            status: 'NEW',
+            assignedSetterId: input.assignedSetterId ?? null,
+            createdById: actorId,
+            lastActivityAt: now,
+            companyId,
+          },
+        })
+        created++
+      }
+    }
+
+    return { created, updated, skipped }
   }
 
   async softDelete(id: string): Promise<void> {

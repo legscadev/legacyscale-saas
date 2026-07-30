@@ -23,6 +23,7 @@ export interface CrmAssignableUser {
 
 export async function listAssignableSalesUsers(
   tenantScope: Prisma.UserWhereInput | undefined,
+  options: { strict?: boolean } = {},
 ): Promise<CrmAssignableUser[]> {
   const baseWhere: Prisma.UserWhereInput = {
     deletedAt: null,
@@ -52,7 +53,13 @@ export async function listAssignableSalesUsers(
     select: { id: true, name: true, email: true, avatarUrl: true },
     orderBy: [{ name: 'asc' }, { email: 'asc' }],
   })
-  if (scoped.length > 0) return scoped
+
+  // Strict mode (import wizard) never falls back — an empty picker
+  // is the correct nudge to configure Setter/Closer roles first.
+  // The interactive pickers (opportunities Assigned to, leads
+  // Assign to submenu) fall back to all ADMIN/TEAM to avoid an
+  // empty dropdown on fresh tenants that haven't set up roles yet.
+  if (options.strict || scoped.length > 0) return scoped
 
   return prisma.user.findMany({
     where: baseWhere,

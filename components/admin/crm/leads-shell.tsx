@@ -178,7 +178,9 @@ export function LeadsShell({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setImportOpen(true)}
+              onClick={() =>
+                router.push('/admin/crm/import?object=contacts')
+              }
             >
               <Upload className="size-4" />
               Import

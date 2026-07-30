@@ -320,6 +320,8 @@ model User {
   crmOpportunityViews CrmOpportunityView[] @relation("CrmOpportunityViewOwner")
   // CRM — same pattern for the Contacts inbox (GHL "Smart Lists").
   crmContactViews     CrmContactView[]     @relation("CrmContactViewOwner")
+  // CRM — history of CSV import runs (Contacts + Opportunities).
+  crmImportJobs       CrmImportJob[]       @relation("CrmImportJobActor")
 
   // CRM — opportunity task/note authorship + assignment. Tasks track
   // both who created the row and who's meant to complete it; notes
@@ -2672,6 +2674,61 @@ model CrmBulkAction {
 // ============================================
 // CRM — SAVED FILTER VIEWS
 // ============================================
+
+/// Which object the CSV populated.
+enum CrmImportJobObject {
+  CONTACTS
+  OPPORTUNITIES
+}
+
+/// How the import treats rows that match an existing record (by email
+/// for both objects). GHL uses the same three-way choice.
+enum CrmImportJobMode {
+  CREATE_ONLY
+  CREATE_OR_UPDATE
+  UPDATE_ONLY
+}
+
+enum CrmImportJobStatus {
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+/// One row per CSV import. Populated at the start of the run and
+/// finalised after all rows are inserted; drives the /admin/crm/
+/// import/history table and the wizard's "Previous imports" link.
+model CrmImportJob {
+  id       String             @id @default(uuid())
+  object   CrmImportJobObject
+  mode     CrmImportJobMode
+  status   CrmImportJobStatus @default(RUNNING)
+  fileName String?            @map("file_name")
+  fileSize Int?               @map("file_size")
+
+  rowsTotal   Int @default(0) @map("rows_total")
+  rowsCreated Int @default(0) @map("rows_created")
+  rowsUpdated Int @default(0) @map("rows_updated")
+  rowsSkipped Int @default(0) @map("rows_skipped")
+  rowsFailed  Int @default(0) @map("rows_failed")
+
+  /// Extra context surfaced in the history row (pipelineId +
+  /// assigneeId for opportunities, etc.). Free-form so shape can
+  /// evolve without migrations.
+  params       Json?
+  errorMessage String? @map("error_message") @db.Text
+
+  actorId String? @map("actor_id")
+  actor   User?   @relation("CrmImportJobActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+  companyId   String    @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([companyId, createdAt])
+  @@index([companyId, actorId, createdAt])
+  @@map("crm_import_jobs")
+}
 
 /// A saved filter set on the Opportunities board — the "smart lists"
 /// pattern from HighLevel. Each view is private to its owner for
