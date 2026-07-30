@@ -85,7 +85,7 @@ export function LeadsShell({ initialData, basePath, teamSurface }: LeadsShellPro
     <div className="space-y-4">
       <PageHeader
         title="Contacts"
-        description={`${leads.total} lead${leads.total === 1 ? '' : 's'} in the inbox`}
+        description={`${leads.total} contact${leads.total === 1 ? '' : 's'}`}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
@@ -94,7 +94,7 @@ export function LeadsShell({ initialData, basePath, teamSurface }: LeadsShellPro
             </Button>
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              New lead
+              New contact
             </Button>
           </div>
         }

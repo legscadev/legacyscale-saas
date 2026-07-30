@@ -99,10 +99,10 @@ export function LeadsTable({
     return (
       <EmptyState
         icon={Inbox}
-        title="No leads match these filters"
-        description="Capture a lead, import a CSV, or broaden the filters."
+        title="No contacts match these filters"
+        description="Capture a contact, import a CSV, or broaden the filters."
       >
-        {onCreate ? <Button onClick={onCreate}>Add a lead</Button> : null}
+        {onCreate ? <Button onClick={onCreate}>Add a contact</Button> : null}
       </EmptyState>
     )
   }

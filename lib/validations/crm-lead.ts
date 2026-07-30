@@ -156,7 +156,11 @@ export const leadFilterSchema = z.object({
     .optional()
     .default([]),
   mine: z.boolean().optional().default(false),
-  includeConverted: z.boolean().optional().default(false),
+  /** GHL-style: Contacts is the master list. Show every non-deleted
+   *  row by default; the status filter above lets users narrow to
+   *  just non-converted (still-leads) when they want the pre-P0 #3
+   *  inbox view. */
+  includeConverted: z.boolean().optional().default(true),
   sortBy: z
     .enum(['createdAt', 'lastActivityAt', 'fullName', 'status'])
     .optional()
