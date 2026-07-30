@@ -256,9 +256,22 @@ export const csvLeadRowSchema = z.object({
 })
 export type CsvLeadRow = z.output<typeof csvLeadRowSchema>
 
+/** Import behaviour chosen in the wizard's Upload step. Shared
+ *  between contacts and opportunities imports (the two shells wire
+ *  the same three-way dropdown). */
+export const importModeSchema = z.enum([
+  'CREATE_ONLY',
+  'CREATE_OR_UPDATE',
+  'UPDATE_ONLY',
+])
+export type ImportMode = z.output<typeof importModeSchema>
+
 export const importLeadsSchema = z.object({
   rows: z.array(csvLeadRowSchema).min(1, 'No rows to import').max(2000),
   assignedSetterId: z.string().uuid().nullable().optional(),
+  mode: importModeSchema.optional().default('CREATE_ONLY'),
+  fileName: z.string().trim().max(200).optional(),
+  fileSize: z.number().int().min(0).optional(),
 })
 export type ImportLeadsInput = z.input<typeof importLeadsSchema>
 export type ImportLeadsOutput = z.output<typeof importLeadsSchema>

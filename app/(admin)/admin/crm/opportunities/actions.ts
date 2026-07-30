@@ -21,6 +21,7 @@ import {
   type OpportunityViewRow,
 } from '@/lib/services/crm-opportunity-view-service'
 import { listAssignableSalesUsers } from '@/lib/services/crm-assignable-users'
+import { crmImportJobService } from '@/lib/services/crm-import-job-service'
 import {
   crmLeadService,
   type LeadListItem,
@@ -618,9 +619,11 @@ export async function importOpportunitiesAction(
 ): Promise<
   MutationResult<{
     created: number
+    updated: number
     skipped: number
     contactsCreated: number
     contactsLinked: number
+    jobId: string
   }>
 > {
   const user = await requireTeamModuleAccess('crm-pipeline')
@@ -628,16 +631,40 @@ export async function importOpportunitiesAction(
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
   }
+  const job = await crmImportJobService.start({
+    object: 'OPPORTUNITIES',
+    mode: parsed.data.mode,
+    rowsTotal: parsed.data.rows.length,
+    fileName: parsed.data.fileName ?? null,
+    fileSize: parsed.data.fileSize ?? null,
+    params: {
+      pipelineId: parsed.data.pipelineId,
+      assignedCloserId: parsed.data.assignedCloserId ?? null,
+    },
+    actorId: user.id,
+  })
   try {
     const result = await crmOpportunityService.importFromCsv({
       pipelineId: parsed.data.pipelineId,
       rows: parsed.data.rows as CsvOpportunityRow[],
       assignedCloserId: parsed.data.assignedCloserId,
       actorId: user.id,
+      mode: parsed.data.mode,
+    })
+    await crmImportJobService.complete({
+      jobId: job.id,
+      rowsCreated: result.created,
+      rowsUpdated: result.updated,
+      rowsSkipped: result.skipped,
+      rowsFailed: 0,
     })
     revalidateAll()
-    return { ok: true, data: result }
+    return { ok: true, data: { ...result, jobId: job.id } }
   } catch (err) {
+    await crmImportJobService.fail({
+      jobId: job.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    })
     return toMutationErr(err, 'Could not import opportunities')
   }
 }

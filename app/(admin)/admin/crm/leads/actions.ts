@@ -14,6 +14,7 @@ import {
   crmContactViewService,
   type ContactViewRow,
 } from '@/lib/services/crm-contact-view-service'
+import { crmImportJobService } from '@/lib/services/crm-import-job-service'
 import {
   crmLeadService,
   LeadAlreadyConvertedError,
@@ -276,18 +277,52 @@ export async function convertLeadAction(
 
 export async function importLeadsAction(
   input: ImportLeadsInput,
-): Promise<MutationResult<{ created: number }>> {
+): Promise<
+  MutationResult<{
+    created: number
+    updated: number
+    skipped: number
+    jobId: string
+  }>
+> {
   const user = await requireTeamModuleAccess('crm-leads')
   const parsed = importLeadsSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
   }
 
+  // Log the run before we start so a crash mid-insert still leaves a
+  // RUNNING row for the operator to see + retry from history.
+  const job = await crmImportJobService.start({
+    object: 'CONTACTS',
+    mode: parsed.data.mode,
+    rowsTotal: parsed.data.rows.length,
+    fileName: parsed.data.fileName ?? null,
+    fileSize: parsed.data.fileSize ?? null,
+    params: { assignedSetterId: parsed.data.assignedSetterId ?? null },
+    actorId: user.id,
+  })
+
   try {
-    const data = await crmLeadService.importCsv(parsed.data, user.id)
+    const data = await crmLeadService.importCsv(
+      parsed.data,
+      user.id,
+      parsed.data.mode,
+    )
+    await crmImportJobService.complete({
+      jobId: job.id,
+      rowsCreated: data.created,
+      rowsUpdated: data.updated,
+      rowsSkipped: data.skipped,
+      rowsFailed: 0,
+    })
     revalidateAll()
-    return { ok: true, data }
+    return { ok: true, data: { ...data, jobId: job.id } }
   } catch (err) {
+    await crmImportJobService.fail({
+      jobId: job.id,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    })
     return toMutationErr(err, 'Could not import leads')
   }
 }

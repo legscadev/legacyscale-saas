@@ -569,8 +569,14 @@ class CrmOpportunityService {
     }>
     assignedCloserId?: string | null
     actorId: string | null
+    /** Import mode from the wizard. CREATE_OR_UPDATE / UPDATE_ONLY
+     *  match existing opportunities by (pipelineId, contactEmail):
+     *  the same contact + pipeline shouldn't accrue duplicate deals
+     *  when the same file is uploaded twice. */
+    mode?: 'CREATE_ONLY' | 'CREATE_OR_UPDATE' | 'UPDATE_ONLY'
   }): Promise<{
     created: number
+    updated: number
     skipped: number
     contactsCreated: number
     contactsLinked: number
@@ -604,15 +610,15 @@ class CrmOpportunityService {
       nextOrderPerStage.set(s.id, (last?.orderIndex ?? 0) + 100)
     }
 
+    const mode = input.mode ?? 'CREATE_ONLY'
     let created = 0
+    let updated = 0
     let skipped = 0
     let contactsCreated = 0
     let contactsLinked = 0
     for (const row of input.rows) {
       const key = row.stageName?.toLowerCase().trim()
       const stage = (key && stageByKey.get(key)) || defaultStage
-      const orderIndex = nextOrderPerStage.get(stage.id)!
-      nextOrderPerStage.set(stage.id, orderIndex + 100)
 
       // Dedupe against existing contacts by email (fallback to name).
       // Track whether we hit an existing row so the import summary
@@ -645,32 +651,87 @@ class CrmOpportunityService {
         else contactsCreated++
       }
 
+      // Look for an existing opportunity to update when the mode
+      // asks for it: same pipeline + same linked contact. That's
+      // the tightest match GHL supports without a stable per-deal
+      // external id, and it stops re-uploading a file from
+      // duplicating deals for the same person.
+      const existing =
+        mode !== 'CREATE_ONLY' && contactId
+          ? await prisma.crmOpportunity.findFirst({
+              where: {
+                pipelineId: input.pipelineId,
+                contactId,
+                deletedAt: null,
+              },
+              select: { id: true },
+            })
+          : null
+
       try {
-        await prisma.crmOpportunity.create({
-          data: {
-            name: row.name,
-            pipelineId: input.pipelineId,
-            stageId: stage.id,
-            contactId,
-            contactName: row.contactName ?? null,
-            contactEmail: row.contactEmail ?? null,
-            contactPhone: row.contactPhone ?? null,
-            companyName: row.companyName ?? null,
-            value: row.value ?? null,
-            probability: row.probability ?? stage.probability ?? null,
-            assignedCloserId: input.assignedCloserId ?? null,
-            notes: row.notes?.trim() ? row.notes.trim() : null,
-            orderIndex,
-            createdById: input.actorId,
-            companyId,
-          },
-        })
-        created++
+        if (existing) {
+          await prisma.crmOpportunity.update({
+            where: { id: existing.id },
+            data: {
+              ...(row.name ? { name: row.name } : {}),
+              stageId: stage.id,
+              ...(row.contactName !== undefined
+                ? { contactName: row.contactName ?? null }
+                : {}),
+              ...(row.contactEmail !== undefined
+                ? { contactEmail: row.contactEmail ?? null }
+                : {}),
+              ...(row.contactPhone !== undefined
+                ? { contactPhone: row.contactPhone ?? null }
+                : {}),
+              ...(row.companyName !== undefined
+                ? { companyName: row.companyName ?? null }
+                : {}),
+              ...(row.value !== undefined ? { value: row.value } : {}),
+              ...(row.probability !== undefined
+                ? {
+                    probability:
+                      row.probability ?? stage.probability ?? null,
+                  }
+                : {}),
+              ...(input.assignedCloserId !== undefined
+                ? { assignedCloserId: input.assignedCloserId ?? null }
+                : {}),
+              ...(row.notes?.trim() ? { notes: row.notes.trim() } : {}),
+            },
+          })
+          updated++
+        } else if (mode === 'UPDATE_ONLY') {
+          skipped++
+        } else {
+          const orderIndex = nextOrderPerStage.get(stage.id)!
+          nextOrderPerStage.set(stage.id, orderIndex + 100)
+          await prisma.crmOpportunity.create({
+            data: {
+              name: row.name,
+              pipelineId: input.pipelineId,
+              stageId: stage.id,
+              contactId,
+              contactName: row.contactName ?? null,
+              contactEmail: row.contactEmail ?? null,
+              contactPhone: row.contactPhone ?? null,
+              companyName: row.companyName ?? null,
+              value: row.value ?? null,
+              probability: row.probability ?? stage.probability ?? null,
+              assignedCloserId: input.assignedCloserId ?? null,
+              notes: row.notes?.trim() ? row.notes.trim() : null,
+              orderIndex,
+              createdById: input.actorId,
+              companyId,
+            },
+          })
+          created++
+        }
       } catch {
         skipped++
       }
     }
-    return { created, skipped, contactsCreated, contactsLinked }
+    return { created, updated, skipped, contactsCreated, contactsLinked }
   }
 
   /**

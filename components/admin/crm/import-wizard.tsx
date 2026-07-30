@@ -20,6 +20,7 @@ import {
   Check,
   Download,
   FileSpreadsheet,
+  History,
   Upload,
   Users,
   X,
@@ -49,6 +50,24 @@ import {
 
 type ObjectId = 'contacts' | 'opportunities'
 type StepId = 'start' | 'upload' | 'map' | 'verify'
+
+/** How the wizard treats a CSV row that matches an existing record.
+ *  Value strings match the shared importModeSchema enum. */
+type ImportMode = 'CREATE_ONLY' | 'CREATE_OR_UPDATE' | 'UPDATE_ONLY'
+
+const IMPORT_MODE_LABELS: Record<ImportMode, string> = {
+  CREATE_ONLY: 'Create new only',
+  CREATE_OR_UPDATE: 'Create new and update existing',
+  UPDATE_ONLY: 'Update existing only',
+}
+
+const IMPORT_MODE_DESCRIPTIONS: Record<ImportMode, string> = {
+  CREATE_ONLY: 'Insert every row as a new record.',
+  CREATE_OR_UPDATE:
+    'Match by email. If found, update in place — otherwise create a new record.',
+  UPDATE_ONLY:
+    'Match by email. If found, update in place. Rows without a match are skipped.',
+}
 
 /** All target fields the mapper can pick, per object. `null` = skip. */
 type ContactField =
@@ -177,6 +196,7 @@ export function ImportWizard({
   const [csvHeaders, setCsvHeaders] = useState<string[]>([])
   const [csvRows, setCsvRows] = useState<string[][]>([])
   const [mapping, setMapping] = useState<Array<TargetField | null>>([])
+  const [mode, setMode] = useState<ImportMode>('CREATE_ONLY')
   const [pipelineId, setPipelineId] = useState<string>('')
   const [assigneeId, setAssigneeId] = useState<string>('')
   const [pending, startTransition] = useTransition()
@@ -252,15 +272,16 @@ export function ImportWizard({
         const res = await importLeadsAction({
           rows: parsedResult.rows as CsvLeadRow[],
           assignedSetterId: assigneeId || null,
+          mode,
+          fileName: file?.name,
+          fileSize: file?.size,
         })
         if (!res.ok) {
           toast.error(res.error ?? 'Import failed')
           return
         }
         toast.success(
-          `Imported ${res.data.created} contact${
-            res.data.created === 1 ? '' : 's'
-          }`,
+          `Imported ${res.data.created} new · ${res.data.updated} updated`,
         )
         router.push('/admin/crm/leads')
         return
@@ -274,15 +295,16 @@ export function ImportWizard({
         pipelineId,
         rows: parsedResult.rows as CsvOpportunityRow[],
         assignedCloserId: assigneeId || null,
+        mode,
+        fileName: file?.name,
+        fileSize: file?.size,
       })
       if (!res.ok) {
         toast.error(res.error ?? 'Import failed')
         return
       }
       toast.success(
-        `Imported ${res.data.created} deal${
-          res.data.created === 1 ? '' : 's'
-        }`,
+        `Imported ${res.data.created} new · ${res.data.updated} updated`,
       )
       router.push('/admin/crm/opportunities')
     })
@@ -301,11 +323,22 @@ export function ImportWizard({
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-16">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Imports</h1>
-        <p className="text-sm text-muted-foreground">
-          Import contacts and opportunities from a CSV.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Imports</h1>
+          <p className="text-sm text-muted-foreground">
+            Import contacts and opportunities from a CSV.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => router.push('/admin/crm/import/history')}
+        >
+          <History className="size-3.5" />
+          Previous imports
+        </Button>
       </header>
 
       <Stepper steps={steps} activeIndex={currentStepIndex} />
@@ -317,6 +350,8 @@ export function ImportWizard({
           <UploadStep
             object={object}
             file={file}
+            mode={mode}
+            onModeChange={setMode}
             onFileParsed={handleFileParsed}
             onClear={() => {
               setFile(null)
@@ -528,11 +563,15 @@ function ObjectCard({
 function UploadStep({
   object,
   file,
+  mode,
+  onModeChange,
   onFileParsed,
   onClear,
 }: {
   object: ObjectId
   file: File | null
+  mode: ImportMode
+  onModeChange: (m: ImportMode) => void
   onFileParsed: (file: File, headers: string[], rows: string[][]) => void
   onClear: () => void
 }) {
@@ -649,6 +688,29 @@ function UploadStep({
           />
         </label>
       )}
+
+      <div className="grid gap-1.5">
+        <Label htmlFor="import-mode" className="text-xs">
+          How to import {object}
+        </Label>
+        <select
+          id="import-mode"
+          value={mode}
+          onChange={(e) => onModeChange(e.target.value as ImportMode)}
+          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+        >
+          {(
+            ['CREATE_ONLY', 'CREATE_OR_UPDATE', 'UPDATE_ONLY'] as ImportMode[]
+          ).map((m) => (
+            <option key={m} value={m}>
+              {IMPORT_MODE_LABELS[m]}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          {IMPORT_MODE_DESCRIPTIONS[mode]}
+        </p>
+      </div>
     </section>
   )
 }
