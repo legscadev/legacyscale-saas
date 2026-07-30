@@ -174,7 +174,18 @@ function LeadRow({
     <TableRow className={cn(pending && 'opacity-60')}>
       <TableCell>
         <div className="min-w-0">
-          <p className="truncate font-medium">{lead.fullName}</p>
+          <div className="flex items-center gap-2">
+            <p className="truncate font-medium">{lead.fullName}</p>
+            {lead.opportunityCount > 0 ? (
+              <span
+                title={`${lead.opportunityCount} opportunit${lead.opportunityCount === 1 ? 'y' : 'ies'} linked`}
+                className="inline-flex items-center gap-0.5 rounded-full border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums"
+              >
+                {lead.opportunityCount} deal
+                {lead.opportunityCount === 1 ? '' : 's'}
+              </span>
+            ) : null}
+          </div>
           {subtitle ? (
             <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
           ) : null}

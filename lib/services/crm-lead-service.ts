@@ -69,6 +69,9 @@ export interface LeadListItem {
   convertedOpportunityId: string | null
   lastActivityAt: Date | null
   createdAt: Date
+  /** Total opportunities linked to this contact (any status). Zero
+   *  for un-converted leads; positive once at least one deal exists. */
+  opportunityCount: number
 }
 
 export interface LeadListResult {
@@ -98,6 +101,7 @@ const LIST_SELECT = {
   lastActivityAt: true,
   createdAt: true,
   assignedSetter: SETTER_SELECT,
+  _count: { select: { opportunities: true } },
 } as const satisfies Prisma.CrmLeadSelect
 
 type LeadRow = Prisma.CrmLeadGetPayload<{ select: typeof LIST_SELECT }>
@@ -117,6 +121,7 @@ function toListItem(row: LeadRow): LeadListItem {
     convertedOpportunityId: row.convertedOpportunityId,
     lastActivityAt: row.lastActivityAt,
     createdAt: row.createdAt,
+    opportunityCount: row._count.opportunities,
   }
 }
 
@@ -398,6 +403,96 @@ class CrmLeadService {
       where: { id },
       data: { deletedAt: new Date() },
     })
+  }
+
+  /**
+   * Search-as-you-type feed for the contact picker on the opportunity
+   * dialogs. Case-insensitive prefix/substring match against name +
+   * email; capped for latency. Returns the same LIST_SELECT shape so
+   * the picker can render name + email + company.
+   */
+  async searchForPicker(query: string, limit = 10): Promise<LeadListItem[]> {
+    const q = query.trim()
+    // Empty query returns the most-recent contacts so the picker isn't
+    // blank when first opened.
+    const rows = await prisma.crmLead.findMany({
+      where: {
+        deletedAt: null,
+        ...(q.length > 0
+          ? {
+              OR: [
+                { fullName: { contains: q, mode: 'insensitive' } },
+                { email: { contains: q, mode: 'insensitive' } },
+                { companyName: { contains: q, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }],
+      take: limit,
+      select: LIST_SELECT,
+    })
+    return rows.map(toListItem)
+  }
+
+  /**
+   * The write path for "new opportunity with a contact that may or may
+   * not exist yet". Dedupe by email first (case-insensitive), then
+   * fall back to name + companyName; create a fresh lead if neither
+   * matches. Returns the resolved lead id so the caller can wire it
+   * as CrmOpportunity.contactId.
+   */
+  async findOrCreateByContact(input: {
+    fullName?: string | null
+    email?: string | null
+    phone?: string | null
+    companyName?: string | null
+    source?: 'MANUAL' | 'CSV_IMPORT' | 'API' | 'WEBHOOK'
+    actorId: string | null
+  }): Promise<string> {
+    const email = input.email?.trim() || null
+    const name = input.fullName?.trim() || null
+    const company = input.companyName?.trim() || null
+
+    if (email) {
+      const existing = await prisma.crmLead.findFirst({
+        where: {
+          deletedAt: null,
+          email: { equals: email, mode: 'insensitive' },
+        },
+        select: { id: true },
+      })
+      if (existing) return existing.id
+    } else if (name) {
+      // No email → name-based dedupe scoped by (name, company) so
+      // "John Smith @ Acme" and "John Smith @ Beta" don't collide.
+      const existing = await prisma.crmLead.findFirst({
+        where: {
+          deletedAt: null,
+          fullName: { equals: name, mode: 'insensitive' },
+          ...(company
+            ? { companyName: { equals: company, mode: 'insensitive' } }
+            : {}),
+        },
+        select: { id: true },
+      })
+      if (existing) return existing.id
+    }
+
+    const created = await prisma.crmLead.create({
+      data: {
+        fullName: name || email || 'Unnamed contact',
+        email,
+        phone: input.phone?.trim() || null,
+        companyName: company,
+        source: input.source ?? 'MANUAL',
+        status: 'CONVERTED',
+        lastActivityAt: new Date(),
+        createdById: input.actorId,
+      },
+      select: { id: true },
+    })
+    return created.id
   }
 
   private async assertExists(id: string): Promise<void> {

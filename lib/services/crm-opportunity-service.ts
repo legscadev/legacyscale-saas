@@ -13,6 +13,7 @@
 import { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { crmLeadService } from '@/lib/services/crm-lead-service'
 import { getRequestCompanyId } from '@/lib/tenancy/request-company'
 import type { OpportunityFilterOutput } from '@/lib/validations/crm'
 import type {
@@ -79,6 +80,15 @@ export interface OpportunityCloser {
   avatarUrl: string | null
 }
 
+/** Compact contact reference embedded in each card/detail response. */
+export interface OpportunityContactRef {
+  id: string
+  fullName: string
+  email: string | null
+  phone: string | null
+  companyName: string | null
+}
+
 /** One card on the board. Kept flat + serializable. */
 export interface OpportunityListItem {
   id: string
@@ -88,7 +98,15 @@ export interface OpportunityListItem {
   status: 'OPEN' | 'WON' | 'LOST'
   value: number | null
   probability: number | null
+  /** The linked contact — GHL model. Nullable only for legacy rows
+   *  whose backfill couldn't match anything (should be rare after
+   *  P0 #3 lands). */
+  contact: OpportunityContactRef | null
+  /** Derived from `contact.fullName` when linked, or the legacy
+   *  free-text contact_name column for un-migrated rows. Kept as a
+   *  top-level convenience so board cards don't drill into `contact`. */
   contactName: string | null
+  /** Same story: from `contact.companyName` if linked, else legacy. */
   companyName: string | null
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
@@ -109,6 +127,16 @@ const CLOSER_SELECT = {
   select: { id: true, name: true, email: true, avatarUrl: true },
 } as const satisfies Prisma.UserDefaultArgs
 
+const CONTACT_SELECT = {
+  select: {
+    id: true,
+    fullName: true,
+    email: true,
+    phone: true,
+    companyName: true,
+  },
+} as const satisfies Prisma.CrmLeadDefaultArgs
+
 interface ToListItemRow {
   id: string
   name: string
@@ -121,6 +149,7 @@ interface ToListItemRow {
   companyName: string | null
   expectedCloseDate: Date | null
   assignedCloser: OpportunityCloser | null
+  contact: OpportunityContactRef | null
   notes: string | null
   source: string | null
   noteCount?: number
@@ -128,6 +157,10 @@ interface ToListItemRow {
 }
 
 function toListItem(row: ToListItemRow): OpportunityListItem {
+  // Prefer the linked contact when present; fall back to the legacy
+  // free-text columns so pre-backfill / un-linked rows still render.
+  const displayName = row.contact?.fullName ?? row.contactName
+  const displayCompany = row.contact?.companyName ?? row.companyName
   return {
     id: row.id,
     name: row.name,
@@ -138,8 +171,9 @@ function toListItem(row: ToListItemRow): OpportunityListItem {
     // JS safe-integer range so this is lossless in practice.
     value: row.value === null ? null : Number(row.value),
     probability: row.probability,
-    contactName: row.contactName,
-    companyName: row.companyName,
+    contact: row.contact,
+    contactName: displayName,
+    companyName: displayCompany,
     expectedCloseDate: row.expectedCloseDate,
     assignedCloser: row.assignedCloser,
     hasNotes: row.notes !== null && row.notes.trim().length > 0,
@@ -195,6 +229,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        contact: CONTACT_SELECT,
         notes: true,
         source: true,
         _count: {
@@ -240,6 +275,7 @@ class CrmOpportunityService {
         notes: true,
         source: true,
         assignedCloser: CLOSER_SELECT,
+        contact: CONTACT_SELECT,
         _count: {
           select: {
             noteEntries: true,
@@ -249,14 +285,16 @@ class CrmOpportunityService {
       },
     })
     if (!row) throw new OpportunityNotFoundError()
+    const base = toListItem({
+      ...row,
+      noteCount: row._count.noteEntries,
+      openTaskCount: row._count.tasks,
+    })
     return {
-      ...toListItem({
-        ...row,
-        noteCount: row._count.noteEntries,
-        openTaskCount: row._count.tasks,
-      }),
-      contactEmail: row.contactEmail,
-      contactPhone: row.contactPhone,
+      ...base,
+      // Prefer contact fields when linked; fall back to legacy free-text.
+      contactEmail: row.contact?.email ?? row.contactEmail,
+      contactPhone: row.contact?.phone ?? row.contactPhone,
       notes: row.notes,
       pipelineId: row.pipelineId,
     }
@@ -292,6 +330,13 @@ class CrmOpportunityService {
 
     const orderIndex = await nextOrderIndex(companyId, stage.id)
 
+    // Resolve the contact: explicit contactId wins; otherwise
+    // find-or-create from the inline free-text fields. We still write
+    // the denormalized contactName/email/phone/companyName so the
+    // board's search (which greps on those columns) keeps working
+    // without a join.
+    const contactId = await resolveContactId(input, actorId)
+
     const created = await prisma.crmOpportunity.create({
       data: {
         name: input.name,
@@ -301,6 +346,7 @@ class CrmOpportunityService {
         // when the caller wants a non-default (rare — typically only
         // used when importing already-closed historical deals).
         ...(input.status ? { status: input.status } : {}),
+        contactId,
         contactName: input.contactName ?? null,
         contactEmail: input.contactEmail ?? null,
         contactPhone: input.contactPhone ?? null,
@@ -326,6 +372,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        contact: CONTACT_SELECT,
         notes: true,
         source: true,
       },
@@ -337,17 +384,24 @@ class CrmOpportunityService {
   async update(
     id: string,
     input: UpdateOpportunityOutput,
+    actorId: string | null = null,
   ): Promise<OpportunityListItem> {
     const existing = await prisma.crmOpportunity.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, contactId: true },
     })
     if (!existing) throw new OpportunityNotFoundError()
+
+    // Resolve the contact when the caller either sent a contactId
+    // (a picker change) or touched one of the inline fields (legacy
+    // free-text edit). Undefined = don't touch the FK.
+    const contactId = await resolveContactIdForUpdate(input, actorId)
 
     const updated = await prisma.crmOpportunity.update({
       where: { id },
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(contactId !== undefined ? { contactId } : {}),
         ...(input.contactName !== undefined ? { contactName: input.contactName } : {}),
         ...(input.contactEmail !== undefined ? { contactEmail: input.contactEmail } : {}),
         ...(input.contactPhone !== undefined ? { contactPhone: input.contactPhone } : {}),
@@ -381,6 +435,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        contact: CONTACT_SELECT,
         notes: true,
         source: true,
         _count: {
@@ -475,6 +530,7 @@ class CrmOpportunityService {
         companyName: true,
         expectedCloseDate: true,
         assignedCloser: CLOSER_SELECT,
+        contact: CONTACT_SELECT,
         notes: true,
         source: true,
         _count: {
@@ -513,7 +569,12 @@ class CrmOpportunityService {
     }>
     assignedCloserId?: string | null
     actorId: string | null
-  }): Promise<{ created: number; skipped: number }> {
+  }): Promise<{
+    created: number
+    skipped: number
+    contactsCreated: number
+    contactsLinked: number
+  }> {
     const companyId = await requireCompanyId()
 
     const stages = await prisma.crmPipelineStage.findMany({
@@ -545,11 +606,44 @@ class CrmOpportunityService {
 
     let created = 0
     let skipped = 0
+    let contactsCreated = 0
+    let contactsLinked = 0
     for (const row of input.rows) {
       const key = row.stageName?.toLowerCase().trim()
       const stage = (key && stageByKey.get(key)) || defaultStage
       const orderIndex = nextOrderPerStage.get(stage.id)!
       nextOrderPerStage.set(stage.id, orderIndex + 100)
+
+      // Dedupe against existing contacts by email (fallback to name).
+      // Track whether we hit an existing row so the import summary
+      // can show N-new-contacts vs N-linked.
+      const hadEmail = !!row.contactEmail?.trim()
+      const contactCountBefore = hadEmail
+        ? await prisma.crmLead.count({
+            where: {
+              deletedAt: null,
+              email: {
+                equals: row.contactEmail!.trim(),
+                mode: 'insensitive',
+              },
+            },
+          })
+        : 0
+      const contactId =
+        row.contactName || row.contactEmail || row.contactPhone
+          ? await crmLeadService.findOrCreateByContact({
+              fullName: row.contactName,
+              email: row.contactEmail,
+              phone: row.contactPhone,
+              companyName: row.companyName,
+              source: 'CSV_IMPORT',
+              actorId: input.actorId,
+            })
+          : null
+      if (contactId) {
+        if (hadEmail && contactCountBefore > 0) contactsLinked++
+        else contactsCreated++
+      }
 
       try {
         await prisma.crmOpportunity.create({
@@ -557,6 +651,7 @@ class CrmOpportunityService {
             name: row.name,
             pipelineId: input.pipelineId,
             stageId: stage.id,
+            contactId,
             contactName: row.contactName ?? null,
             contactEmail: row.contactEmail ?? null,
             contactPhone: row.contactPhone ?? null,
@@ -575,7 +670,7 @@ class CrmOpportunityService {
         skipped++
       }
     }
-    return { created, skipped }
+    return { created, skipped, contactsCreated, contactsLinked }
   }
 
   /**
@@ -665,3 +760,68 @@ class CrmOpportunityService {
 }
 
 export const crmOpportunityService = new CrmOpportunityService()
+
+/**
+ * Resolve the contact for a NEW opportunity. Precedence:
+ *  1. Explicit `contactId` in input (picker chose an existing contact).
+ *  2. Any inline free-text contact field → find-or-create by email/name.
+ *  3. Neither → null (rare; only happens when the caller intentionally
+ *     leaves the deal detached).
+ */
+async function resolveContactId(
+  input: CreateOpportunityOutput,
+  actorId: string | null,
+): Promise<string | null> {
+  if (input.contactId) return input.contactId
+  const hasInlineContact =
+    !!input.contactName?.trim() ||
+    !!input.contactEmail?.trim() ||
+    !!input.contactPhone?.trim() ||
+    !!input.companyName?.trim()
+  if (!hasInlineContact) return null
+  return crmLeadService.findOrCreateByContact({
+    fullName: input.contactName,
+    email: input.contactEmail,
+    phone: input.contactPhone,
+    companyName: input.companyName,
+    source: 'MANUAL',
+    actorId,
+  })
+}
+
+/**
+ * Update-path variant. Returns `undefined` when the caller didn't
+ * touch contact info (leave the FK alone), `null` when the caller
+ * explicitly cleared it, or a string id otherwise. The three-state
+ * return maps directly onto Prisma's spread-if-defined pattern.
+ */
+async function resolveContactIdForUpdate(
+  input: UpdateOpportunityOutput,
+  actorId: string | null,
+): Promise<string | null | undefined> {
+  // Explicit contactId in the payload — picker change.
+  if (input.contactId !== undefined) return input.contactId
+
+  const touchedInline =
+    input.contactName !== undefined ||
+    input.contactEmail !== undefined ||
+    input.contactPhone !== undefined ||
+    input.companyName !== undefined
+  if (!touchedInline) return undefined
+
+  const hasAnyValue =
+    !!input.contactName?.trim() ||
+    !!input.contactEmail?.trim() ||
+    !!input.contactPhone?.trim() ||
+    !!input.companyName?.trim()
+  if (!hasAnyValue) return null
+
+  return crmLeadService.findOrCreateByContact({
+    fullName: input.contactName,
+    email: input.contactEmail,
+    phone: input.contactPhone,
+    companyName: input.companyName,
+    source: 'MANUAL',
+    actorId,
+  })
+}

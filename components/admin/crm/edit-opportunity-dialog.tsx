@@ -20,7 +20,6 @@ import {
   Settings2,
   StickyNote,
   Trash2,
-  UserPlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -46,11 +45,13 @@ import {
   updateOpportunityAction,
 } from '@/app/(admin)/admin/crm/opportunities/actions'
 import type { CrmTeamMember } from '@/app/(admin)/admin/crm/opportunities/actions'
+import type { LeadListItem } from '@/lib/services/crm-lead-service'
 import type {
   PipelineStage,
   PipelineSummary,
 } from '@/lib/services/crm-pipeline-service'
 
+import { ContactPicker, type InlineContactDraft } from './contact-picker'
 import { OpportunityNotesPanel } from './opportunity-notes-panel'
 import { OpportunityTasksPanel } from './opportunity-tasks-panel'
 
@@ -75,10 +76,6 @@ interface FormState {
   id: string
   name: string
   value: string
-  companyName: string
-  contactName: string
-  contactEmail: string
-  contactPhone: string
   probability: string
   expectedCloseDate: string
   assignedCloserId: string
@@ -87,6 +84,12 @@ interface FormState {
   status: 'OPEN' | 'WON' | 'LOST'
   pipelineId: string
   stageId: string
+  /** Currently linked contact (from opportunity.contact). Null while
+   *  the picker is empty; changing it stages a new contactId to send. */
+  contact: LeadListItem | null
+  /** Draft from the picker's inline "Add new contact" form. On save,
+   *  the service find-or-creates by email and links the id. */
+  contactDraft: InlineContactDraft | null
 }
 
 /** Which section of the edit dialog is showing. Tasks + Notes are
@@ -164,14 +167,32 @@ export function EditOpportunityDialog({
       setConfirmingDelete(false)
       setSection('details')
       setPipelineStages(stages)
+      // Build a LeadListItem-compatible shape from the joined contact
+      // (only fields the picker cares about need to be real). The
+      // service always joins when linked, but a legacy row can still
+      // return contact=null.
+      const contactRef: LeadListItem | null = d.contact
+        ? {
+            id: d.contact.id,
+            fullName: d.contact.fullName,
+            email: d.contact.email,
+            phone: d.contact.phone,
+            companyName: d.contact.companyName,
+            source: 'MANUAL',
+            campaign: null,
+            industry: null,
+            status: 'CONVERTED',
+            assignedSetter: null,
+            convertedOpportunityId: null,
+            lastActivityAt: null,
+            createdAt: new Date(),
+            opportunityCount: 0,
+          }
+        : null
       setForm({
         id: d.id,
         name: d.name,
         value: d.value === null ? '' : String(d.value),
-        companyName: d.companyName ?? '',
-        contactName: d.contactName ?? '',
-        contactEmail: d.contactEmail ?? '',
-        contactPhone: d.contactPhone ?? '',
         probability: d.probability === null ? '' : String(d.probability),
         expectedCloseDate: d.expectedCloseDate
           ? toCalendarDateInput(d.expectedCloseDate)
@@ -182,6 +203,8 @@ export function EditOpportunityDialog({
         status: d.status,
         pipelineId: d.pipelineId,
         stageId: d.stageId,
+        contact: contactRef,
+        contactDraft: null,
       })
     })
     return () => {
@@ -236,18 +259,37 @@ export function EditOpportunityDialog({
       // above may have already flipped it, and passing it unchanged
       // would re-stamp wonAt/lostAt for no reason.
       const statusChanged = form.status !== initialStatus
+
+      // Contact resolution: pick > inline draft > leave alone. The
+      // service accepts contactId directly, or free-text fields it
+      // uses to find-or-create.
+      const contactPayload: {
+        contactId?: string | null
+        contactName?: string | null
+        contactEmail?: string | null
+        contactPhone?: string | null
+        companyName?: string | null
+      } = form.contact
+        ? { contactId: form.contact.id }
+        : form.contactDraft
+          ? {
+              contactId: null,
+              contactName: form.contactDraft.fullName,
+              contactEmail: form.contactDraft.email,
+              contactPhone: form.contactDraft.phone,
+              companyName: form.contactDraft.companyName,
+            }
+          : {}
+
       const res = await updateOpportunityAction(opportunityId, {
         name: form.name.trim(),
         value: parsedValue,
-        companyName: form.companyName.trim() || null,
-        contactName: form.contactName.trim() || null,
-        contactEmail: form.contactEmail.trim() || null,
-        contactPhone: form.contactPhone.trim() || null,
         probability: parsedProb,
         expectedCloseDate: form.expectedCloseDate || undefined,
         assignedCloserId: form.assignedCloserId || null,
         notes: form.notes.trim() || null,
         source: form.source.trim() || null,
+        ...contactPayload,
         ...(statusChanged ? { status: form.status } : {}),
       })
       if (!res.ok) {
@@ -378,54 +420,39 @@ export function EditOpportunityDialog({
                     <h3 className="text-sm font-semibold">
                       Contact details
                     </h3>
-                    <span
-                      title="Add contact"
-                      className="text-muted-foreground"
-                    >
-                      <UserPlus className="size-3.5" aria-hidden />
-                    </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field
-                      id="edit-contact"
-                      label="Primary contact name"
-                      required
-                    >
-                      <Input
-                        id="edit-contact"
-                        value={form.contactName}
-                        onChange={(e) => set('contactName', e.target.value)}
-                        placeholder="Select contact"
-                      />
-                    </Field>
-                    <Field id="edit-email" label="Primary email">
-                      <Input
-                        id="edit-email"
-                        type="email"
-                        value={form.contactEmail}
-                        onChange={(e) => set('contactEmail', e.target.value)}
-                        placeholder="Enter email"
-                      />
-                    </Field>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field id="edit-phone" label="Primary phone">
-                      <Input
-                        id="edit-phone"
-                        value={form.contactPhone}
-                        onChange={(e) => set('contactPhone', e.target.value)}
-                        placeholder="Enter phone"
-                      />
-                    </Field>
-                    <Field id="edit-company" label="Company">
-                      <Input
-                        id="edit-company"
-                        value={form.companyName}
-                        onChange={(e) => set('companyName', e.target.value)}
-                        placeholder="Company name"
-                      />
-                    </Field>
-                  </div>
+                  <ContactPicker
+                    label="Contact"
+                    selectedContact={form.contact}
+                    onPick={(c) =>
+                      setForm((prev) =>
+                        prev
+                          ? { ...prev, contact: c, contactDraft: null }
+                          : prev,
+                      )
+                    }
+                    onInlineCreate={(draft) =>
+                      setForm((prev) =>
+                        prev
+                          ? { ...prev, contact: null, contactDraft: draft }
+                          : prev,
+                      )
+                    }
+                    onClear={() =>
+                      setForm((prev) =>
+                        prev
+                          ? { ...prev, contact: null, contactDraft: null }
+                          : prev,
+                      )
+                    }
+                    disabled={pending}
+                  />
+                  {form.contactDraft ? (
+                    <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                      New contact <b>{form.contactDraft.fullName}</b> will be
+                      created on save.
+                    </p>
+                  ) : null}
                 </section>
 
                 <section className="space-y-3">
