@@ -9,12 +9,20 @@
 // Mirrors the GHL Contacts surface: toolbar with Filters button,
 // Sort button, Search, per-page selector, and pagination.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowUpDown, Filter, Plus, Search, Upload } from 'lucide-react'
+import {
+  ArrowUpDown,
+  Columns3,
+  Filter,
+  Plus,
+  Search,
+  Upload,
+} from 'lucide-react'
 
 import { PageHeader } from '@/components/shared/page-header'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,7 +46,12 @@ import {
 } from './contacts-filter-drawer'
 import { CreateLeadDialog } from './create-lead-dialog'
 import { ImportLeadsDialog } from './import-leads-dialog'
-import { LeadsTable } from './leads-table'
+import {
+  DEFAULT_VISIBLE_COLUMNS,
+  LeadsTable,
+  OPTIONAL_COLUMNS,
+  type OptionalColumnId,
+} from './leads-table'
 
 type SortField =
   | 'createdAt'
@@ -82,6 +95,7 @@ export function LeadsShell({
   const [convertLead, setConvertLead] = useState<LeadListItem | null>(null)
   const [filterOpen, setFilterOpen] = useState(false)
   const [searchDraft, setSearchDraft] = useState(params.get('q') ?? '')
+  const [visibleColumns, setVisibleColumns] = useVisibleColumns()
 
   const mine = params.get('mine') === '1'
   const sortBy = (params.get('sort') as SortField) ?? 'createdAt'
@@ -206,6 +220,49 @@ export function LeadsShell({
           </DropdownMenuContent>
         </DropdownMenu>
 
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Columns3 className="size-3.5" />
+                Manage fields
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="start" className="w-56">
+            <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Toggle columns
+            </div>
+            {OPTIONAL_COLUMNS.map((col) => {
+              const checked = visibleColumns.includes(col.id)
+              return (
+                <label
+                  key={col.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => {
+                      setVisibleColumns((prev) =>
+                        prev.includes(col.id)
+                          ? prev.filter((id) => id !== col.id)
+                          : [...prev, col.id],
+                      )
+                    }}
+                  />
+                  <span>{col.label}</span>
+                </label>
+              )
+            })}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => setVisibleColumns([...DEFAULT_VISIBLE_COLUMNS])}
+            >
+              Reset to defaults
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <form onSubmit={submitSearch} className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -235,6 +292,7 @@ export function LeadsShell({
         onSortChange={handleSort}
         onConvert={setConvertLead}
         onCreate={() => setCreateOpen(true)}
+        visibleColumns={visibleColumns}
         onChanged={() => router.refresh()}
       />
 
@@ -319,4 +377,47 @@ export function LeadsShell({
       />
     </div>
   )
+}
+
+const COLUMN_STORAGE_KEY = 'kondense:contacts:visibleColumns:v1'
+
+/** localStorage-backed visible-columns state. Falls back to the
+ *  default set on first render and when a stored value is corrupt.
+ *  Namespaced with a version suffix so we can bump the default list
+ *  later without confusing older browsers. */
+function useVisibleColumns(): [
+  OptionalColumnId[],
+  React.Dispatch<React.SetStateAction<OptionalColumnId[]>>,
+] {
+  const [state, setState] = useState<OptionalColumnId[]>(
+    DEFAULT_VISIBLE_COLUMNS,
+  )
+  const validIds = useMemo(() => new Set(OPTIONAL_COLUMNS.map((c) => c.id)), [])
+
+  // Read once on mount — SSR-safe because it runs after hydration.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(COLUMN_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return
+      const clean = parsed.filter(
+        (v): v is OptionalColumnId =>
+          typeof v === 'string' && validIds.has(v as OptionalColumnId),
+      )
+      if (clean.length > 0) setState(clean)
+    } catch {
+      // Stored blob was garbage — fall through to the default.
+    }
+  }, [validIds])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(state))
+    } catch {
+      // Storage full / disabled — the picker still works in-session.
+    }
+  }, [state])
+
+  return [state, setState]
 }
