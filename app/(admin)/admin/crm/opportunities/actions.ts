@@ -143,6 +143,54 @@ function revalidateAll(): void {
   revalidatePath('/team/crm/opportunities')
 }
 
+/**
+ * Users who can be assigned to an opportunity. First tries the users
+ * with a Setter- or Closer-named role (matched case-insensitively on
+ * either role name or slug so tenants can call them e.g. "Senior
+ * Closer"). Falls back to every active ADMIN/TEAM user when no such
+ * roles exist yet — otherwise a fresh tenant would get an empty
+ * picker, which reads as broken.
+ */
+async function listAssignableSalesUsers(
+  tenantScope: Prisma.UserWhereInput | undefined,
+): Promise<CrmTeamMember[]> {
+  const baseWhere: Prisma.UserWhereInput = {
+    deletedAt: null,
+    isActive: true,
+    role: { in: ['ADMIN', 'TEAM'] },
+    ...(tenantScope ?? {}),
+  }
+  const nameMatch = { contains: 'setter', mode: 'insensitive' as const }
+  const closerMatch = { contains: 'closer', mode: 'insensitive' as const }
+  const salesRoleFilter: Prisma.UserWhereInput = {
+    roleAssignments: {
+      some: {
+        role: {
+          OR: [
+            { name: nameMatch },
+            { slug: nameMatch },
+            { name: closerMatch },
+            { slug: closerMatch },
+          ],
+        },
+      },
+    },
+  }
+
+  const scoped = await prisma.user.findMany({
+    where: { ...baseWhere, ...salesRoleFilter },
+    select: { id: true, name: true, email: true, avatarUrl: true },
+    orderBy: [{ name: 'asc' }, { email: 'asc' }],
+  })
+  if (scoped.length > 0) return scoped
+
+  return prisma.user.findMany({
+    where: baseWhere,
+    select: { id: true, name: true, email: true, avatarUrl: true },
+    orderBy: [{ name: 'asc' }, { email: 'asc' }],
+  })
+}
+
 // ============================================
 // WORKSPACE FETCHER
 // ============================================
@@ -221,16 +269,7 @@ export async function fetchPipelineWorkspaceAction(
       crmPipelineService.listPipelines(),
       crmPipelineService.listStages(pipelineId),
       crmOpportunityService.list(pipelineId, parsed.data),
-      prisma.user.findMany({
-        where: {
-          deletedAt: null,
-          isActive: true,
-          role: { in: ['ADMIN', 'TEAM'] },
-          ...tenantScope,
-        },
-        select: { id: true, name: true, email: true, avatarUrl: true },
-        orderBy: [{ name: 'asc' }, { email: 'asc' }],
-      }),
+      listAssignableSalesUsers(tenantScope),
       crmOpportunityViewService.list(currentUser.id),
     ])
 
