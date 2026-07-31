@@ -2,9 +2,9 @@ import { redirect } from 'next/navigation'
 
 import { requireTeamModuleAccess } from '@/lib/auth/get-user'
 import { LeadsShell } from '@/components/admin/crm/leads-shell'
-import { fetchLeadsWorkspaceAction } from '@/app/(admin)/admin/crm/leads/actions'
+import { fetchLeadsWorkspaceAction } from '@/app/(admin)/admin/crm/contacts/actions'
 
-// TEAM (setter) surface for the lead inbox. Mirrors /admin/crm/leads
+// TEAM (setter) surface for the lead inbox. Mirrors /admin/crm/contacts
 // but pins the "mine" filter so a setter sees the leads routed to
 // them. ADMIN is bounced to the admin surface.
 
@@ -55,19 +55,19 @@ export default async function TeamLeadsPage({
   searchParams,
 }: TeamLeadsPageProps) {
   const viewer = await requireTeamModuleAccess('crm-leads')
-  if (viewer.role === 'ADMIN') redirect('/admin/crm/leads')
+  if (viewer.role === 'ADMIN') redirect('/admin/crm/contacts')
 
   const raw = await searchParams
   const result = await fetchLeadsWorkspaceAction(parseFilters(raw))
   if (!result.ok) {
-    if (result.fieldErrors) redirect('/team/crm/leads')
+    if (result.fieldErrors) redirect('/team/crm/contacts')
     throw new Error(result.error ?? 'Could not load leads')
   }
 
   return (
     <LeadsShell
       initialData={result.data}
-      basePath="/team/crm/leads"
+      basePath="/team/crm/contacts"
       teamSurface
     />
   )

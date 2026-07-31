@@ -52,7 +52,7 @@ import {
   assignLeadAction,
   changeLeadStatusAction,
   deleteLeadAction,
-} from '@/app/(admin)/admin/crm/leads/actions'
+} from '@/app/(admin)/admin/crm/contacts/actions'
 
 import { LeadSourceBadge, LeadStatusPill } from './lead-pills'
 
@@ -119,6 +119,10 @@ interface LeadsTableProps {
   onSortChange: (field: SortField) => void
   onConvert: (lead: LeadListItem) => void
   onCreate?: () => void
+  /** Called when the user clicks anywhere on a row that isn't an
+   *  interactive control (dropdown, link) — parent opens the detail
+   *  edit dialog. */
+  onRowOpen: (lead: LeadListItem) => void
   /** Which optional columns the picker enabled. `contact` + `actions`
    *  are always rendered and don't appear here. */
   visibleColumns: OptionalColumnId[]
@@ -141,6 +145,7 @@ export function LeadsTable({
   onSortChange,
   onConvert,
   onCreate,
+  onRowOpen,
   visibleColumns,
   onChanged,
 }: LeadsTableProps) {
@@ -195,6 +200,7 @@ export function LeadsTable({
               lead={lead}
               members={members}
               onConvert={onConvert}
+              onOpen={onRowOpen}
               columns={columns}
               onChanged={onChanged}
             />
@@ -209,12 +215,14 @@ function LeadRow({
   lead,
   members,
   onConvert,
+  onOpen,
   columns,
   onChanged,
 }: {
   lead: LeadListItem
   members: CrmMember[]
   onConvert: (lead: LeadListItem) => void
+  onOpen: (lead: LeadListItem) => void
   columns: ColumnDefinition[]
   onChanged: () => void
 }) {
@@ -239,9 +247,16 @@ function LeadRow({
 
   const subtitle = lead.companyName ?? lead.email
 
+  // Row click opens the edit dialog. We stop propagation on the
+  // actions column so clicking the dropdown / its menu items doesn't
+  // also fire the open handler.
   return (
     <TableRow
-      className={cn('transition-colors hover:bg-accent/30', pending && 'opacity-60')}
+      className={cn(
+        'cursor-pointer transition-colors hover:bg-accent/30',
+        pending && 'opacity-60',
+      )}
+      onClick={() => onOpen(lead)}
     >
       <TableCell>
         <div className="flex min-w-0 items-center gap-2.5">
@@ -276,7 +291,10 @@ function LeadRow({
           {renderOptionalCell(col.id, lead, isConverted)}
         </TableCell>
       ))}
-      <TableCell className="text-right">
+      <TableCell
+        className="text-right"
+        onClick={(e) => e.stopPropagation()}
+      >
         <DropdownMenu>
           <DropdownMenuTrigger
             disabled={pending}

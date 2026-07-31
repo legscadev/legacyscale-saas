@@ -18,7 +18,7 @@ import {
   deleteContactViewAction,
   renameContactViewAction,
   updateContactViewFilterAction,
-} from '@/app/(admin)/admin/crm/leads/actions'
+} from '@/app/(admin)/admin/crm/contacts/actions'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -367,7 +367,7 @@ function TabButton({
 }
 
 /** Maps the long filter-blob key names back to the short URL query
- *  keys the /admin/crm/leads page.tsx parser understands. Extend this
+ *  keys the /admin/crm/contacts page.tsx parser understands. Extend this
  *  when the filter shape grows so a saved view still round-trips. */
 const SHORT_KEY: Record<string, string> = {
   statuses: 'statuses',

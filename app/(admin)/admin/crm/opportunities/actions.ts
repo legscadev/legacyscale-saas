@@ -629,7 +629,12 @@ export async function importOpportunitiesAction(
   const user = await requireTeamModuleAccess('crm-pipeline')
   const parsed = importOpportunitiesSchema.safeParse(input)
   if (!parsed.success) {
-    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+    const fieldErrors = fieldErrorsFromZod(parsed.error.issues)
+    const first = parsed.error.issues[0]
+    const error = first
+      ? `${first.path.map(String).join('.') || 'input'}: ${first.message}`
+      : 'Import request was rejected'
+    return { ok: false, error, fieldErrors }
   }
   const job = await crmImportJobService.start({
     object: 'OPPORTUNITIES',
