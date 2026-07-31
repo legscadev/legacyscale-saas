@@ -22,8 +22,8 @@ import { Label } from '@/components/ui/label'
 
 import type { LeadListItem } from '@/lib/services/crm-lead-service'
 
-import { convertLeadAction } from '@/app/(admin)/admin/crm/leads/actions'
-import type { CrmTeamMember } from '@/app/(admin)/admin/crm/leads/actions'
+import { convertLeadAction } from '@/app/(admin)/admin/crm/contacts/actions'
+import type { CrmTeamMember } from '@/app/(admin)/admin/crm/contacts/actions'
 
 const SELECT_CLASS =
   'h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'

@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function AdminImportHistoryPage() {
   const viewer = await requireTeamOrAdmin()
-  if (viewer.role !== 'ADMIN') redirect('/team/crm/leads')
+  if (viewer.role !== 'ADMIN') redirect('/team/crm/contacts')
 
   const jobs = await crmImportJobService.list(viewer.id)
 

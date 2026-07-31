@@ -83,8 +83,8 @@ function toMutationErr(err: unknown, fallback: string): MutationErr {
 }
 
 function revalidateAll(): void {
-  revalidatePath('/admin/crm/leads')
-  revalidatePath('/team/crm/leads')
+  revalidatePath('/admin/crm/contacts')
+  revalidatePath('/team/crm/contacts')
   // Conversions add a pipeline card — keep the board fresh too.
   revalidatePath('/admin/crm/opportunities')
   revalidatePath('/team/crm/opportunities')
@@ -212,6 +212,27 @@ export async function updateLeadAction(
     return { ok: true, data }
   } catch (err) {
     return toMutationErr(err, 'Could not update lead')
+  }
+}
+
+/** Full contact detail for the row-click edit dialog. Returns the
+ *  same shape as list items plus the fields the list projection
+ *  omits (secondaryPhone, address, notes). */
+export type LeadDetail = LeadListItem & {
+  secondaryPhone: string | null
+  address: string | null
+  notes: string | null
+}
+
+export async function fetchLeadDetailAction(
+  id: string,
+): Promise<MutationResult<LeadDetail>> {
+  await requireTeamModuleAccess('crm-leads')
+  try {
+    const data = await crmLeadService.get(id)
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load contact')
   }
 }
 

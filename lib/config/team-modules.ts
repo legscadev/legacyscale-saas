@@ -151,7 +151,7 @@ export const TEAM_MODULES: readonly TeamModuleDef[] = [
     key: 'crm-leads',
     section: 'Sales',
     label: 'Contacts',
-    href: '/admin/crm/leads',
+    href: '/admin/crm/contacts',
     icon: Inbox,
     description:
       'Contact inbox — capture, qualify, assign to setters, and convert to deals.',

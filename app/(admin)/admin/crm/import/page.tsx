@@ -5,9 +5,9 @@ import { ImportWizard } from '@/components/admin/crm/import-wizard'
 import { listAssignableSalesUsers } from '@/lib/services/crm-assignable-users'
 import { memberTenantScope } from '@/lib/tenancy/request-company'
 import { fetchPipelineWorkspaceAction } from '@/app/(admin)/admin/crm/opportunities/actions'
-import { fetchLeadsWorkspaceAction } from '@/app/(admin)/admin/crm/leads/actions'
+import { fetchLeadsWorkspaceAction } from '@/app/(admin)/admin/crm/contacts/actions'
 
-// GHL-style unified importer. Serves both /admin/crm/leads (Contacts)
+// GHL-style unified importer. Serves both /admin/crm/contacts (Contacts)
 // and /admin/crm/opportunities import buttons via a 4-step wizard
 // (Start → Upload → Map → Verify). Auth is admin-only for P0 — the
 // team surface doesn't need the importer.
@@ -22,7 +22,7 @@ export default async function AdminImportPage({
   searchParams,
 }: ImportPageProps) {
   const viewer = await requireTeamOrAdmin()
-  if (viewer.role !== 'ADMIN') redirect('/team/crm/leads')
+  if (viewer.role !== 'ADMIN') redirect('/team/crm/contacts')
 
   const params = await searchParams
   const preselectedObject =

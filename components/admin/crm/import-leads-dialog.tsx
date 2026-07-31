@@ -23,8 +23,8 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 
-import { importLeadsAction } from '@/app/(admin)/admin/crm/leads/actions'
-import type { CrmTeamMember } from '@/app/(admin)/admin/crm/leads/actions'
+import { importLeadsAction } from '@/app/(admin)/admin/crm/contacts/actions'
+import type { CrmTeamMember } from '@/app/(admin)/admin/crm/contacts/actions'
 import type { CsvLeadRow } from '@/lib/validations/crm-lead'
 
 const SELECT_CLASS =

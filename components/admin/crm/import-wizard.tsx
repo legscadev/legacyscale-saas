@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { importLeadsAction } from '@/app/(admin)/admin/crm/leads/actions'
+import { importLeadsAction } from '@/app/(admin)/admin/crm/contacts/actions'
 import { importOpportunitiesAction } from '@/app/(admin)/admin/crm/opportunities/actions'
 import type { CrmTeamMember } from '@/app/(admin)/admin/crm/opportunities/actions'
 import { Button } from '@/components/ui/button'
@@ -294,7 +294,7 @@ export function ImportWizard({
         toast.success(
           `Imported ${res.data.created} new · ${res.data.updated} updated`,
         )
-        router.push('/admin/crm/leads')
+        router.push('/admin/crm/contacts')
         return
       }
 

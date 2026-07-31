@@ -6,7 +6,7 @@ import { LeadsShell } from '@/components/admin/crm/leads-shell'
 import { fetchLeadsWorkspaceAction } from './actions'
 
 // Admin surface for the lead inbox. TEAM users are bounced to
-// /team/crm/leads with params intact. ADMIN sees every lead.
+// /team/crm/contacts with params intact. ADMIN sees every lead.
 
 export const dynamic = 'force-dynamic'
 
@@ -65,14 +65,14 @@ export default async function AdminLeadsPage({
       else qs.set(key, value)
     }
     const suffix = qs.toString()
-    redirect(suffix ? `/team/crm/leads?${suffix}` : '/team/crm/leads')
+    redirect(suffix ? `/team/crm/contacts?${suffix}` : '/team/crm/contacts')
   }
 
   const result = await fetchLeadsWorkspaceAction(parseFilters(raw))
   if (!result.ok) {
-    if (result.fieldErrors) redirect('/admin/crm/leads')
+    if (result.fieldErrors) redirect('/admin/crm/contacts')
     throw new Error(result.error ?? 'Could not load leads')
   }
 
-  return <LeadsShell initialData={result.data} basePath="/admin/crm/leads" />
+  return <LeadsShell initialData={result.data} basePath="/admin/crm/contacts" />
 }

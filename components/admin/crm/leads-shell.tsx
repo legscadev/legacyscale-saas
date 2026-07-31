@@ -35,8 +35,9 @@ import { cn } from '@/lib/utils'
 
 import type { LeadListItem } from '@/lib/services/crm-lead-service'
 
-import type { LeadsWorkspacePayload } from '@/app/(admin)/admin/crm/leads/actions'
+import type { LeadsWorkspacePayload } from '@/app/(admin)/admin/crm/contacts/actions'
 
+import { ContactEditDialog } from './contact-edit-dialog'
 import { ConvertLeadDialog } from './convert-lead-dialog'
 import {
   ContactsFilterDrawer,
@@ -94,6 +95,7 @@ export function LeadsShell({
   const [createOpen, setCreateOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [convertLead, setConvertLead] = useState<LeadListItem | null>(null)
+  const [editContactId, setEditContactId] = useState<string | null>(null)
   const [filterOpen, setFilterOpen] = useState(false)
   const [searchDraft, setSearchDraft] = useState(params.get('q') ?? '')
   const [visibleColumns, setVisibleColumns] = useVisibleColumns()
@@ -336,6 +338,7 @@ export function LeadsShell({
         onSortChange={handleSort}
         onConvert={setConvertLead}
         onCreate={() => setCreateOpen(true)}
+        onRowOpen={(lead) => setEditContactId(lead.id)}
         visibleColumns={visibleColumns}
         onChanged={() => router.refresh()}
       />
@@ -418,6 +421,12 @@ export function LeadsShell({
         onOpenChange={(o) => !o && setConvertLead(null)}
         members={members}
         onConverted={() => router.refresh()}
+      />
+      <ContactEditDialog
+        contactId={editContactId}
+        onClose={() => setEditContactId(null)}
+        members={members}
+        onSaved={() => router.refresh()}
       />
     </div>
   )
