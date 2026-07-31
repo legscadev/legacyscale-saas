@@ -62,15 +62,23 @@ Response:
 
 ## Landing-page snippet
 
-Drop this in the `TODO: send full 'answers' object to your CRM /
-webhook here` block of the existing `qmodalForm` handler on
-`legacyscale.co/100kmarketingprogram`.
+The current form on `legacyscale.co/100kmarketingprogram` has
+**two** `TODO: send ... to your CRM / webhook here` blocks:
 
-The form's answer keys today: `name`, `email`, `phone`, `savings`,
-`credit`, `timeline`. The quiz keys use short codes as values —
-this snippet maps them to the button labels the user actually saw,
-so the notes on the deal card read as full sentences rather than
-`savings: high`.
+1. After the Step 1 contact form submits (would capture bailers).
+2. Inside `finish()` after all 4 quiz steps complete.
+
+**Wire only the second one** (the `finish()` TODO). A single POST
+per completed submission is the simplest pattern with zero
+duplicate risk. Bailers who fill Step 1 and drop mid-quiz will not
+be captured — worth it for the simplicity. Ping if you want bailer
+capture later; we'll add an `upsert` mode to the endpoint.
+
+The form's answer keys today: `name`, `email`, `phone`,
+`situation`, `savings`, `credit`, `timeline`. The quiz keys use
+short codes as values — this snippet maps them back to the button
+labels the user actually saw, so the notes on the deal card read
+as full sentences rather than `savings: high`.
 
 ```html
 <script>
@@ -79,8 +87,14 @@ so the notes on the deal card read as full sentences rather than
   const CRM_INTAKE_TOKEN = 'REPLACE_WITH_YOUR_TOKEN'
   const CRM_INTAKE_URL = 'https://kondense.ai/api/crm/intake'
 
-  // Value → button-text map. Add rows if you add more quiz options.
+  // Value → button-text map. Add rows here if you add more quiz options.
   const ANSWER_LABELS = {
+    situation: {
+      college: "I'm in college / school",
+      job: 'Working a 9–5',
+      business: 'Trying to get a business off the ground',
+      between: 'In between things at the moment',
+    },
     savings: {
       high: "I've got $5K+ put away",
       mid: 'Somewhere between $1K and $5K',
@@ -126,7 +140,7 @@ so the notes on the deal card read as full sentences rather than
           source: '100k Marketing Program',
           campaign: 'landing-page-2026',
           // Quiz answers ride along here; pretty-printed on the
-          // deal card as `Savings: I've got $5K+ put away`, etc.
+          // deal card as "Savings: I've got $5K+ put away", etc.
           answers: humaniseAnswers(answers),
         }),
       })
@@ -139,9 +153,9 @@ so the notes on the deal card read as full sentences rather than
 </script>
 ```
 
-Call `sendToKondense(answers)` right after your existing validation
-succeeds and before you open the Calendly/GHL booking link. It's
-fire-and-forget so a slow API call doesn't stall the user.
+Drop `sendToKondense(answers)` inside `finish()` as the first line —
+fire-and-forget so a slow API call doesn't stall the qualified /
+downsell branching that follows.
 
 ## Env vars
 
