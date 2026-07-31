@@ -1582,6 +1582,11 @@ model StatMetric {
   /// Optional target value drawn as a horizontal reference line on
   /// the chart. Nullable — a lot of stats don't have hard targets.
   targetValue  Decimal?       @map("target_value") @db.Decimal(18, 4)
+  /// Marks rows that pre-date the /production-sheets bridge (i.e.
+  /// hand-created per-user sales metrics like "Michael Chacon - DMs")
+  /// so the UI can badge them "Manual entry" and admins can tell them
+  /// apart from live bridge cards sharing the same board.
+  isLegacyManual Boolean      @default(false) @map("is_legacy_manual")
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
   deletedAt    DateTime?      @map("deleted_at")

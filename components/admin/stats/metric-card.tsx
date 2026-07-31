@@ -1,8 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import {
   Expand,
+  ExternalLink,
+  Lock,
   MoreVertical,
   Pencil,
   Plus,
@@ -82,20 +85,27 @@ export function MetricCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [pending, startTransition] = useTransition()
 
+  // Bridge cards (mirrors of ProductionEntry) are always read-only —
+  // values are entered on /admin/production-sheets, not here.
+  const isBridge = metric.bridgeSource === 'PRODUCTION_SHEETS'
+
   // The assignee records values on their own metrics; admins can
   // record on any metric (needed for historical imports + covering
-  // ex-employees whose linked User is gone).
+  // ex-employees whose linked User is gone). Bridge cards short-circuit.
   const isAssignee = metric.assignedTo?.userId === currentUserId
-  const canRecord = isAssignee || currentUserIsAdmin
+  const canRecord = !isBridge && (isAssignee || currentUserIsAdmin)
 
   // Apply the page-level date range to this card's data. Points are
-  // already ordered oldest → newest.
-  const fromTime = fromDate ? new Date(fromDate).getTime() : null
-  const toTime = toDate ? new Date(toDate + 'T23:59:59').getTime() : null
+  // already ordered oldest → newest. We compare by ISO calendar day
+  // (YYYY-MM-DD, UTC) rather than epoch timestamps — StatDataPoint /
+  // production bridge points are `@db.Date` values stored at UTC
+  // midnight, so an epoch comparison drops the current day for
+  // viewers east of UTC (their local "today" resolves to a later
+  // UTC midnight than the stored date).
   const visiblePoints = metric.dataPoints.filter((p) => {
-    const t = new Date(p.recordedAt).getTime()
-    if (fromTime !== null && t < fromTime) return false
-    if (toTime !== null && t > toTime) return false
+    const iso = new Date(p.recordedAt).toISOString().slice(0, 10)
+    if (fromDate && iso < fromDate) return false
+    if (toDate && iso > toDate) return false
     return true
   })
   const latestVisible = visiblePoints[visiblePoints.length - 1] ?? null
@@ -104,7 +114,7 @@ export function MetricCard({
   //   - With a range: totalize (SUM) for COUNT/CURRENCY units,
   //     average for PERCENT (a "% for a period" doesn't sum).
   //   - Without a range: use the latest recorded value.
-  const rangeActive = fromTime !== null || toTime !== null
+  const rangeActive = fromDate !== null || toDate !== null
   const headlineValue: number | null =
     visiblePoints.length === 0
       ? null
@@ -136,16 +146,34 @@ export function MetricCard({
               {metric.division.shortLabel ?? metric.division.name}
             </div>
           ) : null}
-          <h3 className="truncate text-sm font-semibold">{metric.name}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="truncate text-sm font-semibold">{metric.name}</h3>
+            {metric.isLegacyManual ? (
+              <span
+                className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:text-amber-400"
+                title="Pre-bridge, hand-entered metric — a live bridge card for this KPI probably exists in the Production Sheets group."
+              >
+                Manual
+              </span>
+            ) : null}
+          </div>
           <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <User className="size-3" />
             {metric.assignedTo?.name.trim() || 'Unassigned'}
           </div>
         </div>
         {/* One primary + one overflow. Keeps the header tidy no
-            matter which role is looking. */}
+            matter which role is looking. Bridge cards get the lock
+            hint in place of the record button. */}
         <div className="flex shrink-0 items-center gap-1">
-          {canRecord ? (
+          {isBridge ? (
+            <span
+              className="inline-flex size-8 items-center justify-center text-muted-foreground"
+              title="Sourced from Production Sheets — edit values there"
+            >
+              <Lock className="size-3.5" />
+            </span>
+          ) : canRecord ? (
             <Button
               size="icon-sm"
               aria-label="Manage values"
@@ -171,7 +199,16 @@ export function MetricCard({
                 <Expand className="size-4" />
                 Expand
               </DropdownMenuItem>
-              {currentUserIsAdmin ? (
+              {isBridge ? (
+                <DropdownMenuItem
+                  render={
+                    <Link href="/admin/production-sheets" />
+                  }
+                >
+                  <ExternalLink className="size-4" />
+                  Open Production Sheets
+                </DropdownMenuItem>
+              ) : currentUserIsAdmin ? (
                 <>
                   <DropdownMenuItem onClick={() => setEditing(true)}>
                     <Pencil className="size-4" />
