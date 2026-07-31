@@ -149,6 +149,7 @@ export const memberNav: NavSection[] = [
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'My Courses', href: '/courses', icon: BookOpen },
+      { label: 'Tasks & Goals', href: '/tasks', icon: CheckSquare },
       { label: 'Announcements', href: '/announcements', icon: Bell },
     ],
   },

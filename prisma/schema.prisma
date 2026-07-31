@@ -330,6 +330,9 @@ model User {
   crmOpportunityTasksAssigned CrmOpportunityTask[] @relation("CrmOpportunityTaskAssignee")
   crmOpportunityNotesAuthored CrmOpportunityNote[] @relation("CrmOpportunityNoteAuthor")
 
+  // Personal tasks/goals surfaced on the student dashboard.
+  studentTasks StudentTask[]
+
   @@index([role])
   @@index([isActive])
   @@index([deletedAt])
@@ -693,6 +696,8 @@ model Course {
   memberships          CourseMembership[]
   certificateIssuances CertificateIssuance[]
   nudges               Nudge[]
+  // Personal tasks students created that link back to this course.
+  studentTasks         StudentTask[]         @relation("StudentTaskCourse")
   companyId            String                @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([status])
@@ -821,6 +826,7 @@ model Lesson {
   quizAttempts   QuizAttempt[]
   notes          Note[]
   resources      LessonResource[]
+  studentTasks   StudentTask[]    @relation("StudentTaskLesson")
   companyId      String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([chapterId, orderIndex])
@@ -2774,4 +2780,46 @@ model CrmContactView {
 
   @@index([companyId, ownerId, orderIndex])
   @@map("crm_contact_views")
+}
+
+// ============================================
+// STUDENT TASKS  (personal goals surfaced on /dashboard + /tasks)
+// ============================================
+//
+// One row per student-owned task/goal. Kept lean intentionally —
+// this is the member's private to-do list, not a workflow board.
+// Optional links back to a course/lesson so "Finish Module 3"
+// jumps straight to that lesson from the task card.
+
+model StudentTask {
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String? @db.Text
+
+  /// Calendar day the task is due — stored as @db.Date so timezone
+  /// wobble doesn't shift the "due today" bucket.
+  dueDate     DateTime? @map("due_date") @db.Date
+  /// Set when the student marks the task done. Null = still open.
+  completedAt DateTime? @map("completed_at")
+
+  /// Optional deep-links back into the LMS so a task like "watch
+  /// Module 4 lesson 2" can jump the student straight to the lesson.
+  linkedCourseId String? @map("linked_course_id")
+  linkedCourse   Course? @relation("StudentTaskCourse", fields: [linkedCourseId], references: [id], onDelete: SetNull)
+  linkedLessonId String? @map("linked_lesson_id")
+  linkedLesson   Lesson? @relation("StudentTaskLesson", fields: [linkedLessonId], references: [id], onDelete: SetNull)
+
+  /// Sort key for manual reordering (drag-drop coming later).
+  orderIndex Int @default(0) @map("order_index")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([userId, completedAt, dueDate])
+  @@index([companyId, userId])
+  @@map("student_tasks")
 }

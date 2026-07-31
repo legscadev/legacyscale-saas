@@ -14,11 +14,13 @@ import {
   CourseCard,
   EmptyState,
 } from '@/components/shared'
+import { DashboardTasksCard } from '@/components/student/dashboard-tasks-card'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { requireActiveUser } from '@/lib/auth'
 import { dashboardService } from '@/lib/services/dashboard-service'
+import { studentTaskService } from '@/lib/services/student-task-service'
 import { ANNOUNCEMENT_CATEGORY_LABELS } from '@/lib/validations/announcement'
 import { cn, htmlToPlainText } from '@/lib/utils'
 
@@ -36,8 +38,11 @@ function formatRelative(date: Date): string {
 
 export default async function UserDashboardPage() {
   const user = await requireActiveUser()
-  const { stats, continueLearning, inProgressCourses, announcements } =
-    await dashboardService.getMemberDashboard(user.id)
+  const [{ stats, continueLearning, inProgressCourses, announcements }, tasks] =
+    await Promise.all([
+      dashboardService.getMemberDashboard(user.id),
+      studentTaskService.listUpcoming(user.id, 5),
+    ])
 
   return (
     <div className="space-y-6">
@@ -63,6 +68,8 @@ export default async function UserDashboardPage() {
           },
         ]}
       />
+
+      <DashboardTasksCard initialTasks={tasks} />
 
       {continueLearning ? (
         <Card variant="raised" className="gap-4 p-6">
