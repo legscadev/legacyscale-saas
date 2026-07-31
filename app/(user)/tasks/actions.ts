@@ -9,10 +9,15 @@ import { revalidatePath } from 'next/cache'
 
 import { requireActiveUser } from '@/lib/auth/get-user'
 import {
+  lessonTaskSuggestionService,
+  LessonTaskSuggestionNotFoundError,
+} from '@/lib/services/lesson-task-suggestion-service'
+import {
   studentTaskService,
   StudentTaskNotFoundError,
   type StudentTaskItem,
 } from '@/lib/services/student-task-service'
+import { addSuggestionToTasksSchema } from '@/lib/validations/lesson-task-suggestion'
 import {
   createStudentTaskSchema,
   deleteStudentTaskSchema,
@@ -51,6 +56,9 @@ function fieldErrorsFromZod(
 
 function toErr(err: unknown, fallback: string): MutationErr {
   if (err instanceof StudentTaskNotFoundError) {
+    return { ok: false, error: err.message }
+  }
+  if (err instanceof LessonTaskSuggestionNotFoundError) {
     return { ok: false, error: err.message }
   }
   console.error('[tasks/actions]', fallback, err)
@@ -172,5 +180,32 @@ export async function deleteStudentTaskAction(
     return { ok: true, data: undefined }
   } catch (err) {
     return toErr(err, 'Could not delete task')
+  }
+}
+
+/**
+ * One-click "Add to my tasks" from a lesson's suggested-tasks list.
+ * Snapshots the suggestion's title/description into a StudentTask
+ * and links it back to the lesson + course. Optional dueDate lets
+ * the student set a deadline in the same click.
+ */
+export async function addSuggestionToTasksAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<{ taskId: string }>> {
+  const user = await requireActiveUser()
+  const parsed = addSuggestionToTasksSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await lessonTaskSuggestionService.addToStudentTasks({
+      suggestionId: parsed.data.suggestionId,
+      userId: user.id,
+      dueDate: parsed.data.dueDate,
+    })
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toErr(err, 'Could not add suggested task')
   }
 }

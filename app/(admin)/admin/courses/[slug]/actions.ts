@@ -13,6 +13,11 @@ import {
 } from '@/lib/services/chapter-service'
 import { lessonService } from '@/lib/services/lesson-service'
 import {
+  lessonTaskSuggestionService,
+  LessonTaskSuggestionNotFoundError,
+  type LessonTaskSuggestionRow,
+} from '@/lib/services/lesson-task-suggestion-service'
+import {
   moduleService,
   type ModuleListItem,
 } from '@/lib/services/module-service'
@@ -32,6 +37,13 @@ import {
   updateLessonSchema,
   updateModuleSchema,
 } from '@/lib/validations/course'
+import {
+  createLessonTaskSuggestionSchema,
+  deleteLessonTaskSuggestionSchema,
+  reorderLessonTaskSuggestionsSchema,
+  updateLessonTaskSuggestionSchema,
+  type CreateLessonTaskSuggestionInput,
+} from '@/lib/validations/lesson-task-suggestion'
 
 interface BaseResult {
   ok: boolean
@@ -793,5 +805,136 @@ export async function deleteModuleAction(
   } catch (err) {
     console.error('Module delete failed:', err)
     return { ok: false, error: 'Could not delete module' }
+  }
+}
+
+// ============================================
+// LESSON TASK SUGGESTIONS  (instructor templates → student /tasks)
+// ============================================
+
+function fieldErrorsFromZod(
+  issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const issue of issues) {
+    const key = issue.path.map(String).join('.') || '_root'
+    if (!out[key]) out[key] = []
+    out[key]!.push(issue.message)
+  }
+  return out
+}
+
+function suggestionErr(
+  err: unknown,
+  fallback: string,
+): { ok: false; error: string } {
+  if (err instanceof LessonTaskSuggestionNotFoundError) {
+    return { ok: false, error: err.message }
+  }
+  console.error('[lesson-task-suggestion]', fallback, err)
+  return { ok: false, error: err instanceof Error ? err.message : fallback }
+}
+
+export async function fetchLessonTaskSuggestionsAction(
+  lessonId: string,
+): Promise<
+  | (BaseResult & { ok: true; data: LessonTaskSuggestionRow[] })
+  | (BaseResult & { ok: false })
+> {
+  await requireTeamModuleAccess('courses')
+  try {
+    const data = await lessonTaskSuggestionService.listForLesson(lessonId)
+    return { ok: true, data }
+  } catch (err) {
+    return suggestionErr(err, 'Could not load suggested tasks')
+  }
+}
+
+export async function createLessonTaskSuggestionAction(
+  input: CreateLessonTaskSuggestionInput,
+): Promise<
+  | (BaseResult & { ok: true; data: LessonTaskSuggestionRow })
+  | (BaseResult & { ok: false })
+> {
+  await requireTeamModuleAccess('courses')
+  const parsed = createLessonTaskSuggestionSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await lessonTaskSuggestionService.create({
+      lessonId: parsed.data.lessonId,
+      title: parsed.data.title,
+      description: parsed.data.description ?? null,
+    })
+    revalidatePath('/admin/courses/[slug]', 'page')
+    revalidatePath('/courses/[slug]/lessons/[lessonId]', 'page')
+    return { ok: true, data }
+  } catch (err) {
+    return suggestionErr(err, 'Could not create suggested task')
+  }
+}
+
+export async function updateLessonTaskSuggestionAction(
+  input: Record<string, unknown>,
+): Promise<
+  | (BaseResult & { ok: true; data: LessonTaskSuggestionRow })
+  | (BaseResult & { ok: false })
+> {
+  await requireTeamModuleAccess('courses')
+  const parsed = updateLessonTaskSuggestionSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await lessonTaskSuggestionService.update({
+      suggestionId: parsed.data.suggestionId,
+      title: parsed.data.title,
+      description: parsed.data.description,
+    })
+    revalidatePath('/admin/courses/[slug]', 'page')
+    revalidatePath('/courses/[slug]/lessons/[lessonId]', 'page')
+    return { ok: true, data }
+  } catch (err) {
+    return suggestionErr(err, 'Could not update suggested task')
+  }
+}
+
+export async function deleteLessonTaskSuggestionAction(
+  input: Record<string, unknown>,
+): Promise<BaseResult> {
+  await requireTeamModuleAccess('courses')
+  const parsed = deleteLessonTaskSuggestionSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await lessonTaskSuggestionService.delete(parsed.data.suggestionId)
+    revalidatePath('/admin/courses/[slug]', 'page')
+    revalidatePath('/courses/[slug]/lessons/[lessonId]', 'page')
+    return { ok: true }
+  } catch (err) {
+    return suggestionErr(err, 'Could not delete suggested task')
+  }
+}
+
+export async function reorderLessonTaskSuggestionsAction(
+  input: Record<string, unknown>,
+): Promise<BaseResult> {
+  await requireTeamModuleAccess('courses')
+  const parsed = reorderLessonTaskSuggestionsSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    await lessonTaskSuggestionService.reorder({
+      lessonId: parsed.data.lessonId,
+      suggestionIds: parsed.data.suggestionIds,
+    })
+    revalidatePath('/admin/courses/[slug]', 'page')
+    revalidatePath('/courses/[slug]/lessons/[lessonId]', 'page')
+    return { ok: true }
+  } catch (err) {
+    return suggestionErr(err, 'Could not reorder suggested tasks')
   }
 }

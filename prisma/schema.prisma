@@ -820,19 +820,45 @@ model Lesson {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  chapter        Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  quizQuestions  QuizQuestion[]
-  lessonProgress LessonProgress[]
-  quizAttempts   QuizAttempt[]
-  notes          Note[]
-  resources      LessonResource[]
-  studentTasks   StudentTask[]    @relation("StudentTaskLesson")
-  companyId      String           @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+  chapter         Chapter                @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  quizQuestions   QuizQuestion[]
+  lessonProgress  LessonProgress[]
+  quizAttempts    QuizAttempt[]
+  notes           Note[]
+  resources       LessonResource[]
+  studentTasks    StudentTask[]          @relation("StudentTaskLesson")
+  taskSuggestions LessonTaskSuggestion[]
+  companyId       String                 @default("00000000-0000-0000-0000-000000000001") @map("company_id")
 
   @@index([chapterId, orderIndex])
   @@index([type])
   @@index([status])
   @@map("lessons")
+}
+
+/// Instructor-authored task/goal templates pinned to a lesson.
+/// A student clicks "Add to my tasks" in the lesson viewer, which
+/// snapshots the title/description into a StudentTask row (with the
+/// lesson + course pre-linked). Later edits by the instructor don't
+/// alter tasks the student already claimed — snapshotting keeps
+/// personal to-do lists stable.
+model LessonTaskSuggestion {
+  id          String  @id @default(uuid())
+  lessonId    String  @map("lesson_id")
+  title       String
+  description String? @db.Text
+  /// Sort order shown in the viewer (matches admin's drag order).
+  orderIndex  Int     @default(0) @map("order_index")
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  companyId String   @default("00000000-0000-0000-0000-000000000001") @map("company_id")
+
+  @@index([lessonId, orderIndex])
+  @@index([companyId])
+  @@map("lesson_task_suggestions")
 }
 
 /// Files attached to a lesson (PDFs, worksheets, slides, etc.).
