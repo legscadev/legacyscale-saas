@@ -69,6 +69,11 @@ const IMPORT_MODE_DESCRIPTIONS: Record<ImportMode, string> = {
     'Match by email. If found, update in place. Rows without a match are skipped.',
 }
 
+/** Per-request row cap enforced by the server (importLeadsSchema /
+ *  importOpportunitiesSchema). Kept in sync here so the wizard can
+ *  block oversized batches at Verify instead of failing on submit. */
+const MAX_ROWS_PER_IMPORT = 2000
+
 /** All target fields the mapper can pick, per object. `null` = skip. */
 type ContactField =
   | 'fullName'
@@ -266,6 +271,12 @@ export function ImportWizard({
       toast.error('Nothing to import — every row failed validation')
       return
     }
+    if (parsedResult.rows.length > MAX_ROWS_PER_IMPORT) {
+      toast.error(
+        `Too many rows (${parsedResult.rows.length.toLocaleString()}). Split the file into chunks of ${MAX_ROWS_PER_IMPORT.toLocaleString()} and import each one.`,
+      )
+      return
+    }
 
     startTransition(async () => {
       if (object === 'contacts') {
@@ -400,6 +411,7 @@ export function ImportWizard({
                 pending ||
                 !parsedResult ||
                 parsedResult.rows.length === 0 ||
+                parsedResult.rows.length > MAX_ROWS_PER_IMPORT ||
                 (object === 'opportunities' && !pipelineId)
               }
             >
@@ -912,6 +924,21 @@ function VerifyStep({
           )}
         </div>
       </div>
+
+      {parsed && parsed.rows.length > MAX_ROWS_PER_IMPORT ? (
+        <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-xs">
+          <p className="font-medium text-destructive">
+            Too many rows in this file
+          </p>
+          <p className="mt-1 text-destructive/90">
+            {parsed.rows.length.toLocaleString()} valid rows detected —
+            the per-import cap is {MAX_ROWS_PER_IMPORT.toLocaleString()}.
+            Split the CSV into chunks of{' '}
+            {MAX_ROWS_PER_IMPORT.toLocaleString()} or fewer and import
+            each one; results merge under the same list.
+          </p>
+        </div>
+      ) : null}
 
       {parsed && parsed.errors.length > 0 ? (
         <details className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3">

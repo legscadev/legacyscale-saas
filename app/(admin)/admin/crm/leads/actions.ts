@@ -288,7 +288,15 @@ export async function importLeadsAction(
   const user = await requireTeamModuleAccess('crm-leads')
   const parsed = importLeadsSchema.safeParse(input)
   if (!parsed.success) {
-    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+    const fieldErrors = fieldErrorsFromZod(parsed.error.issues)
+    // Bubble the first Zod message up as `error` too so the wizard's
+    // toast shows the actual reason (row cap, missing field, etc.)
+    // instead of the generic "Import failed" fallback.
+    const first = parsed.error.issues[0]
+    const error = first
+      ? `${first.path.map(String).join('.') || 'input'}: ${first.message}`
+      : 'Import request was rejected'
+    return { ok: false, error, fieldErrors }
   }
 
   // Log the run before we start so a crash mid-insert still leaves a

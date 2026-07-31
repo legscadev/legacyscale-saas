@@ -92,7 +92,7 @@ export const createLeadSchema = z.object({
   address: shortText(500),
   source: crmLeadSourceSchema.optional().default('MANUAL'),
   campaign: shortText(200),
-  industry: shortText(120),
+  industry: shortText(500),
   status: crmLeadStatusSchema.optional().default('NEW'),
   assignedSetterId: z.string().uuid().nullable().optional(),
   notes: z.string().max(20000).nullable().optional(),
@@ -109,7 +109,7 @@ export const updateLeadSchema = z.object({
   address: shortText(500),
   source: crmLeadSourceSchema.optional(),
   campaign: shortText(200),
-  industry: shortText(120),
+  industry: shortText(500),
   assignedSetterId: z.string().uuid().nullable().optional(),
   notes: z.string().max(20000).nullable().optional(),
 })
@@ -251,7 +251,7 @@ export const csvLeadRowSchema = z.object({
   email: optionalEmail,
   phone: shortText(50),
   companyName: shortText(200),
-  industry: shortText(120),
+  industry: shortText(500),
   campaign: shortText(200),
 })
 export type CsvLeadRow = z.output<typeof csvLeadRowSchema>
