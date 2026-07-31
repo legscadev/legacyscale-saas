@@ -3,11 +3,13 @@ import { Loader2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AutoplayToggle } from './autoplay-toggle'
+import { LessonSuggestedTasks } from './lesson-suggested-tasks'
 import { MuxLessonPlayer } from './mux-lesson-player'
 import { MarkCompleteButton } from './mark-complete-button'
 import { NotesPanel } from './notes-panel'
 import { QuizRunner } from './quiz-runner'
 import { ResourceList, ResourceView } from './resource-view'
+import type { LessonTaskSuggestionRow } from '@/lib/services/lesson-task-suggestion-service'
 import type { MemberCourseDetail } from '@/lib/services/member-course-service'
 
 type Lesson = MemberCourseDetail['chapters'][number]['lessons'][number]
@@ -17,6 +19,7 @@ interface LessonBodyProps {
   autoPlay?: boolean
   nextHref?: string
   nextTitle?: string
+  suggestedTasks: LessonTaskSuggestionRow[]
 }
 
 export function LessonBody({
@@ -24,6 +27,7 @@ export function LessonBody({
   autoPlay,
   nextHref,
   nextTitle,
+  suggestedTasks,
 }: LessonBodyProps) {
   const completed = lesson.progress?.completed ?? false
 
@@ -101,6 +105,7 @@ export function LessonBody({
             ) : null}
           </Tabs>
         </Card>
+        <LessonSuggestedTasks suggestions={suggestedTasks} />
       </>
     )
   }
@@ -113,6 +118,7 @@ export function LessonBody({
           description={lesson.description}
           resources={lesson.resources}
         />
+        <LessonSuggestedTasks suggestions={suggestedTasks} />
         <div className="flex justify-end">
           <MarkCompleteButton
             lessonId={lesson.id}
@@ -128,15 +134,18 @@ export function LessonBody({
   // completes, and Try again / Skip quiz both mark complete regardless
   // of score (spec 5.5). No external Mark Complete button needed.
   return (
-    <QuizRunner
-      lessonId={lesson.id}
-      title={lesson.title}
-      description={lesson.description}
-      questions={lesson.quizQuestions}
-      passingScore={lesson.passingScore}
-      maxAttempts={lesson.maxAttempts}
-      timeLimitMin={lesson.timeLimitMin}
-      nextHref={nextHref}
-    />
+    <>
+      <QuizRunner
+        lessonId={lesson.id}
+        title={lesson.title}
+        description={lesson.description}
+        questions={lesson.quizQuestions}
+        passingScore={lesson.passingScore}
+        maxAttempts={lesson.maxAttempts}
+        timeLimitMin={lesson.timeLimitMin}
+        nextHref={nextHref}
+      />
+      <LessonSuggestedTasks suggestions={suggestedTasks} />
+    </>
   )
 }

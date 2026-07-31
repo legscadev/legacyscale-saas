@@ -40,6 +40,7 @@ import type {
   LessonListItem,
   LessonResourceItem,
 } from '@/lib/services/chapter-service'
+import { LessonTaskSuggestionsSection } from './lesson-task-suggestions-section'
 import { QuizSection } from './quiz-section'
 
 interface LessonEditorDialogProps {
@@ -100,8 +101,8 @@ export function LessonEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-xl">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Edit lesson</DialogTitle>
           <DialogDescription>
             Changes to title and description save when you click Save in the
@@ -109,7 +110,7 @@ export function LessonEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
           <div className="space-y-1.5">
             <Label htmlFor="lesson-title">Title</Label>
             <Input
@@ -155,9 +156,14 @@ export function LessonEditorDialog({
               ensureSaved={ensureSaved}
             />
           ) : null}
+
+          <LessonTaskSuggestionsSection
+            lessonId={lesson.id}
+            ensureSaved={ensureSaved}
+          />
         </div>
 
-        <DialogFooter showCloseButton>
+        <DialogFooter className="shrink-0" showCloseButton>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Done
           </Button>

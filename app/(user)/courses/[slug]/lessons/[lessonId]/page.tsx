@@ -24,6 +24,7 @@ import { LessonBody } from '@/components/member/lesson-body'
 import { UpNextCard } from '@/components/member/up-next-card'
 import { requireActiveUser } from '@/lib/auth'
 import { computeLessonGating } from '@/lib/lesson-gating'
+import { lessonTaskSuggestionService } from '@/lib/services/lesson-task-suggestion-service'
 import {
   memberCourseService,
   type MemberCourseDetail,
@@ -95,6 +96,10 @@ export default async function LessonPlayerPage({
   const nextInOrder = ordered
     .slice(pos + 1)
     .find((l) => l.status === 'READY')
+
+  const suggestedTasks = await lessonTaskSuggestionService.listForLesson(
+    lesson.id,
+  )
 
   // Touch progress + enrollment lastAccessedAt after the response so
   // the resume picker has fresh data without slowing the render.
@@ -226,6 +231,7 @@ export default async function LessonPlayerPage({
                 : undefined
             }
             nextTitle={nextInOrder?.title}
+            suggestedTasks={suggestedTasks}
           />
         </div>
 
