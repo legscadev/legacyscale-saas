@@ -147,18 +147,24 @@ function MasterCharts({ aggregates }: { aggregates: MonthlyAggregateRow[] }) {
     month: `${MONTH_SHORT[row.month - 1]} ${String(row.year).slice(2)}`,
     phoneCalls: row.phoneCalls,
     dms: row.dms,
-    cellConnects: row.cellConnects,
+    dmNumbers: row.dmNumbers,
+    callConnects: row.callConnects,
     appointmentsSet: row.appointmentsSet,
+    appointmentsThatShow: row.appointmentsThatShow,
     demosConducted: row.demosConducted,
     introUnits: row.introUnits,
-    basisUnits: row.basisUnits,
+    basicUnits: row.basicUnits,
     majorUnits: row.majorUnits,
     sales: row.sales,
     collections: row.collections,
     salesTarget: row.salesTarget,
     showUpRate:
       row.appointmentsSet > 0
-        ? Math.round((row.demosConducted / row.appointmentsSet) * 100)
+        ? Math.round(
+            ((row.appointmentsThatShow || row.demosConducted) /
+              row.appointmentsSet) *
+              100,
+          )
         : 0,
   }))
 
@@ -236,7 +242,7 @@ function MasterCharts({ aggregates }: { aggregates: MonthlyAggregateRow[] }) {
               <Tooltip />
               <Legend />
               <Bar dataKey="phoneCalls" name="Phone Calls" fill="hsl(var(--primary))" />
-              <Bar dataKey="cellConnects" name="Cell Connects" fill="hsl(var(--chart-2))" />
+              <Bar dataKey="callConnects" name="Call Connects" fill="hsl(var(--chart-2))" />
               <Bar dataKey="appointmentsSet" name="Appts Set" fill="hsl(var(--chart-3))" />
               <Bar dataKey="demosConducted" name="Demos" fill="hsl(var(--chart-4))" />
             </BarChart>
@@ -247,7 +253,7 @@ function MasterCharts({ aggregates }: { aggregates: MonthlyAggregateRow[] }) {
       <Card>
         <CardHeader>
           <CardTitle>Units Mix</CardTitle>
-          <CardDescription>Intro / Basis / Major units sold per month.</CardDescription>
+          <CardDescription>Intro / Basic / Major units sold per month.</CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={240}>
@@ -258,7 +264,7 @@ function MasterCharts({ aggregates }: { aggregates: MonthlyAggregateRow[] }) {
               <Tooltip />
               <Legend />
               <Bar dataKey="introUnits" name="Intro" stackId="units" fill="hsl(var(--chart-2))" />
-              <Bar dataKey="basisUnits" name="Basis" stackId="units" fill="hsl(var(--chart-3))" />
+              <Bar dataKey="basicUnits" name="Basic" stackId="units" fill="hsl(var(--chart-3))" />
               <Bar dataKey="majorUnits" name="Major" stackId="units" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
