@@ -64,7 +64,13 @@ Response:
 
 Drop this in the `TODO: send full 'answers' object to your CRM /
 webhook here` block of the existing `qmodalForm` handler on
-`legacyscale.co/100kmarketingprogram`:
+`legacyscale.co/100kmarketingprogram`.
+
+The form's answer keys today: `name`, `email`, `phone`, `savings`,
+`credit`, `timeline`. The quiz keys use short codes as values —
+this snippet maps them to the button labels the user actually saw,
+so the notes on the deal card read as full sentences rather than
+`savings: high`.
 
 ```html
 <script>
@@ -72,6 +78,38 @@ webhook here` block of the existing `qmodalForm` handler on
   // commit this token into a public repo.
   const CRM_INTAKE_TOKEN = 'REPLACE_WITH_YOUR_TOKEN'
   const CRM_INTAKE_URL = 'https://kondense.ai/api/crm/intake'
+
+  // Value → button-text map. Add rows if you add more quiz options.
+  const ANSWER_LABELS = {
+    savings: {
+      high: "I've got $5K+ put away",
+      mid: 'Somewhere between $1K and $5K',
+      low: 'Less than $1K saved right now',
+      zero: 'Basically starting from zero',
+    },
+    credit: {
+      good: 'Solid — 700 or better',
+      mid: 'Decent — somewhere in the 600s',
+      low: "It's a work in progress",
+      unknown: 'Honestly, no idea',
+    },
+    timeline: {
+      now: "Yesterday. I'm ready now",
+      soon: 'Within the next 30 days',
+      months: 'A few months out',
+      looking: 'Just looking around for now',
+    },
+  }
+
+  function humaniseAnswers(answers) {
+    const out = { ...answers }
+    for (const key of Object.keys(ANSWER_LABELS)) {
+      if (out[key] && ANSWER_LABELS[key][out[key]]) {
+        out[key] = ANSWER_LABELS[key][out[key]]
+      }
+    }
+    return out
+  }
 
   async function sendToKondense(answers) {
     try {
@@ -82,15 +120,14 @@ webhook here` block of the existing `qmodalForm` handler on
           'x-intake-token': CRM_INTAKE_TOKEN,
         },
         body: JSON.stringify({
-          // Pull the standard fields directly; the rest of the
-          // qmodalForm answers ride along in `answers`.
           name: answers.name,
           email: answers.email,
           phone: answers.phone,
-          companyName: answers.company,
           source: '100k Marketing Program',
           campaign: 'landing-page-2026',
-          answers,
+          // Quiz answers ride along here; pretty-printed on the
+          // deal card as `Savings: I've got $5K+ put away`, etc.
+          answers: humaniseAnswers(answers),
         }),
       })
       if (!res.ok) console.warn('[Kondense intake]', await res.text())
