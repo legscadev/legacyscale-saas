@@ -142,15 +142,19 @@ export async function listBridgeCards(): Promise<StatMetricRow[]> {
     const target = targetByUser.get(author.userId)
 
     for (const [index, key] of METRIC_KEYS.entries()) {
-      out.push(
-        buildBridgeCard({
-          author,
-          key,
-          orderIndex: index,
-          entries: authorEntries,
-          targetValue: target ? decimalOrIntToNumber(target[key]) : null,
-        }),
-      )
+      const card = buildBridgeCard({
+        author,
+        key,
+        orderIndex: index,
+        entries: authorEntries,
+        targetValue: target ? decimalOrIntToNumber(target[key]) : null,
+      })
+      // Skip KPIs this user has never entered a value for — a card
+      // with an empty sparkline just clutters the board. Materializes
+      // the card the first time they type a value into that column
+      // on /admin/production-sheets.
+      if (card.dataPoints.length === 0) continue
+      out.push(card)
     }
   }
   return out

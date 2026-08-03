@@ -55,8 +55,15 @@ export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
 
   // Only append the bridge division if there's at least one author
   // to render cards for — an empty rail entry would confuse.
+  //
+  // Card count in the rail badge is derived from the actual cards
+  // list, not authors × KPI count, because we now skip KPIs a user
+  // has never entered (a setter who only fills Phone Calls only
+  // gets one card, not 12).
   const allDivisions =
-    bridgeCards.length > 0 ? [...divisions, bridgeDivision] : divisions
+    bridgeCards.length > 0
+      ? [...divisions, { ...bridgeDivision, metricCount: bridgeCards.length }]
+      : divisions
   const allMetrics =
     bridgeCards.length > 0 ? [...metrics, ...bridgeCards] : metrics
 
