@@ -100,6 +100,7 @@ export function ConvertLeadDialog({
                 step="any"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
+                onWheel={(e) => e.currentTarget.blur()}
                 placeholder="5000"
                 autoFocus
               />

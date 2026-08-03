@@ -216,6 +216,7 @@ export function OpportunitiesFilterDrawer({
                   onChange={(e) =>
                     setDraft({ ...draft, valueMin: e.target.value })
                   }
+                  onWheel={(e) => e.currentTarget.blur()}
                   placeholder="0"
                 />
               </div>
@@ -232,6 +233,7 @@ export function OpportunitiesFilterDrawer({
                   onChange={(e) =>
                     setDraft({ ...draft, valueMax: e.target.value })
                   }
+                  onWheel={(e) => e.currentTarget.blur()}
                   placeholder="∞"
                 />
               </div>

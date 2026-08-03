@@ -289,6 +289,7 @@ export function CreateOpportunityDialog({
                         step="any"
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
                         placeholder="0"
                         className={cn('no-spinner pl-6')}
                       />
