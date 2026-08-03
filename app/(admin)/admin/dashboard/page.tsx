@@ -8,6 +8,7 @@ import {
   Clock,
   FilePen,
   GraduationCap,
+  ListChecks,
   Megaphone,
   Plus,
   Ticket,
@@ -31,6 +32,7 @@ import {
 import { getInitials, relativeTime } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
+import { adminStudentTaskService } from '@/lib/services/admin-student-task-service'
 import { memberTenantScope } from '@/lib/tenancy/request-company'
 import { CompletionsChart } from '@/components/admin/dashboard/completions-chart'
 import { TopCoursesChart } from '@/components/admin/dashboard/top-courses-chart'
@@ -144,7 +146,12 @@ export default async function AdminDashboardPage() {
     status: { isTerminal: false },
     assignees: { some: { userId: currentUser.id } },
   } as const
-  const [myOpenTasks, myOpenTaskTotal, myOverdueCount] = await Promise.all([
+  const [
+    myOpenTasks,
+    myOpenTaskTotal,
+    myOverdueCount,
+    studentOverdueCount,
+  ] = await Promise.all([
     prisma.task.findMany({
       where: myOpenTasksWhere,
       orderBy: [
@@ -167,6 +174,10 @@ export default async function AdminDashboardPage() {
         dueDate: { lt: new Date() },
       },
     }),
+    // Powers the "N student tasks overdue" attention row. Tenant
+    // scoping happens via the Prisma extension (StudentTask is a
+    // scoped model), no where-clause plumbing needed here.
+    adminStudentTaskService.countOverdue(),
   ])
 
   const cells: StatStripCell[] = [
@@ -236,6 +247,13 @@ export default async function AdminDashboardPage() {
         label: `${plural(myOverdueCount, 'task', 'tasks')} overdue on you`,
         href: '/admin/tasks',
         icon: CheckSquare,
+        tone: 'danger',
+      },
+      {
+        count: studentOverdueCount,
+        label: `student ${plural(studentOverdueCount, 'task', 'tasks')} overdue`,
+        href: '/admin/progress/tasks?overdue=1',
+        icon: ListChecks,
         tone: 'danger',
       },
     ] satisfies AttentionItem[]
