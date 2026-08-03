@@ -523,6 +523,7 @@ function SortableStageRow({
           const raw = e.target.value.trim()
           onProbability(raw === '' ? null : Number(raw))
         }}
+        onWheel={(e) => e.currentTarget.blur()}
         className="no-spinner h-8"
       />
 

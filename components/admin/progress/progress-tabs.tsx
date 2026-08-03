@@ -17,6 +17,7 @@ const TABS: ProgressTab[] = [
   { label: 'Overview', href: '/admin/progress', exact: true },
   { label: 'Students', href: '/admin/progress/members' },
   { label: 'Courses', href: '/admin/progress/courses' },
+  { label: 'Tasks', href: '/admin/progress/tasks' },
 ]
 
 export function ProgressTabs() {

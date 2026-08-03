@@ -529,6 +529,10 @@ export function EditOpportunityDialog({
                           step="any"
                           value={form.value}
                           onChange={(e) => set('value', e.target.value)}
+                          // Stop the browser's scroll-adjusts-value
+                          // behavior. Focus loss is the tradeoff, but
+                          // silently mutating dollar amounts is worse.
+                          onWheel={(e) => e.currentTarget.blur()}
                           placeholder="0"
                           className={cn('no-spinner pl-6')}
                         />
@@ -544,6 +548,7 @@ export function EditOpportunityDialog({
                         max={100}
                         value={form.probability}
                         onChange={(e) => set('probability', e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
                         className="no-spinner"
                       />
                     </Field>

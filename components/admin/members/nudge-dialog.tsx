@@ -35,6 +35,11 @@ interface NudgeDialogProps {
   onOpenChange: (open: boolean) => void
   memberId: string
   memberName: string
+  /** Optional prefilled message. When set, replaces the generic
+   *  "just checking in" template — used by task-specific nudges so
+   *  the admin doesn't have to retype context ("… on 'Look up 5
+   *  niches', due Jul 28"). */
+  messageTemplate?: string
 }
 
 export function NudgeDialog({
@@ -42,6 +47,7 @@ export function NudgeDialog({
   onOpenChange,
   memberId,
   memberName,
+  messageTemplate,
 }: NudgeDialogProps) {
   const [courses, setCourses] = useState<NudgeCoursePickerOption[]>([])
   const [courseId, setCourseId] = useState<string>(NO_COURSE)
@@ -69,7 +75,7 @@ export function NudgeDialog({
 
   function resetForm() {
     setCourseId(NO_COURSE)
-    setMessage(defaultMessage(memberName))
+    setMessage(messageTemplate ?? defaultMessage(memberName))
   }
 
   function handleOpenChange(next: boolean) {
@@ -81,10 +87,13 @@ export function NudgeDialog({
 
   // Prime the message + courseId on transition to open. Runs during
   // render (before the mounted useEffect above) via a cheap ref check.
+  // Key includes the template so switching between task-specific
+  // nudges for the same member re-primes with the new task context.
+  const primeKey = `${memberId}|${messageTemplate ?? ''}`
   const [primedFor, setPrimedFor] = useState<string | null>(null)
-  if (open && primedFor !== memberId) {
-    setPrimedFor(memberId)
-    setMessage(defaultMessage(memberName))
+  if (open && primedFor !== primeKey) {
+    setPrimedFor(primeKey)
+    setMessage(messageTemplate ?? defaultMessage(memberName))
     setCourseId(NO_COURSE)
   }
   if (!open && primedFor !== null) {
