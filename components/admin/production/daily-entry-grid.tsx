@@ -82,8 +82,9 @@ export function DailyEntryGrid({
 
   const totals = useMemo(() => {
     const acc: Record<MetricKey, number> = {
-      phoneCalls: 0, dms: 0, cellConnects: 0, appointmentsSet: 0,
-      demosConducted: 0, introUnits: 0, basisUnits: 0, majorUnits: 0,
+      phoneCalls: 0, dms: 0, dmNumbers: 0, callConnects: 0,
+      appointmentsSet: 0, appointmentsThatShow: 0, demosConducted: 0,
+      introUnits: 0, basicUnits: 0, majorUnits: 0,
       sales: 0, collections: 0,
     }
     for (const e of entries) {
@@ -140,11 +141,13 @@ export function DailyEntryGrid({
         date,
         phoneCalls: merged.phoneCalls,
         dms: merged.dms,
-        cellConnects: merged.cellConnects,
+        dmNumbers: merged.dmNumbers,
+        callConnects: merged.callConnects,
         appointmentsSet: merged.appointmentsSet,
+        appointmentsThatShow: merged.appointmentsThatShow,
         demosConducted: merged.demosConducted,
         introUnits: merged.introUnits,
-        basisUnits: merged.basisUnits,
+        basicUnits: merged.basicUnits,
         majorUnits: merged.majorUnits,
         sales: merged.sales,
         collections: merged.collections,
@@ -175,11 +178,13 @@ export function DailyEntryGrid({
         month,
         phoneCalls: next.phoneCalls,
         dms: next.dms,
-        cellConnects: next.cellConnects,
+        dmNumbers: next.dmNumbers,
+        callConnects: next.callConnects,
         appointmentsSet: next.appointmentsSet,
+        appointmentsThatShow: next.appointmentsThatShow,
         demosConducted: next.demosConducted,
         introUnits: next.introUnits,
-        basisUnits: next.basisUnits,
+        basicUnits: next.basicUnits,
         majorUnits: next.majorUnits,
         sales: next.sales,
         collections: next.collections,

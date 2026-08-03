@@ -291,15 +291,27 @@ export function StatsShell({
     const oldIndex = metrics.findIndex((m) => m.id === active.id)
     const newIndex = metrics.findIndex((m) => m.id === over.id)
     if (oldIndex === -1 || newIndex === -1) return
+    // Bridge cards aren't backed by a real StatMetric row — no
+    // reordering. Dropping onto one is also ignored (would land the
+    // moved card in a bridge slot, whose position we don't persist).
+    const moved = metrics[oldIndex]
+    const target = metrics[newIndex]
+    if (moved?.bridgeSource || target?.bridgeSource) return
 
     const next = metrics.slice()
-    const [moved] = next.splice(oldIndex, 1)
-    if (!moved) return
-    next.splice(newIndex, 0, moved)
+    const [taken] = next.splice(oldIndex, 1)
+    if (!taken) return
+    next.splice(newIndex, 0, taken)
     setMetrics(next)
 
     startReorder(async () => {
-      const res = await reorderMetricsAction(next.map((m) => m.id))
+      // Strip bridge ids from the payload — they have no server-side
+      // orderIndex to update. Real metric ids preserve their order
+      // relative to each other.
+      const realIds = next
+        .filter((m) => !m.bridgeSource)
+        .map((m) => m.id)
+      const res = await reorderMetricsAction(realIds)
       if (!res.ok) {
         toast.error(res.error ?? 'Could not save order')
         setMetrics(initialMetrics)

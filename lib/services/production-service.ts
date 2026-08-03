@@ -32,11 +32,13 @@ export interface DailyEntry {
   date: string /** ISO yyyy-mm-dd */
   phoneCalls: number | null
   dms: number | null
-  cellConnects: number | null
+  dmNumbers: number | null
+  callConnects: number | null
   appointmentsSet: number | null
+  appointmentsThatShow: number | null
   demosConducted: number | null
   introUnits: number | null
-  basisUnits: number | null
+  basicUnits: number | null
   majorUnits: number | null
   sales: number | null
   collections: number | null
@@ -78,11 +80,13 @@ function mapEntry(
       date: fallbackDate,
       phoneCalls: null,
       dms: null,
-      cellConnects: null,
+      dmNumbers: null,
+      callConnects: null,
       appointmentsSet: null,
+      appointmentsThatShow: null,
       demosConducted: null,
       introUnits: null,
-      basisUnits: null,
+      basicUnits: null,
       majorUnits: null,
       sales: null,
       collections: null,
@@ -95,11 +99,13 @@ function mapEntry(
     date: toIsoDate(row.date),
     phoneCalls: row.phoneCalls,
     dms: row.dms,
-    cellConnects: row.cellConnects,
+    dmNumbers: row.dmNumbers,
+    callConnects: row.callConnects,
     appointmentsSet: row.appointmentsSet,
+    appointmentsThatShow: row.appointmentsThatShow,
     demosConducted: row.demosConducted,
     introUnits: row.introUnits,
-    basisUnits: row.basisUnits,
+    basicUnits: row.basicUnits,
     majorUnits: row.majorUnits,
     sales: decimalToNumber(row.sales),
     collections: decimalToNumber(row.collections),
@@ -154,11 +160,13 @@ export async function listEntriesForMonthAll(
       date: iso,
       phoneCalls: 0,
       dms: 0,
-      cellConnects: 0,
+      dmNumbers: 0,
+      callConnects: 0,
       appointmentsSet: 0,
+      appointmentsThatShow: 0,
       demosConducted: 0,
       introUnits: 0,
-      basisUnits: 0,
+      basicUnits: 0,
       majorUnits: 0,
       sales: 0,
       collections: 0,
@@ -171,11 +179,14 @@ export async function listEntriesForMonthAll(
     if (!bucket) continue
     bucket.phoneCalls = (bucket.phoneCalls ?? 0) + (r.phoneCalls ?? 0)
     bucket.dms = (bucket.dms ?? 0) + (r.dms ?? 0)
-    bucket.cellConnects = (bucket.cellConnects ?? 0) + (r.cellConnects ?? 0)
+    bucket.dmNumbers = (bucket.dmNumbers ?? 0) + (r.dmNumbers ?? 0)
+    bucket.callConnects = (bucket.callConnects ?? 0) + (r.callConnects ?? 0)
     bucket.appointmentsSet = (bucket.appointmentsSet ?? 0) + (r.appointmentsSet ?? 0)
+    bucket.appointmentsThatShow =
+      (bucket.appointmentsThatShow ?? 0) + (r.appointmentsThatShow ?? 0)
     bucket.demosConducted = (bucket.demosConducted ?? 0) + (r.demosConducted ?? 0)
     bucket.introUnits = (bucket.introUnits ?? 0) + (r.introUnits ?? 0)
-    bucket.basisUnits = (bucket.basisUnits ?? 0) + (r.basisUnits ?? 0)
+    bucket.basicUnits = (bucket.basicUnits ?? 0) + (r.basicUnits ?? 0)
     bucket.majorUnits = (bucket.majorUnits ?? 0) + (r.majorUnits ?? 0)
     bucket.sales = (bucket.sales ?? 0) + Number(r.sales?.toString() ?? '0')
     bucket.collections =
@@ -189,11 +200,13 @@ export interface UpsertEntryInput {
   date: string /** yyyy-mm-dd */
   phoneCalls?: number | null
   dms?: number | null
-  cellConnects?: number | null
+  dmNumbers?: number | null
+  callConnects?: number | null
   appointmentsSet?: number | null
+  appointmentsThatShow?: number | null
   demosConducted?: number | null
   introUnits?: number | null
-  basisUnits?: number | null
+  basicUnits?: number | null
   majorUnits?: number | null
   sales?: number | null
   collections?: number | null
@@ -210,11 +223,13 @@ export async function upsertEntry(input: UpsertEntryInput): Promise<DailyEntry> 
   const numericFields: (keyof UpsertEntryInput)[] = [
     'phoneCalls',
     'dms',
-    'cellConnects',
+    'dmNumbers',
+    'callConnects',
     'appointmentsSet',
+    'appointmentsThatShow',
     'demosConducted',
     'introUnits',
-    'basisUnits',
+    'basicUnits',
     'majorUnits',
     'sales',
     'collections',
@@ -232,11 +247,13 @@ export async function upsertEntry(input: UpsertEntryInput): Promise<DailyEntry> 
   const data = {
     phoneCalls: input.phoneCalls ?? null,
     dms: input.dms ?? null,
-    cellConnects: input.cellConnects ?? null,
+    dmNumbers: input.dmNumbers ?? null,
+    callConnects: input.callConnects ?? null,
     appointmentsSet: input.appointmentsSet ?? null,
+    appointmentsThatShow: input.appointmentsThatShow ?? null,
     demosConducted: input.demosConducted ?? null,
     introUnits: input.introUnits ?? null,
-    basisUnits: input.basisUnits ?? null,
+    basicUnits: input.basicUnits ?? null,
     majorUnits: input.majorUnits ?? null,
     sales:
       input.sales !== undefined && input.sales !== null
@@ -274,11 +291,13 @@ export interface MonthlyTargets {
   month: number
   phoneCalls: number | null
   dms: number | null
-  cellConnects: number | null
+  dmNumbers: number | null
+  callConnects: number | null
   appointmentsSet: number | null
+  appointmentsThatShow: number | null
   demosConducted: number | null
   introUnits: number | null
-  basisUnits: number | null
+  basicUnits: number | null
   majorUnits: number | null
   sales: number | null
   collections: number | null
@@ -298,11 +317,13 @@ function mapTarget(
       month: fallbackMonth,
       phoneCalls: null,
       dms: null,
-      cellConnects: null,
+      dmNumbers: null,
+      callConnects: null,
       appointmentsSet: null,
+      appointmentsThatShow: null,
       demosConducted: null,
       introUnits: null,
-      basisUnits: null,
+      basicUnits: null,
       majorUnits: null,
       sales: null,
       collections: null,
@@ -315,11 +336,13 @@ function mapTarget(
     month: row.month,
     phoneCalls: row.phoneCalls,
     dms: row.dms,
-    cellConnects: row.cellConnects,
+    dmNumbers: row.dmNumbers,
+    callConnects: row.callConnects,
     appointmentsSet: row.appointmentsSet,
+    appointmentsThatShow: row.appointmentsThatShow,
     demosConducted: row.demosConducted,
     introUnits: row.introUnits,
-    basisUnits: row.basisUnits,
+    basicUnits: row.basicUnits,
     majorUnits: row.majorUnits,
     sales: decimalToNumber(row.sales),
     collections: decimalToNumber(row.collections),
@@ -357,11 +380,13 @@ export async function getMonthlyTargetsAll(
     month,
     phoneCalls: 0,
     dms: 0,
-    cellConnects: 0,
+    dmNumbers: 0,
+    callConnects: 0,
     appointmentsSet: 0,
+    appointmentsThatShow: 0,
     demosConducted: 0,
     introUnits: 0,
-    basisUnits: 0,
+    basicUnits: 0,
     majorUnits: 0,
     sales: 0,
     collections: 0,
@@ -369,11 +394,14 @@ export async function getMonthlyTargetsAll(
   for (const r of rows) {
     sum.phoneCalls = (sum.phoneCalls ?? 0) + (r.phoneCalls ?? 0)
     sum.dms = (sum.dms ?? 0) + (r.dms ?? 0)
-    sum.cellConnects = (sum.cellConnects ?? 0) + (r.cellConnects ?? 0)
+    sum.dmNumbers = (sum.dmNumbers ?? 0) + (r.dmNumbers ?? 0)
+    sum.callConnects = (sum.callConnects ?? 0) + (r.callConnects ?? 0)
     sum.appointmentsSet = (sum.appointmentsSet ?? 0) + (r.appointmentsSet ?? 0)
+    sum.appointmentsThatShow =
+      (sum.appointmentsThatShow ?? 0) + (r.appointmentsThatShow ?? 0)
     sum.demosConducted = (sum.demosConducted ?? 0) + (r.demosConducted ?? 0)
     sum.introUnits = (sum.introUnits ?? 0) + (r.introUnits ?? 0)
-    sum.basisUnits = (sum.basisUnits ?? 0) + (r.basisUnits ?? 0)
+    sum.basicUnits = (sum.basicUnits ?? 0) + (r.basicUnits ?? 0)
     sum.majorUnits = (sum.majorUnits ?? 0) + (r.majorUnits ?? 0)
     sum.sales = (sum.sales ?? 0) + Number(r.sales?.toString() ?? '0')
     sum.collections = (sum.collections ?? 0) + Number(r.collections?.toString() ?? '0')
@@ -387,11 +415,13 @@ export interface UpsertTargetsInput {
   month: number
   phoneCalls?: number | null
   dms?: number | null
-  cellConnects?: number | null
+  dmNumbers?: number | null
+  callConnects?: number | null
   appointmentsSet?: number | null
+  appointmentsThatShow?: number | null
   demosConducted?: number | null
   introUnits?: number | null
-  basisUnits?: number | null
+  basicUnits?: number | null
   majorUnits?: number | null
   sales?: number | null
   collections?: number | null
@@ -403,11 +433,13 @@ export async function upsertMonthlyTargets(
   const data = {
     phoneCalls: input.phoneCalls ?? null,
     dms: input.dms ?? null,
-    cellConnects: input.cellConnects ?? null,
+    dmNumbers: input.dmNumbers ?? null,
+    callConnects: input.callConnects ?? null,
     appointmentsSet: input.appointmentsSet ?? null,
+    appointmentsThatShow: input.appointmentsThatShow ?? null,
     demosConducted: input.demosConducted ?? null,
     introUnits: input.introUnits ?? null,
-    basisUnits: input.basisUnits ?? null,
+    basicUnits: input.basicUnits ?? null,
     majorUnits: input.majorUnits ?? null,
     sales:
       input.sales !== undefined && input.sales !== null
@@ -593,11 +625,13 @@ export interface MonthlyAggregateRow {
   month: number
   phoneCalls: number
   dms: number
-  cellConnects: number
+  dmNumbers: number
+  callConnects: number
   appointmentsSet: number
+  appointmentsThatShow: number
   demosConducted: number
   introUnits: number
-  basisUnits: number
+  basicUnits: number
   majorUnits: number
   sales: number
   collections: number
@@ -647,11 +681,13 @@ export async function listMonthlyAggregates(
     if (!bucket) continue
     bucket.phoneCalls += r.phoneCalls ?? 0
     bucket.dms += r.dms ?? 0
-    bucket.cellConnects += r.cellConnects ?? 0
+    bucket.dmNumbers += r.dmNumbers ?? 0
+    bucket.callConnects += r.callConnects ?? 0
     bucket.appointmentsSet += r.appointmentsSet ?? 0
+    bucket.appointmentsThatShow += r.appointmentsThatShow ?? 0
     bucket.demosConducted += r.demosConducted ?? 0
     bucket.introUnits += r.introUnits ?? 0
-    bucket.basisUnits += r.basisUnits ?? 0
+    bucket.basicUnits += r.basicUnits ?? 0
     bucket.majorUnits += r.majorUnits ?? 0
     bucket.sales += Number(r.sales?.toString() ?? '0')
     bucket.collections += Number(r.collections?.toString() ?? '0')
@@ -701,11 +737,13 @@ export async function listMonthlyAggregatesAll(
     if (!bucket) continue
     bucket.phoneCalls += r.phoneCalls ?? 0
     bucket.dms += r.dms ?? 0
-    bucket.cellConnects += r.cellConnects ?? 0
+    bucket.dmNumbers += r.dmNumbers ?? 0
+    bucket.callConnects += r.callConnects ?? 0
     bucket.appointmentsSet += r.appointmentsSet ?? 0
+    bucket.appointmentsThatShow += r.appointmentsThatShow ?? 0
     bucket.demosConducted += r.demosConducted ?? 0
     bucket.introUnits += r.introUnits ?? 0
-    bucket.basisUnits += r.basisUnits ?? 0
+    bucket.basicUnits += r.basicUnits ?? 0
     bucket.majorUnits += r.majorUnits ?? 0
     bucket.sales += Number(r.sales?.toString() ?? '0')
     bucket.collections += Number(r.collections?.toString() ?? '0')
@@ -742,11 +780,13 @@ function emptyAggregate(year: number, month: number): MonthlyAggregateRow {
     month,
     phoneCalls: 0,
     dms: 0,
-    cellConnects: 0,
+    dmNumbers: 0,
+    callConnects: 0,
     appointmentsSet: 0,
+    appointmentsThatShow: 0,
     demosConducted: 0,
     introUnits: 0,
-    basisUnits: 0,
+    basicUnits: 0,
     majorUnits: 0,
     sales: 0,
     collections: 0,

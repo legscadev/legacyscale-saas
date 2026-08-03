@@ -1,6 +1,10 @@
 import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { StatsShell } from '@/components/admin/stats/stats-shell'
 import {
+  getBridgeDivisionSummary,
+  listBridgeCards,
+} from '@/lib/services/production-bridge-service'
+import {
   fetchAllMetrics,
   fetchDivisions,
   listAssigneesForStats,
@@ -35,20 +39,42 @@ export default async function AdminStatsPage({ searchParams }: StatsPageProps) {
   // client shell filters + groups on demand — much cheaper than
   // per-division fetches now that the left rail can show any group
   // and search spans everything.
-  const [divisions, metrics, assignees] = await Promise.all([
-    fetchDivisions(),
-    fetchAllMetrics(),
-    listAssigneesForStats(),
-  ])
+  //
+  // Bridge cards + the synthetic "Sales — Production Sheets"
+  // division are fetched alongside so the client shell can show them
+  // in the same divisions rail / metrics grid as regular metrics
+  // without a second round-trip.
+  const [divisions, metrics, assignees, bridgeDivision, bridgeCards] =
+    await Promise.all([
+      fetchDivisions(),
+      fetchAllMetrics(),
+      listAssigneesForStats(),
+      getBridgeDivisionSummary(),
+      listBridgeCards(),
+    ])
+
+  // Only append the bridge division if there's at least one author
+  // to render cards for — an empty rail entry would confuse.
+  //
+  // Card count in the rail badge is derived from the actual cards
+  // list, not authors × KPI count, because we now skip KPIs a user
+  // has never entered (a setter who only fills Phone Calls only
+  // gets one card, not 12).
+  const allDivisions =
+    bridgeCards.length > 0
+      ? [...divisions, { ...bridgeDivision, metricCount: bridgeCards.length }]
+      : divisions
+  const allMetrics =
+    bridgeCards.length > 0 ? [...metrics, ...bridgeCards] : metrics
 
   return (
     <StatsShell
       currentUserId={admin.id}
       currentUserIsAdmin={true}
-      divisions={divisions}
+      divisions={allDivisions}
       initialDivisionId={params.division ?? null}
       initialAssigneeIds={parseAssigneeIds(params.assignee)}
-      metrics={metrics}
+      metrics={allMetrics}
       assignees={assignees}
     />
   )

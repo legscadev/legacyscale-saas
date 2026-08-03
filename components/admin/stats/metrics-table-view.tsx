@@ -207,6 +207,11 @@ export function MetricsTableView({
 
   const canEditMetric = useCallback(
     (m: StatMetricRow): boolean => {
+      // Bridge cards are read-only mirrors of ProductionEntry — values
+      // are edited on /admin/production-sheets, never inline here.
+      // Applies to admins too (avoids two writers racing for the same
+      // day's number).
+      if (m.bridgeSource) return false
       if (currentUserIsAdmin) return true
       return m.assignedTo?.userId === currentUserId
     },

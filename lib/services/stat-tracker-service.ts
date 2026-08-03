@@ -54,6 +54,17 @@ export interface StatMetricRow {
   latestValue: number | null
   latestRecordedAt: Date | null
   dataPoints: StatDataPoint[]
+  /** Set when the row is a virtual read-only card sourced from
+   *  another module (e.g. `PRODUCTION_SHEETS`). MetricCard uses this
+   *  to hide record / edit / delete affordances and show a lock
+   *  hint. Real StatMetric rows leave it undefined. */
+  bridgeSource?: 'PRODUCTION_SHEETS'
+  /** Pre-bridge, hand-created per-user sales metric (e.g. "Michael
+   *  Chacon - DMs"). MetricCard badges these "Manual entry" so
+   *  admins can tell them apart from live bridge cards on the same
+   *  board. Only true for legacy rows — normal admin-created
+   *  metrics leave it false. */
+  isLegacyManual: boolean
 }
 
 export interface StatDataPoint {
@@ -169,6 +180,7 @@ export async function listAllMetrics(): Promise<StatMetricRow[]> {
       unit: true,
       orderIndex: true,
       targetValue: true,
+      isLegacyManual: true,
       division: { select: { id: true, name: true, shortLabel: true } },
       assignedTo: {
         select: {
@@ -214,6 +226,7 @@ export async function listMetricsForDivision(
       unit: true,
       orderIndex: true,
       targetValue: true,
+      isLegacyManual: true,
       division: { select: { id: true, name: true, shortLabel: true } },
       assignedTo: {
         select: {
@@ -288,6 +301,7 @@ interface RawMetric {
   unit: string
   orderIndex: number
   targetValue: Prisma.Decimal | null
+  isLegacyManual: boolean
   division: { id: string; name: string; shortLabel: string | null }
   assignedTo: {
     id: string
@@ -317,6 +331,7 @@ function shapeMetricRow(m: RawMetric): StatMetricRow {
     unit: m.unit as StatMetricUnit,
     orderIndex: m.orderIndex,
     targetValue: m.targetValue?.toNumber() ?? null,
+    isLegacyManual: m.isLegacyManual,
     division: m.division,
     assignedTo: m.assignedTo,
     latestValue: latest?.value.toNumber() ?? null,
