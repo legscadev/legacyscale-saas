@@ -12,9 +12,10 @@ import { AlertCircle, CheckCircle2, ClipboardList, User } from 'lucide-react'
 
 import { AvatarGroup } from '@/components/shared/avatar-group'
 import { EmptyState } from '@/components/shared/empty-state'
+import { NudgeRowAction } from '@/components/admin/progress/nudge-row-action'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { nudgeTemplateForTask } from './nudge-template'
 import {
   Table,
   TableBody,
@@ -71,32 +72,43 @@ export function StudentTasksShell({ result, students, filters }: Props) {
     [result.items],
   )
 
-  return (
-    <div className="space-y-6">
-      {/* Subhead — the page-level H1 lives in the /admin/progress
-          layout (PageHeader: "Progress Tracker"). This is just the
-          Tasks-tab-specific context + counts. */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Every personal task or goal students have set for themselves,
-          with due dates and overdue status. Read-only — follow up
-          with a nudge.
-        </p>
-        <div className="rounded-lg border bg-card px-3 py-2 text-xs">
-          <span className="font-medium tabular-nums">{result.total}</span>{' '}
-          <span className="text-muted-foreground">total</span>
-          <span className="mx-2 text-muted-foreground/40">·</span>
-          <span className="font-medium tabular-nums text-destructive">
-            {overdueCount}
-          </span>{' '}
-          <span className="text-muted-foreground">overdue on page</span>
-        </div>
-      </div>
+  const anyFilterActive =
+    !!filters.studentId ||
+    filters.overdueOnly ||
+    filters.includeCompleted
 
-      {/* Filters */}
-      <Card className="flex flex-wrap items-center gap-3 p-3">
+  return (
+    <div className="space-y-4">
+      {/* One-line toolbar — description on the left, filters + counts
+          on the right. No wrapper card; the toolbar sits directly on
+          the page for a lighter feel. Wraps naturally on narrow
+          viewports. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="mr-auto text-sm text-muted-foreground">
+          Personal tasks + goals students set for themselves.{' '}
+          <span className="text-muted-foreground/60">
+            Read-only — follow up with a nudge.
+          </span>
+        </p>
+
+        {/* Count chip — inline, muted, right-aligned with the filters
+            so the eye reads: description ← → count · filters. */}
+        <div className="text-xs text-muted-foreground tabular-nums">
+          <span className="font-medium text-foreground">{result.total}</span>{' '}
+          total
+          {overdueCount > 0 ? (
+            <>
+              {' · '}
+              <span className="font-medium text-destructive">
+                {overdueCount}
+              </span>{' '}
+              overdue
+            </>
+          ) : null}
+        </div>
+
         <select
-          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="h-8 rounded-md border border-input bg-transparent px-2.5 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           value={filters.studentId ?? ''}
           onChange={(e) => setParams({ studentId: e.target.value || null })}
           disabled={pending}
@@ -109,7 +121,7 @@ export function StudentTasksShell({ result, students, filters }: Props) {
           ))}
         </select>
 
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs">
           <Checkbox
             checked={filters.overdueOnly}
             onCheckedChange={(c) =>
@@ -117,10 +129,10 @@ export function StudentTasksShell({ result, students, filters }: Props) {
             }
             disabled={pending}
           />
-          Overdue only
+          Overdue
         </label>
 
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs">
           <Checkbox
             checked={filters.includeCompleted}
             onCheckedChange={(c) =>
@@ -131,12 +143,11 @@ export function StudentTasksShell({ result, students, filters }: Props) {
           Show completed
         </label>
 
-        {(filters.studentId ||
-          filters.overdueOnly ||
-          filters.includeCompleted) && (
+        {anyFilterActive ? (
           <Button
             variant="ghost"
             size="sm"
+            className="h-8 px-2 text-xs"
             onClick={() =>
               setParams({
                 studentId: null,
@@ -148,8 +159,8 @@ export function StudentTasksShell({ result, students, filters }: Props) {
           >
             Clear
           </Button>
-        )}
-      </Card>
+        ) : null}
+      </div>
 
       {/* Table */}
       {result.items.length === 0 ? (
@@ -172,6 +183,7 @@ export function StudentTasksShell({ result, students, filters }: Props) {
                 <TableHead className="whitespace-nowrap">Due</TableHead>
                 <TableHead>Course</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="w-12 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -220,8 +232,10 @@ export function StudentTasksShell({ result, students, filters }: Props) {
 
 function StudentTaskRow({ task }: { task: AdminStudentTaskItem }) {
   const done = task.completedAt !== null
+  // Tighter row: py-2 (vs py-4 default). Single-line student cell —
+  // name only, email in the tooltip via title.
   return (
-    <TableRow className="align-top">
+    <TableRow className="align-middle [&>td]:py-2">
       <TableCell>
         <div className="flex items-center gap-2">
           <AvatarGroup
@@ -234,28 +248,26 @@ function StudentTaskRow({ task }: { task: AdminStudentTaskItem }) {
             size="sm"
             max={1}
           />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">
-              {task.student.name?.trim() ||
-                task.student.email.split('@')[0]}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {task.student.email}
-            </p>
-          </div>
+          <span
+            className="truncate text-sm font-medium"
+            title={task.student.email}
+          >
+            {task.student.name?.trim() ||
+              task.student.email.split('@')[0]}
+          </span>
         </div>
       </TableCell>
       <TableCell>
         <p
           className={cn(
-            'text-sm font-medium leading-snug',
+            'truncate text-sm font-medium leading-snug',
             done && 'text-muted-foreground line-through',
           )}
         >
           {task.title}
         </p>
         {task.description ? (
-          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {task.description}
           </p>
         ) : null}
@@ -309,6 +321,15 @@ function StudentTaskRow({ task }: { task: AdminStudentTaskItem }) {
             <User className="size-3" />
             Open
           </span>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        {done ? null : (
+          <NudgeRowAction
+            memberId={task.student.id}
+            memberName={task.student.name ?? task.student.email}
+            messageTemplate={nudgeTemplateForTask(task)}
+          />
         )}
       </TableCell>
     </TableRow>

@@ -8,7 +8,9 @@
 import Link from 'next/link'
 import { AlertCircle, ClipboardList, ExternalLink } from 'lucide-react'
 
+import { NudgeRowAction } from '@/components/admin/progress/nudge-row-action'
 import { SectionCard } from '@/components/shared'
+import { nudgeTemplateForTask } from '@/components/admin/student-tasks/nudge-template'
 import { cn } from '@/lib/utils'
 import type { AdminStudentTaskItem } from '@/lib/services/admin-student-task-service'
 
@@ -76,26 +78,33 @@ export function MemberTasksCard({ studentId, tasks, counts }: Props) {
                     </p>
                   ) : null}
                 </div>
-                <div className="shrink-0 text-right text-xs tabular-nums">
-                  {t.dueDate ? (
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1',
-                        isOverdue
-                          ? 'font-medium text-destructive'
-                          : 'text-muted-foreground',
-                      )}
-                    >
-                      {isOverdue ? (
-                        <AlertCircle className="size-3" />
-                      ) : null}
-                      {DATE_FMT.format(t.dueDate)}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground/60">
-                      No due date
-                    </span>
-                  )}
+                <div className="flex shrink-0 items-center gap-2">
+                  <div className="text-right text-xs tabular-nums">
+                    {t.dueDate ? (
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1',
+                          isOverdue
+                            ? 'font-medium text-destructive'
+                            : 'text-muted-foreground',
+                        )}
+                      >
+                        {isOverdue ? (
+                          <AlertCircle className="size-3" />
+                        ) : null}
+                        {DATE_FMT.format(t.dueDate)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/60">
+                        No due date
+                      </span>
+                    )}
+                  </div>
+                  <NudgeRowAction
+                    memberId={t.student.id}
+                    memberName={t.student.name ?? t.student.email}
+                    messageTemplate={nudgeTemplateForTask(t)}
+                  />
                 </div>
               </li>
             )

@@ -12,6 +12,12 @@ interface NudgeRowActionProps {
    *  to progress metadata inside a row; 'button' is a full button
    *  for hero sections. */
   variant?: 'icon' | 'button'
+  /** Prefill the nudge dialog's message (task-specific context, etc).
+   *  Omit for the generic "just checking in" template. */
+  messageTemplate?: string
+  /** Override the icon label — useful when the trigger sits in a task
+   *  context where "Send nudge" reads better as "Nudge". */
+  label?: string
 }
 
 /**
@@ -23,6 +29,8 @@ export function NudgeRowAction({
   memberId,
   memberName,
   variant = 'icon',
+  messageTemplate,
+  label,
 }: NudgeRowActionProps) {
   const [open, setOpen] = useState(false)
 
@@ -38,7 +46,7 @@ export function NudgeRowAction({
         <button
           type="button"
           onClick={handleClick}
-          aria-label="Send nudge"
+          aria-label={label ?? 'Send nudge'}
           className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Bell className="size-4" />
@@ -50,7 +58,7 @@ export function NudgeRowAction({
           className="inline-flex items-center gap-2 rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
         >
           <Bell className="size-4" />
-          Send nudge
+          {label ?? 'Send nudge'}
         </button>
       )}
       <NudgeDialog
@@ -58,6 +66,7 @@ export function NudgeRowAction({
         onOpenChange={setOpen}
         memberId={memberId}
         memberName={memberName}
+        messageTemplate={messageTemplate}
       />
     </>
   )
