@@ -149,6 +149,47 @@ class AdminStudentTaskService {
     }
   }
 
+  /** Slim helper for the per-student card on
+   *  /admin/progress/members/[id]. Returns the student's open tasks
+   *  (overdue first via dueDate asc), capped at `limit`. */
+  async listForStudent(
+    studentId: string,
+    limit = 6,
+  ): Promise<AdminStudentTaskItem[]> {
+    const now = new Date()
+    const rows = await prisma.studentTask.findMany({
+      where: { userId: studentId, completedAt: null },
+      orderBy: [
+        { dueDate: { sort: 'asc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
+      take: limit,
+      select: SELECT,
+    })
+    return rows.map((r) => toItem(r, now.getTime()))
+  }
+
+  /** Total open + count-of-overdue for the per-student card. Cheap
+   *  because it's two aggregate counts, no row fetches. */
+  async countsForStudent(
+    studentId: string,
+  ): Promise<{ open: number; overdue: number }> {
+    const now = new Date()
+    const [open, overdue] = await Promise.all([
+      prisma.studentTask.count({
+        where: { userId: studentId, completedAt: null },
+      }),
+      prisma.studentTask.count({
+        where: {
+          userId: studentId,
+          completedAt: null,
+          dueDate: { lt: now },
+        },
+      }),
+    ])
+    return { open, overdue }
+  }
+
   /** Count of tasks with a due date in the past that aren't done. Used
    *  by the "Needs attention" widget on /admin/dashboard. */
   async countOverdue(): Promise<number> {

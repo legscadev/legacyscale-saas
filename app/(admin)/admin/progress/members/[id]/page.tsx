@@ -18,10 +18,12 @@ import {
   StatusBadge,
 } from '@/components/shared'
 import { MemberEnrollmentsTable } from '@/components/admin/progress/member-enrollments-table'
+import { MemberTasksCard } from '@/components/admin/progress/member-tasks-card'
 import { NudgeRowAction } from '@/components/admin/progress/nudge-row-action'
 import {  requireTeamModuleAccess  } from "@/lib/auth/get-user"
 import { fmtDate, getInitials } from '@/lib/format'
 import { adminProgressService } from '@/lib/services/admin-progress-service'
+import { adminStudentTaskService } from '@/lib/services/admin-student-task-service'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -36,6 +38,10 @@ export default async function AdminProgressMemberDetailPage({
   if (!detail) notFound()
 
   const { user, kpis, enrollments } = detail
+  const [taskItems, taskCounts] = await Promise.all([
+    adminStudentTaskService.listForStudent(user.id),
+    adminStudentTaskService.countsForStudent(user.id),
+  ])
 
   return (
     <div className="space-y-6">
@@ -128,6 +134,12 @@ export default async function AdminProgressMemberDetailPage({
           <MemberEnrollmentsTable userId={user.id} enrollments={enrollments} />
         )}
       </SectionCard>
+
+      <MemberTasksCard
+        studentId={user.id}
+        tasks={taskItems}
+        counts={taskCounts}
+      />
     </div>
   )
 }
