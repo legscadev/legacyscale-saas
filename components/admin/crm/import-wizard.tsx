@@ -914,12 +914,12 @@ function VerifyStep({
           </select>
           {members.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">
-              No users with a Setter or Closer role yet. Assign a role in
-              /admin/team, or leave imports Unassigned.
+              No admins or users with a Setter/Closer role yet. Assign
+              a role in /admin/team, or leave imports Unassigned.
             </p>
           ) : (
             <p className="text-[11px] text-muted-foreground">
-              Only users with a Setter or Closer role are eligible.
+              Admins and users with a Setter or Closer role are eligible.
             </p>
           )}
         </div>
