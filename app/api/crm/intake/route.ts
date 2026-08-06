@@ -49,6 +49,45 @@ function formatAnswers(answers: Record<string, unknown> | undefined): string {
   return lines.join('\n')
 }
 
+/** Append-mode write: enrich the contact's most recent opportunity
+ *  instead of spawning a new deal. Used by follow-up form steps (e.g.
+ *  an Instagram-handle capture on the success screen). Returns null
+ *  when there's no matching contact or prior deal, so the caller can
+ *  fall back to a normal create. Runs inside the tenant scope, so
+ *  Prisma auto-filters by company. */
+async function appendToLatestOpportunity(
+  email: string,
+  extraNotes: string,
+): Promise<{ contactId: string; opportunityId: string; appended: true } | null> {
+  if (!extraNotes) return null
+  const contact = await prisma.crmLead.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' } },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  })
+  if (!contact) return null
+  const opp = await prisma.crmOpportunity.findFirst({
+    where: { contactId: contact.id, deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, notes: true },
+  })
+  if (!opp) return null
+
+  const merged = [opp.notes, extraNotes]
+    .filter((s): s is string => !!s && s.length > 0)
+    .join('\n\n')
+
+  await prisma.crmOpportunity.update({
+    where: { id: opp.id },
+    data: { notes: merged || null },
+  })
+  await prisma.crmLead.update({
+    where: { id: contact.id },
+    data: { lastActivityAt: new Date() },
+  })
+  return { contactId: contact.id, opportunityId: opp.id, appended: true }
+}
+
 export async function POST(req: Request) {
   // ---- Auth ----------------------------------------------------
   const expected = process.env.CRM_INTAKE_TOKEN
@@ -95,8 +134,24 @@ export async function POST(req: Request) {
     process.env.CRM_INTAKE_COMPANY_ID || PLATFORM_SEED_COMPANY_ID
   const source = input.source?.trim() || 'Landing page'
 
+  const notes = [
+    input.campaign ? `Campaign: ${input.campaign}` : null,
+    formatAnswers(input.answers),
+  ]
+    .filter((s): s is string => !!s && s.length > 0)
+    .join('\n\n')
+
   try {
     const result = await runAsTenant(companyId, async () => {
+      // Append mode: enrich the person's existing deal (e.g. an
+      // Instagram-handle capture on the success screen) rather than
+      // spawning a duplicate. Falls through to create when there's no
+      // prior opportunity to attach to.
+      if (input.mode === 'append' && input.email) {
+        const appended = await appendToLatestOpportunity(input.email, notes)
+        if (appended) return appended
+      }
+
       // Dedupe contact by email (falls back to name+company when
       // no email); P0 #3's find-or-create writes back the source
       // + lastActivityAt as the contact's `campaign`.
@@ -109,7 +164,11 @@ export async function POST(req: Request) {
         actorId: null,
       })
 
-      const pipelineId = await crmPipelineService.resolvePipelineId()
+      // Route by the funnel's pipeline id when supplied; unknown/omitted
+      // ids fall back to the tenant's default pipeline.
+      const pipelineId = await crmPipelineService.resolvePipelineId(
+        input.pipeline,
+      )
       if (!pipelineId) {
         throw new Error(
           'No pipeline configured — create one at /admin/crm/opportunities/pipelines first',
@@ -121,15 +180,8 @@ export async function POST(req: Request) {
         select: { id: true, probability: true },
       })
       if (!firstStage) {
-        throw new Error('Default pipeline has no stages')
+        throw new Error('Pipeline has no stages')
       }
-
-      const notes = [
-        input.campaign ? `Campaign: ${input.campaign}` : null,
-        formatAnswers(input.answers),
-      ]
-        .filter((s): s is string => !!s && s.length > 0)
-        .join('\n\n')
 
       const opportunity = await prisma.crmOpportunity.create({
         data: {
