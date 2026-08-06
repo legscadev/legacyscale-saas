@@ -683,6 +683,86 @@ export async function getLessonStatusAction(
   return { ok: true, lesson }
 }
 
+/**
+ * Manual publish toggle for QUIZ + RESOURCE lessons. Admins flip a
+ * lesson between DRAFT and READY when the auto-flip that VIDEO
+ * lessons get from Mux isn't available for the type.
+ *
+ * Guards:
+ *   - VIDEO lessons are excluded — their status is owned by the Mux
+ *     webhook, and letting admins override would race with it.
+ *   - Publishing a QUIZ requires at least 1 question.
+ *   - Publishing a RESOURCE requires at least 1 attached file.
+ *   - Unpublish (READY → DRAFT) is always allowed on QUIZ / RESOURCE.
+ */
+export async function setLessonStatusAction(
+  lessonId: string,
+  status: 'DRAFT' | 'READY',
+): Promise<LessonStatusResult> {
+  const admin = await requireTeamModuleAccess('courses')
+
+  const lesson = await prisma.lesson.findUnique({
+    where: { id: lessonId },
+    select: {
+      id: true,
+      chapterId: true,
+      type: true,
+      status: true,
+      _count: {
+        select: {
+          quizQuestions: true,
+          resources: true,
+        },
+      },
+    },
+  })
+  if (!lesson) return { ok: false, error: 'Lesson not found' }
+  if (lesson.type === 'VIDEO') {
+    return {
+      ok: false,
+      error: "Video lesson status is set automatically when Mux finishes processing.",
+    }
+  }
+  if (status === 'READY') {
+    if (lesson.type === 'QUIZ' && lesson._count.quizQuestions === 0) {
+      return {
+        ok: false,
+        error: 'Add at least one question before publishing this quiz.',
+      }
+    }
+    if (lesson.type === 'RESOURCE' && lesson._count.resources === 0) {
+      return {
+        ok: false,
+        error: 'Attach at least one file before publishing this resource lesson.',
+      }
+    }
+  }
+
+  const updated = await prisma.lesson.update({
+    where: { id: lessonId },
+    data: { status },
+    select: {
+      id: true,
+      chapterId: true,
+      status: true,
+      durationSeconds: true,
+      muxPlaybackId: true,
+    },
+  })
+
+  await writeAuditLog({
+    actorId: admin.id,
+    action: 'lesson.status',
+    resourceType: 'lesson',
+    resourceId: lessonId,
+    summary: `${status === 'READY' ? 'Published' : 'Unpublished'} lesson`,
+    metadata: { status, type: lesson.type },
+  })
+
+  revalidatePath('/admin/courses/[slug]', 'page')
+  return { ok: true, lesson: updated }
+}
+
 export interface ResourceDownloadUrlResult extends BaseResult {
   url?: string
 }

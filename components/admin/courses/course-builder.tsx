@@ -1301,6 +1301,20 @@ export function CourseBuilder({
           setChapters(apply)
           setSavedSnapshot(apply)
         }}
+        onLessonStatusChange={(lessonId, status) => {
+          // Admin flipped a QUIZ or RESOURCE lesson's publish state
+          // via the header toggle. Mirror to local state so the tree
+          // badge flips without a full page revalidate.
+          const apply = (chs: LocalChapter[]): LocalChapter[] =>
+            chs.map((c) => ({
+              ...c,
+              lessons: c.lessons.map((l) =>
+                l.id === lessonId ? { ...l, status } : l,
+              ),
+            }))
+          setChapters(apply)
+          setSavedSnapshot(apply)
+        }}
       />
 
       <AlertDialog
