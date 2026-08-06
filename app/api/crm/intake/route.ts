@@ -185,7 +185,10 @@ export async function POST(req: Request) {
 
       const opportunity = await prisma.crmOpportunity.create({
         data: {
-          name: `${input.name} — ${source}`.slice(0, 200),
+          // Deal name is just the applicant's name — the funnel/source
+          // is captured in the `source` column and by the pipeline the
+          // deal lands in, so it needn't clutter the name.
+          name: input.name.slice(0, 200),
           pipelineId,
           stageId: firstStage.id,
           contactId,
