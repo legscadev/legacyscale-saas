@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import MuxPlayer from '@mux/mux-player-react'
 import * as UpChunk from '@mux/upchunk'
 import {
@@ -35,6 +35,7 @@ import {
   getResourceDownloadUrlAction,
   prepareResourceUploadAction,
   removeLessonResourceAction,
+  setLessonStatusAction,
 } from '@/app/(admin)/admin/courses/[slug]/actions'
 import type {
   LessonListItem,
@@ -76,6 +77,10 @@ interface LessonEditorDialogProps {
     durationSeconds: number | null
     muxPlaybackId: string | null
   }) => void
+  /** Fires after the admin manually publishes/unpublishes a QUIZ or
+   *  RESOURCE lesson via the header toggle, so the parent tree can
+   *  refresh the status badge without a full page revalidate. */
+  onLessonStatusChange: (lessonId: string, status: 'DRAFT' | 'READY') => void
 }
 
 function formatDuration(seconds: number | null): string {
@@ -96,18 +101,26 @@ export function LessonEditorDialog({
   onResourceRemoved,
   onVideoUploadStarted,
   onVideoStatusReady,
+  onLessonStatusChange,
 }: LessonEditorDialogProps) {
   if (!lesson) return null
 
+  // Type-aware header description. VIDEO's copy about auto-save
+  // and uploads doesn't apply to QUIZ/RESOURCE — swap in text that
+  // matches the workflow.
+  const headerDescription =
+    lesson.type === 'QUIZ'
+      ? 'Add questions and set the correct answer. Click Publish when the quiz is ready to go live.'
+      : lesson.type === 'RESOURCE'
+        ? 'Attach files. Click Publish when the lesson is ready to go live.'
+        : 'Changes to title and description save when you click Save in the course header. Uploads happen immediately.'
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-xl">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
+        <DialogHeader className="shrink-0 pr-8">
           <DialogTitle>Edit lesson</DialogTitle>
-          <DialogDescription>
-            Changes to title and description save when you click Save in the
-            course header. Uploads happen immediately.
-          </DialogDescription>
+          <DialogDescription>{headerDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
@@ -163,7 +176,21 @@ export function LessonEditorDialog({
           />
         </div>
 
-        <DialogFooter className="shrink-0" showCloseButton>
+        <DialogFooter className="shrink-0 sm:justify-between">
+          {/* Publish/Unpublish lives here (left) for QUIZ + RESOURCE so
+              it doesn't collide with the header Close X. VIDEO gets no
+              toggle — Mux owns its status. Empty flex slot keeps the
+              Done button right-anchored either way. */}
+          <div className="flex items-center gap-2">
+            {lesson.type === 'QUIZ' || lesson.type === 'RESOURCE' ? (
+              <LessonPublishToggle
+                lesson={lesson}
+                onChanged={(status) =>
+                  onLessonStatusChange(lesson.id, status)
+                }
+              />
+            ) : null}
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Done
           </Button>
@@ -783,6 +810,83 @@ function FileRow({
         onClick={onRemove}
       >
         <X />
+      </Button>
+    </div>
+  )
+}
+
+/**
+ * Header-level publish toggle for QUIZ + RESOURCE lessons. Shows the
+ * current status as a colored badge and offers a Publish / Unpublish
+ * button. Server-side guards prevent publishing empty QUIZ/RESOURCE
+ * lessons; when that fires, the returned error surfaces in a toast.
+ * For RESOURCE we also proactively disable the Publish button when
+ * the resources array is empty (cheap client-side check).
+ */
+function LessonPublishToggle({
+  lesson,
+  onChanged,
+}: {
+  lesson: LessonListItem
+  onChanged: (status: 'DRAFT' | 'READY') => void
+}) {
+  const [pending, startTransition] = useTransition()
+  const isReady = lesson.status === 'READY'
+  const target: 'DRAFT' | 'READY' = isReady ? 'DRAFT' : 'READY'
+
+  // RESOURCE has resource count on the prop — check client-side. QUIZ
+  // question count isn't on the prop, so we let the server enforce
+  // that guard and surface any error via toast.
+  const clientBlock =
+    !isReady &&
+    lesson.type === 'RESOURCE' &&
+    lesson.resources.length === 0
+
+  function handleClick() {
+    startTransition(async () => {
+      const result = await setLessonStatusAction(lesson.id, target)
+      if (!result.ok) {
+        toast.error(result.error ?? 'Could not update lesson status')
+        return
+      }
+      onChanged(target)
+      toast.success(target === 'READY' ? 'Lesson published' : 'Lesson unpublished')
+    })
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={cn(
+          'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
+          isReady
+            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+            : 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+        )}
+      >
+        {isReady ? 'Ready' : 'Draft'}
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant={isReady ? 'outline' : 'default'}
+        // Override the default (red brand) styling on the Publish
+        // action — green reads "make live," red reads "destructive"
+        // and clashes with the amber DRAFT badge sitting next to it.
+        // Unpublish keeps the neutral outline styling.
+        className={cn(
+          !isReady &&
+            'bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500',
+        )}
+        onClick={handleClick}
+        disabled={pending || clientBlock}
+        title={
+          clientBlock
+            ? 'Attach at least one file before publishing this resource lesson.'
+            : undefined
+        }
+      >
+        {pending ? '…' : isReady ? 'Unpublish' : 'Publish'}
       </Button>
     </div>
   )
