@@ -287,6 +287,30 @@ class CrmPipelineService {
     return fallback?.id ?? null
   }
 
+  /** Resolve a stage within a pipeline by name (case-insensitive), else
+   *  the lowest-orderIndex stage. Lets funnel intakes route by stage name
+   *  ("Partial", "New Lead") without hard-coding ids. Returns null only
+   *  when the pipeline has no stages. */
+  async resolveStageId(
+    pipelineId: string,
+    stageName?: string,
+  ): Promise<{ id: string; probability: number | null } | null> {
+    const wanted = stageName?.trim()
+    if (wanted) {
+      const named = await prisma.crmPipelineStage.findFirst({
+        where: { pipelineId, name: { equals: wanted, mode: 'insensitive' } },
+        select: { id: true, probability: true },
+      })
+      if (named) return named
+    }
+    const first = await prisma.crmPipelineStage.findFirst({
+      where: { pipelineId },
+      orderBy: { orderIndex: 'asc' },
+      select: { id: true, probability: true },
+    })
+    return first ?? null
+  }
+
   /** Ordered stages (Kanban columns) for one pipeline. */
   async listStages(pipelineId: string): Promise<PipelineStage[]> {
     const rows = await prisma.crmPipelineStage.findMany({

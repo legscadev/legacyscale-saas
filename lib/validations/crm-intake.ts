@@ -35,13 +35,35 @@ export const leadIntakeSchema = z.object({
     .uuid()
     .optional()
     .or(z.literal('').transform(() => undefined)),
-  /** Write mode. `create` (default) spawns a new opportunity. `append`
-   *  finds the existing contact by email and appends `answers` to their
-   *  most recent opportunity's notes — used for follow-up steps (e.g. an
-   *  Instagram-handle capture on the success screen) so they enrich the
-   *  original deal instead of spawning a duplicate. Falls back to
-   *  `create` when no prior opportunity exists. */
-  mode: z.enum(['create', 'append']).optional().default('create'),
+  /** Write mode.
+   *  - `create` (default) spawns a new opportunity in the target stage.
+   *  - `partial` captures a half-finished application (step 1: name +
+   *    email + phone) into the `Partial` stage so an abandoned lead is
+   *    still saved. No closer notification fires — it lands silently in
+   *    the Partial column.
+   *  - `promote` advances that partial deal into the target stage (New
+   *    Lead) and enriches it with the full answers when the applicant
+   *    finishes. Falls back to `create` when there's no partial deal.
+   *  - `append` finds the existing contact by email and appends
+   *    `answers` to their most recent opportunity's notes — used for the
+   *    Instagram-handle capture on the success screen. Falls back to
+   *    `create` when no prior opportunity exists. */
+  mode: z
+    .enum(['create', 'append', 'partial', 'promote'])
+    .optional()
+    .default('create'),
+  /** Target stage name within the pipeline (case-insensitive). `partial`
+   *  routes to "Partial", `promote`/`create` to "New Lead". Falls back to
+   *  the pipeline's first stage when omitted or unmatched. */
+  stage: shortText(100),
+  /** Existing opportunity id — the precise promote target returned by the
+   *  earlier `partial` write. Falls back to latest-by-email when omitted. */
+  opportunityId: z
+    .string()
+    .trim()
+    .uuid()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
   /** Arbitrary form answers keyed by question. Dumped into the
    *  opportunity's description so the closer sees full context. */
   answers: z.record(z.string(), z.unknown()).optional(),

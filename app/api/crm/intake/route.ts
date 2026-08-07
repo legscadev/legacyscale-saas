@@ -89,6 +89,82 @@ async function appendToLatestOpportunity(
   return { contactId: contact.id, opportunityId: opp.id, appended: true }
 }
 
+/** Find the partial deal to promote: an explicit id first (returned by
+ *  the earlier `partial` write), else the contact's latest deal in this
+ *  pipeline. Scoped by pipeline so a promote never grabs a deal from
+ *  another funnel. Runs inside the tenant scope. */
+async function findPromotable(
+  pipelineId: string,
+  opportunityId: string | undefined,
+  email: string | undefined,
+): Promise<{ id: string; contactId: string | null } | null> {
+  if (opportunityId) {
+    return prisma.crmOpportunity.findFirst({
+      where: { id: opportunityId, pipelineId, deletedAt: null },
+      select: { id: true, contactId: true },
+    })
+  }
+  if (email) {
+    return prisma.crmOpportunity.findFirst({
+      where: {
+        pipelineId,
+        deletedAt: null,
+        contactEmail: { equals: email, mode: 'insensitive' },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, contactId: true },
+    })
+  }
+  return null
+}
+
+/** Promote a partial deal into the target stage (New Lead) and enrich it
+ *  with the completed application's notes — the applicant finished, so the
+ *  same deal advances instead of spawning a duplicate. Returns null when
+ *  there's no partial deal to promote, so the caller falls back to a
+ *  normal create. Returns `pipelineId` so the caller fires the closer
+ *  notification (now that we have full answers). */
+async function promoteOpportunity(args: {
+  pipelineId: string
+  opportunityId?: string
+  email?: string
+  stageName?: string
+  notes: string
+  campaign?: string
+}): Promise<{
+  contactId: string | null
+  opportunityId: string
+  pipelineId: string
+} | null> {
+  const opp = await findPromotable(args.pipelineId, args.opportunityId, args.email)
+  if (!opp) return null
+
+  const stage = await crmPipelineService.resolveStageId(
+    args.pipelineId,
+    args.stageName,
+  )
+  if (!stage) return null
+
+  await prisma.crmOpportunity.update({
+    where: { id: opp.id },
+    data: {
+      stageId: stage.id,
+      probability: stage.probability,
+      notes: args.notes || null,
+    },
+  })
+  if (opp.contactId) {
+    await prisma.crmLead.update({
+      where: { id: opp.contactId },
+      data: {
+        ...(args.campaign ? { campaign: args.campaign } : {}),
+        lastActivityAt: new Date(),
+      },
+    })
+  }
+  return { contactId: opp.contactId, opportunityId: opp.id, pipelineId: args.pipelineId }
+}
+
 export async function POST(req: Request) {
   // ---- Auth ----------------------------------------------------
   const expected = process.env.CRM_INTAKE_TOKEN
@@ -153,6 +229,33 @@ export async function POST(req: Request) {
         if (appended) return appended
       }
 
+      // Route by the funnel's pipeline id when supplied; unknown/omitted
+      // ids fall back to the tenant's default pipeline.
+      const pipelineId = await crmPipelineService.resolvePipelineId(
+        input.pipeline,
+      )
+      if (!pipelineId) {
+        throw new Error(
+          'No pipeline configured — create one at /admin/crm/opportunities/pipelines first',
+        )
+      }
+
+      // Promote mode: the applicant finished the form — advance their
+      // partial deal into the target stage (New Lead) and enrich it with
+      // the full answers. Falls through to a normal create when there's
+      // no partial deal to promote.
+      if (input.mode === 'promote') {
+        const promoted = await promoteOpportunity({
+          pipelineId,
+          opportunityId: input.opportunityId,
+          email: input.email,
+          stageName: input.stage,
+          notes,
+          campaign: input.campaign,
+        })
+        if (promoted) return promoted
+      }
+
       // Dedupe contact by email (falls back to name+company when
       // no email); P0 #3's find-or-create writes back the source
       // + lastActivityAt as the contact's `campaign`.
@@ -165,22 +268,39 @@ export async function POST(req: Request) {
         actorId: null,
       })
 
-      // Route by the funnel's pipeline id when supplied; unknown/omitted
-      // ids fall back to the tenant's default pipeline.
-      const pipelineId = await crmPipelineService.resolvePipelineId(
-        input.pipeline,
-      )
-      if (!pipelineId) {
-        throw new Error(
-          'No pipeline configured — create one at /admin/crm/opportunities/pipelines first',
-        )
+      // Partial reuse: if this contact already has an open deal in the
+      // pipeline (funnel reopened, or continued on another device), reuse
+      // that card instead of spawning a second one. Leave its stage
+      // untouched — it may already be past Partial from a prior
+      // completion, and a re-entry mustn't demote it.
+      if (input.mode === 'partial') {
+        const existing = await prisma.crmOpportunity.findFirst({
+          where: { pipelineId, contactId, deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        })
+        if (existing) {
+          if (input.campaign) {
+            await prisma.crmLead.update({
+              where: { id: contactId },
+              data: { campaign: input.campaign, lastActivityAt: new Date() },
+            })
+          }
+          return {
+            contactId,
+            opportunityId: existing.id,
+            partial: true as const,
+          }
+        }
       }
-      const firstStage = await prisma.crmPipelineStage.findFirst({
-        where: { pipelineId },
-        orderBy: { orderIndex: 'asc' },
-        select: { id: true, probability: true },
-      })
-      if (!firstStage) {
+
+      // Route to the named stage ("Partial" / "New Lead"); unmatched or
+      // omitted names fall back to the pipeline's first stage.
+      const stage = await crmPipelineService.resolveStageId(
+        pipelineId,
+        input.stage,
+      )
+      if (!stage) {
         throw new Error('Pipeline has no stages')
       }
 
@@ -191,13 +311,13 @@ export async function POST(req: Request) {
           // deal lands in, so it needn't clutter the name.
           name: input.name.slice(0, 200),
           pipelineId,
-          stageId: firstStage.id,
+          stageId: stage.id,
           contactId,
           contactName: input.name,
           contactEmail: input.email ?? null,
           contactPhone: input.phone ?? null,
           companyName: input.companyName ?? null,
-          probability: firstStage.probability,
+          probability: stage.probability,
           source,
           notes: notes || null,
           companyId,
@@ -212,6 +332,13 @@ export async function POST(req: Request) {
           where: { id: contactId },
           data: { campaign: input.campaign, lastActivityAt: new Date() },
         })
+      }
+
+      // Partial captures land silently in the Partial column — omit the
+      // `pipelineId` key so the closer notification below doesn't fire
+      // until the application is completed (promote/create).
+      if (input.mode === 'partial') {
+        return { contactId, opportunityId: opportunity.id, partial: true as const }
       }
 
       return { contactId, opportunityId: opportunity.id, pipelineId }
