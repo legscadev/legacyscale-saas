@@ -12,7 +12,7 @@ import {
 import { DEFAULT_BRANDING } from '@/lib/branding/defaults'
 import type { Branding } from '@/lib/branding/schema'
 
-import { BrandFooter, BrandHeader, emailStyles } from './_brand'
+import { BrandHeader, emailStyles } from './_brand'
 
 interface LeadConfirmationEmailProps {
   leadName: string
@@ -51,8 +51,6 @@ export function LeadConfirmationEmail({
               The {productName} Team
             </Text>
           </Section>
-
-          <BrandFooter branding={branding} styles={s} />
         </Container>
       </Body>
     </Html>
