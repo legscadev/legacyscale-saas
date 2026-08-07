@@ -453,6 +453,26 @@ export function EditOpportunityDialog({
                       created on save.
                     </p>
                   ) : null}
+                  {/* Read-only phone readout so a closer can see + call the
+                      lead. The number lives on the contact record; edit it
+                      via the contact, not the deal. */}
+                  {(() => {
+                    const phone =
+                      form.contact?.phone ?? form.contactDraft?.phone ?? null
+                    return phone ? (
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs font-medium">
+                          Phone number
+                        </Label>
+                        <a
+                          href={`tel:${phone}`}
+                          className="w-fit text-sm text-primary hover:underline"
+                        >
+                          {phone}
+                        </a>
+                      </div>
+                    ) : null
+                  })()}
                 </section>
 
                 <section className="space-y-3">
