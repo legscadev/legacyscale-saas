@@ -11,6 +11,8 @@ export interface ProvisionMemberInput {
   name: string
   email: string
   role: UserRole
+  /** Optional contact mobile (CRM lead-notification SMS). */
+  phone?: string
   /**
    * Optional category tier. Only meaningful for the MEMBER role; the
    * caller (or this helper) normalises it to null for ADMIN/TEAM.
@@ -154,7 +156,12 @@ export async function provisionMemberWithInvite(
     suppressWelcomeEmail: true,
   })
 
-  if (user.role !== input.role || user.membershipId !== effectiveMembershipId) {
+  const phone = input.phone?.trim()
+  if (
+    user.role !== input.role ||
+    user.membershipId !== effectiveMembershipId ||
+    !!phone
+  ) {
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -162,6 +169,7 @@ export async function provisionMemberWithInvite(
         ...(user.membershipId !== effectiveMembershipId
           ? { membershipId: effectiveMembershipId }
           : {}),
+        ...(phone ? { phone } : {}),
       },
     })
     if (user.role !== input.role) {

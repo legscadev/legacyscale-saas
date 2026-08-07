@@ -14,9 +14,10 @@
 // CRM_INTAKE_COMPANY_ID env var if you point the endpoint at a
 // non-primary tenant.
 
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
+import { notifyLead } from '@/lib/services/lead-notify'
 import { crmLeadService } from '@/lib/services/crm-lead-service'
 import { crmPipelineService } from '@/lib/services/crm-pipeline-service'
 import { PLATFORM_SEED_COMPANY_ID } from '@/lib/tenancy/seed'
@@ -213,8 +214,28 @@ export async function POST(req: Request) {
         })
       }
 
-      return { contactId, opportunityId: opportunity.id }
+      return { contactId, opportunityId: opportunity.id, pipelineId }
     })
+
+    // Fire per-funnel lead notifications after the response — never for the
+    // append path (that enriched an existing deal, not a new lead).
+    if ('pipelineId' in result && result.pipelineId) {
+      const pipelineId = result.pipelineId
+      const opportunityId = result.opportunityId
+      after(() =>
+        runAsTenant(companyId, () =>
+          notifyLead({
+            pipelineId,
+            opportunityId,
+            name: input.name,
+            email: input.email,
+            phone: input.phone,
+            source,
+            answers: input.answers,
+          }),
+        ),
+      )
+    }
 
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {

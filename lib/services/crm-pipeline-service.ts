@@ -185,6 +185,8 @@ export interface PipelineListRow extends PipelineSummary {
   stageCount: number
   dealCount: number
   updatedAt: Date
+  notifyEmail: string | null
+  notifyPhone: string | null
 }
 
 class CrmPipelineService {
@@ -214,6 +216,8 @@ class CrmPipelineService {
         slug: true,
         orderIndex: true,
         updatedAt: true,
+        notifyEmail: true,
+        notifyPhone: true,
         _count: {
           select: {
             stages: true,
@@ -228,9 +232,27 @@ class CrmPipelineService {
       slug: r.slug,
       orderIndex: r.orderIndex,
       updatedAt: r.updatedAt,
+      notifyEmail: r.notifyEmail,
+      notifyPhone: r.notifyPhone,
       stageCount: r._count.stages,
       dealCount: r._count.opportunities,
     }))
+  }
+
+  /** Update just the per-pipeline notification recipients (email/phone).
+   *  Empty values clear the field. */
+  async updateNotifications(
+    pipelineId: string,
+    data: { notifyEmail?: string; notifyPhone?: string },
+  ): Promise<PipelineSummary> {
+    return prisma.crmPipeline.update({
+      where: { id: pipelineId },
+      data: {
+        notifyEmail: data.notifyEmail ?? null,
+        notifyPhone: data.notifyPhone ?? null,
+      },
+      select: { id: true, name: true, slug: true, orderIndex: true },
+    })
   }
 
   /** Rewrite orderIndex for every pipeline in the tenant from the given
@@ -297,6 +319,8 @@ class CrmPipelineService {
   async createPipeline(input: {
     name: string
     stageNames: string[]
+    notifyEmail?: string
+    notifyPhone?: string
   }): Promise<PipelineSummary> {
     const companyId = await requireCompanyId()
     const names = input.stageNames
@@ -318,6 +342,8 @@ class CrmPipelineService {
         name: input.name.trim(),
         slug,
         orderIndex: (lastOrder?.orderIndex ?? -1) + 1,
+        notifyEmail: input.notifyEmail ?? null,
+        notifyPhone: input.notifyPhone ?? null,
         companyId,
         stages: {
           create: names.map((name, i) => {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, User, UserPlus2 } from 'lucide-react'
+import { Mail, Phone, User, UserPlus2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -32,7 +32,7 @@ import type { MembershipOption } from './members-shell'
 
 type UserRole = 'ADMIN' | 'TEAM' | 'MEMBER'
 type FieldErrors = Partial<
-  Record<'name' | 'email' | 'role' | 'membershipId', string[]>
+  Record<'name' | 'email' | 'phone' | 'role' | 'membershipId', string[]>
 >
 
 /** Sentinel for "no membership" — Radix Select disallows empty values. */
@@ -93,6 +93,7 @@ export function MemberCreateDialog({
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [selectedRoleId, setSelectedRoleId] = useState<string>('')
   const [availableRoles, setAvailableRoles] = useState<RoleSummary[]>([])
   const [rolesLoading, setRolesLoading] = useState(false)
@@ -120,6 +121,7 @@ export function MemberCreateDialog({
   const reset = () => {
     setName('')
     setEmail('')
+    setPhone('')
     setSelectedRoleId(availableRoles[0]?.id ?? '')
     setMembershipId(null)
     setError(null)
@@ -156,6 +158,7 @@ export function MemberCreateDialog({
     const parsed = adminCreateMemberSchema.safeParse({
       name,
       email,
+      phone,
       role: derivedTier,
       membershipId: payloadMembershipId,
     })
@@ -166,6 +169,7 @@ export function MemberCreateDialog({
         if (
           key === 'name' ||
           key === 'email' ||
+          key === 'phone' ||
           key === 'role' ||
           key === 'membershipId'
         ) {
@@ -284,6 +288,31 @@ export function MemberCreateDialog({
             {fieldErrors.email?.[0] && (
               <p className="text-xs text-destructive" role="alert">
                 {fieldErrors.email[0]}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="member-phone">
+              Phone <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <div className="relative">
+              <Phone className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="member-phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 555 000 0000"
+                autoComplete="tel"
+                className="pl-8"
+                disabled={submitting}
+                aria-invalid={!!fieldErrors.phone}
+              />
+            </div>
+            {fieldErrors.phone?.[0] && (
+              <p className="text-xs text-destructive" role="alert">
+                {fieldErrors.phone[0]}
               </p>
             )}
           </div>

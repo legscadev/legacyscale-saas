@@ -185,6 +185,9 @@ model User {
   authId                  String?   @unique @map("auth_id") // Supabase auth.users.id
   email                   String    @unique
   name                    String?
+  /// Optional contact mobile — used for CRM lead-notification SMS when
+  /// this user is a pipeline's notification recipient.
+  phone                   String?
   avatarUrl               String?   @map("avatar_url")
   /// Legacy global role. Being phased out in favour of
   /// CompanyMembership.role once every code path reads the active
@@ -2388,6 +2391,10 @@ model CrmPipeline {
   slug       String
   isDefault  Boolean  @default(false) @map("is_default")
   orderIndex Int      @default(0) @map("order_index")
+  /// Where a "new lead" notification goes when the intake drops a deal
+  /// into this pipeline. Email is used today; phone is reserved for SMS.
+  notifyEmail String? @map("notify_email")
+  notifyPhone String? @map("notify_phone")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 

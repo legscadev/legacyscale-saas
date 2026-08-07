@@ -48,6 +48,7 @@ interface MemberEditDialogProps {
     id: string
     name: string | null
     email: string
+    phone: string | null
     role: UserRole
     membershipId: string | null
   }
@@ -93,6 +94,7 @@ export function MemberEditDialog({
     !allowedRoles || allowedRoles.filter((r) => r !== 'MEMBER').length > 0
 
   const [name, setName] = useState(member.name ?? '')
+  const [phone, setPhone] = useState(member.phone ?? '')
   const [role, setRole] = useState<UserRole>(member.role)
   const [membershipId, setMembershipId] = useState<string | null>(
     member.membershipId,
@@ -111,6 +113,7 @@ export function MemberEditDialog({
   useEffect(() => {
     if (open) {
       setName(member.name ?? '')
+      setPhone(member.phone ?? '')
       setRole(member.role)
       setMembershipId(member.membershipId)
       setShowPasswordFields(false)
@@ -119,7 +122,14 @@ export function MemberEditDialog({
       setError(null)
       setFieldErrors({})
     }
-  }, [open, member.id, member.name, member.role, member.membershipId])
+  }, [
+    open,
+    member.id,
+    member.name,
+    member.phone,
+    member.role,
+    member.membershipId,
+  ])
 
   // Fetch pickable custom roles + the member's current assignment
   // when the dialog opens. Only when we're in a lens that shows the
@@ -201,11 +211,13 @@ export function MemberEditDialog({
     // Only send fields that actually changed.
     const body: {
       name?: string
+      phone?: string
       role?: UserRole
       password?: string
       membershipId?: string | null
     } = {}
     if (parsedName.data !== member.name) body.name = parsedName.data
+    if (phone.trim() !== (member.phone ?? '')) body.phone = phone.trim()
     if (canChangeRole && derivedRole !== member.role) body.role = derivedRole
     if (parsedPassword !== undefined) body.password = parsedPassword
     if (membershipId !== member.membershipId) body.membershipId = membershipId
@@ -323,6 +335,21 @@ export function MemberEditDialog({
             <p className="text-xs text-muted-foreground">
               Email can&apos;t be changed here.
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-phone">
+              Phone <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="edit-phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 555 000 0000"
+              autoComplete="tel"
+              disabled={submitting}
+            />
           </div>
 
           {showRoleField ? (

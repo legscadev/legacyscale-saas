@@ -3,9 +3,12 @@ import { Resend } from 'resend'
 import { AnnouncementEmail } from '@/emails/announcement'
 import { CompanyOwnerInviteEmail } from '@/emails/company-owner-invite'
 import { CourseCompleteEmail } from '@/emails/course-complete'
+import { LeadConfirmationEmail } from '@/emails/lead-confirmation'
+import { NewLeadEmail, type NewLeadAnswer } from '@/emails/new-lead'
 import { OwnerAddedEmail } from '@/emails/owner-added'
 import { PasswordResetEmail } from '@/emails/password-reset'
 import { WelcomeEmail } from '@/emails/welcome'
+import { DEFAULT_BRANDING } from '@/lib/branding/defaults'
 import { getBranding } from '@/lib/branding/get-branding'
 
 // Lazy singleton — only throws on first use, not at import time, so
@@ -235,5 +238,59 @@ export async function sendCourseCompleteEmail(
     fromName: branding.fromName,
     subject: `Congrats — you finished ${courseTitle}`,
     react: CourseCompleteEmail({ name, courseTitle, completeUrl, branding }),
+  })
+}
+
+interface NewLeadEmailOptions {
+  /** Funnel owner being notified. */
+  recipientName: string
+  leadName: string
+  leadEmail?: string | null
+  leadPhone?: string | null
+  source?: string | null
+  answers?: NewLeadAnswer[]
+  /** Deep link into the CRM. */
+  ctaUrl: string
+}
+
+/** Confirmation email to the LEAD who just applied via a funnel. Sent
+ *  from the funnel's program brand (not Kondense) — uses default styling
+ *  with the product name + legal entity overridden. Public intake has no
+ *  session, so no getBranding(). */
+export async function sendLeadConfirmationEmail(
+  to: string,
+  options: { leadName: string; productName?: string },
+) {
+  const productName = options.productName ?? 'AI Agents Club'
+  const branding = {
+    ...DEFAULT_BRANDING,
+    productName,
+    fromName: productName,
+    legalCompany: 'Legacy Scale LLC',
+  }
+  return sendEmail({
+    to,
+    purpose: 'notifications',
+    fromName: productName,
+    subject: `We got your application — ${productName}`,
+    react: LeadConfirmationEmail({ leadName: options.leadName, productName, branding }),
+  })
+}
+
+/** Notify a funnel owner that a new lead landed in their pipeline.
+ *  Fired from the public intake (no auth session), so it uses default
+ *  branding rather than getBranding() — the latter reads request cookies
+ *  that don't exist here, which would just error + fall back anyway. */
+export async function sendNewLeadEmail(
+  to: string | string[],
+  options: NewLeadEmailOptions,
+) {
+  const branding = DEFAULT_BRANDING
+  return sendEmail({
+    to,
+    purpose: 'notifications',
+    fromName: branding.fromName,
+    subject: `New lead: ${options.leadName}`,
+    react: NewLeadEmail({ ...options, branding }),
   })
 }

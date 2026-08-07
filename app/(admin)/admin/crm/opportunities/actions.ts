@@ -77,6 +77,7 @@ import {
   opportunityFilterSchema,
   renameOpportunityViewSchema,
   renamePipelineSchema,
+  updatePipelineNotificationsSchema,
   reorderPipelinesSchema,
   reorderStagesSchema,
   toggleOpportunityTaskSchema,
@@ -412,6 +413,59 @@ export async function renamePipelineAction(
     return { ok: true, data }
   } catch (err) {
     return toMutationErr(err, 'Could not rename pipeline')
+  }
+}
+
+export async function updatePipelineNotificationsAction(
+  input: Record<string, unknown>,
+): Promise<MutationResult<PipelineSummary>> {
+  await requireTeamModuleAccess('crm-pipeline')
+  const parsed = updatePipelineNotificationsSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error.issues) }
+  }
+  try {
+    const data = await crmPipelineService.updateNotifications(
+      parsed.data.pipelineId,
+      {
+        notifyEmail: parsed.data.notifyEmail,
+        notifyPhone: parsed.data.notifyPhone,
+      },
+    )
+    revalidateAll()
+    return { ok: true, data }
+  } catch (err) {
+    return toMutationErr(err, 'Could not update notifications')
+  }
+}
+
+export interface CrmNotifyUser {
+  id: string
+  name: string | null
+  email: string
+  phone: string | null
+}
+
+/** Team users available as lead-notification recipients — powers the
+ *  email picker (search a teammate) while still allowing a raw email. */
+export async function listCrmNotifyUsersAction(): Promise<
+  MutationResult<CrmNotifyUser[]>
+> {
+  await requireTeamModuleAccess('crm-pipeline')
+  try {
+    const tenantScope = await memberTenantScope()
+    const users = await listAssignableSalesUsers(tenantScope)
+    return {
+      ok: true,
+      data: users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+      })),
+    }
+  } catch (err) {
+    return toMutationErr(err, 'Could not load users')
   }
 }
 

@@ -26,13 +26,14 @@ export async function POST(request: NextRequest) {
   const validation = await validateBody(request, adminCreateMemberSchema)
   if (validation.error) return validation.error
 
-  const { name, email, role, membershipId } = validation.data
+  const { name, email, role, phone, membershipId } = validation.data
 
   try {
     const member = await provisionMemberWithInvite({
       name,
       email,
       role,
+      phone,
       membershipId,
     })
     await writeAuditLog({

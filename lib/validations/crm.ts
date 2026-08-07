@@ -143,14 +143,42 @@ export type MoveOpportunityInput = z.input<typeof moveOpportunitySchema>
 // PIPELINE CRUD
 // ============================================
 
+const optionalNotifyEmail = z
+  .string()
+  .trim()
+  .max(320)
+  .email('Invalid email')
+  .optional()
+  .or(z.literal('').transform(() => undefined))
+
+const optionalNotifyPhone = z
+  .string()
+  .trim()
+  .max(40)
+  .optional()
+  .or(z.literal('').transform(() => undefined))
+
 export const createPipelineSchema = z.object({
   name: z.string().trim().min(1, 'Pipeline name is required').max(100),
   stageNames: z
     .array(z.string().trim().min(1).max(60))
     .min(1, 'Add at least one stage')
     .max(30, 'Too many stages'),
+  /** Where new-lead notifications go for this pipeline. */
+  notifyEmail: optionalNotifyEmail,
+  notifyPhone: optionalNotifyPhone,
 })
 export type CreatePipelineInput = z.input<typeof createPipelineSchema>
+
+/** Edit just the per-pipeline notification recipients. */
+export const updatePipelineNotificationsSchema = z.object({
+  pipelineId: z.string().uuid(),
+  notifyEmail: optionalNotifyEmail,
+  notifyPhone: optionalNotifyPhone,
+})
+export type UpdatePipelineNotificationsInput = z.input<
+  typeof updatePipelineNotificationsSchema
+>
 
 export const renamePipelineSchema = z.object({
   pipelineId: z.string().uuid(),

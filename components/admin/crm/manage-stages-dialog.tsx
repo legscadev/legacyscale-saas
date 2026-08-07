@@ -49,12 +49,17 @@ import {
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
+import { NotifyEmailInput } from './notify-email-input'
+
+import { Label } from '@/components/ui/label'
+
 import {
   addStageAction,
   deleteStageAction,
   fetchPipelineStagesAction,
   renamePipelineAction,
   reorderStagesAction,
+  updatePipelineNotificationsAction,
   updateStageAction,
   type StageWithCount,
 } from '@/app/(admin)/admin/crm/opportunities/actions'
@@ -63,6 +68,8 @@ interface ManageStagesDialogProps {
   open: boolean
   pipelineId: string | null
   pipelineName: string
+  initialNotifyEmail?: string | null
+  initialNotifyPhone?: string | null
   onOpenChange: (open: boolean) => void
   onChanged: () => void
 }
@@ -71,6 +78,8 @@ export function ManageStagesDialog({
   open,
   pipelineId,
   pipelineName,
+  initialNotifyEmail,
+  initialNotifyPhone,
   onOpenChange,
   onChanged,
 }: ManageStagesDialogProps) {
@@ -85,6 +94,12 @@ export function ManageStagesDialog({
   const [nameDraft, setNameDraft] = useState(pipelineName)
   const [displayName, setDisplayName] = useState(pipelineName)
 
+  // Lead-notification recipients — persist on blur.
+  const [notifyEmail, setNotifyEmail] = useState(initialNotifyEmail ?? '')
+  const [notifyPhone, setNotifyPhone] = useState(initialNotifyPhone ?? '')
+  const [savedEmail, setSavedEmail] = useState(initialNotifyEmail ?? '')
+  const [savedPhone, setSavedPhone] = useState(initialNotifyPhone ?? '')
+
   const loading = open && !!pipelineId && loadedFor !== pipelineId
 
   useEffect(() => {
@@ -94,6 +109,10 @@ export function ManageStagesDialog({
     setNameDraft(pipelineName)
     setRenaming(false)
     setQuery('')
+    setNotifyEmail(initialNotifyEmail ?? '')
+    setNotifyPhone(initialNotifyPhone ?? '')
+    setSavedEmail(initialNotifyEmail ?? '')
+    setSavedPhone(initialNotifyPhone ?? '')
     fetchPipelineStagesAction(pipelineId).then((res) => {
       if (cancelled) return
       if (!res.ok) {
@@ -106,7 +125,7 @@ export function ManageStagesDialog({
     return () => {
       cancelled = true
     }
-  }, [open, pipelineId, pipelineName])
+  }, [open, pipelineId, pipelineName, initialNotifyEmail, initialNotifyPhone])
 
   function patchLocal(id: string, patch: Partial<StageWithCount>) {
     setStages((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)))
@@ -224,6 +243,29 @@ export function ManageStagesDialog({
     })
   }
 
+  /** Persist notification recipients on blur — only when changed. */
+  function saveNotifications() {
+    if (!pipelineId) return
+    const email = notifyEmail.trim()
+    const phone = notifyPhone.trim()
+    if (email === savedEmail && phone === savedPhone) return
+    startOp(async () => {
+      const res = await updatePipelineNotificationsAction({
+        pipelineId,
+        notifyEmail: email,
+        notifyPhone: phone,
+      })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not save notifications')
+        return
+      }
+      setSavedEmail(email)
+      setSavedPhone(phone)
+      toast.success('Notifications saved')
+      onChanged()
+    })
+  }
+
   const filteredStages = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return stages
@@ -232,8 +274,8 @@ export function ManageStagesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b p-4">
           <div className="flex items-center gap-2">
             {renaming ? (
               <div className="flex flex-1 items-center gap-1">
@@ -301,6 +343,7 @@ export function ManageStagesDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {loading ? (
           <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
             <Loader2 className="mr-2 size-4 animate-spin" />
@@ -308,6 +351,29 @@ export function ManageStagesDialog({
           </div>
         ) : (
           <>
+            {/* Owner alert (SMS) */}
+            <section className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <div>
+                <h3 className="text-sm font-semibold">Owner alert (SMS)</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  Text this teammate when a new lead lands in this pipeline.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ms-notify-phone" className="text-xs font-medium">
+                  Owner mobile
+                </Label>
+                <NotifyEmailInput
+                  id="ms-notify-phone"
+                  pickFills="phone"
+                  value={notifyPhone}
+                  onChange={setNotifyPhone}
+                  onBlur={saveNotifications}
+                  placeholder="Search a teammate or type a mobile number"
+                />
+              </div>
+            </section>
+
             {/* Search + Add stage row */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -348,7 +414,7 @@ export function ManageStagesDialog({
               </div>
             </div>
 
-            <div className="max-h-[55vh] space-y-2 overflow-y-auto py-2">
+            <div className="space-y-2 py-2">
               {/* Header row */}
               <div className="grid grid-cols-[auto_1fr_5rem_auto_3rem_auto] items-center gap-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 <span className="w-6" aria-hidden />
@@ -426,8 +492,9 @@ export function ManageStagesDialog({
             </div>
           </>
         )}
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="border-t p-4">
           <Button type="button" onClick={() => onOpenChange(false)}>
             Done
           </Button>

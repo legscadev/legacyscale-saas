@@ -325,6 +325,7 @@ export function getMemberColumns(
             memberId={row.original.id}
             memberName={row.original.name ?? row.original.email}
             memberEmail={row.original.email}
+            memberPhone={row.original.phone}
             memberRole={row.original.role}
             memberMembershipId={row.original.membershipId}
             memberships={memberships}
