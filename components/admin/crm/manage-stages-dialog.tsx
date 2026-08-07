@@ -275,7 +275,7 @@ export function ManageStagesDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b p-4">
+        <DialogHeader className="border-b p-4 pr-14">
           <div className="flex items-center gap-2">
             {renaming ? (
               <div className="flex flex-1 items-center gap-1">
