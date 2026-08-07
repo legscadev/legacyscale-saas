@@ -2475,6 +2475,11 @@ model CrmOpportunity {
   /// string rather than the CrmLeadSource enum so imported deals can
   /// carry whatever the source system labelled them.
   source     String?
+  /// Funnel qualification, captured once at application completion:
+  /// true = qualified (700+ credit AND ready to start), false =
+  /// unqualified, null = not applicable (partial / manual / legacy).
+  /// Durable so the qualified badge follows the card across stage moves.
+  qualified  Boolean?
   orderIndex Int                  @default(0) @map("order_index")
 
   wonAt      DateTime? @map("won_at")

@@ -121,6 +121,10 @@ export interface OpportunityListItem {
   /** Only tasks still open — the card badge is about outstanding work,
    *  not completed history. */
   openTaskCount: number
+  /** Funnel qualification: true = qualified, false = unqualified, null =
+   *  not applicable (partial / manual / legacy). Drives the card badge
+   *  and stays put as the deal moves across stages. */
+  qualified: boolean | null
 }
 
 const CLOSER_SELECT = {
@@ -152,6 +156,7 @@ interface ToListItemRow {
   contact: OpportunityContactRef | null
   notes: string | null
   source: string | null
+  qualified?: boolean | null
   noteCount?: number
   openTaskCount?: number
 }
@@ -178,6 +183,7 @@ function toListItem(row: ToListItemRow): OpportunityListItem {
     assignedCloser: row.assignedCloser,
     hasNotes: row.notes !== null && row.notes.trim().length > 0,
     source: row.source,
+    qualified: row.qualified ?? null,
     noteCount: row.noteCount ?? 0,
     openTaskCount: row.openTaskCount ?? 0,
   }
@@ -232,6 +238,7 @@ class CrmOpportunityService {
         contact: CONTACT_SELECT,
         notes: true,
         source: true,
+        qualified: true,
         _count: {
           select: {
             noteEntries: true,

@@ -64,6 +64,10 @@ export const leadIntakeSchema = z.object({
     .uuid()
     .optional()
     .or(z.literal('').transform(() => undefined)),
+  /** Funnel qualification decided at completion (700+ credit AND ready
+   *  to start). Stored durably on the deal so the badge follows the card
+   *  across stages. Sent on the `promote` write; omitted for partials. */
+  qualified: z.boolean().optional(),
   /** Arbitrary form answers keyed by question. Dumped into the
    *  opportunity's description so the closer sees full context. */
   answers: z.record(z.string(), z.unknown()).optional(),
