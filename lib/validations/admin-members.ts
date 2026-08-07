@@ -3,6 +3,9 @@ import { z } from 'zod'
 import { emailSchema, nameSchema, passwordSchema } from './common'
 import { userRoleSchema } from './user'
 
+/** Optional contact mobile. Empty string is treated as "no phone". */
+const phoneSchema = z.string().trim().max(40).optional()
+
 /**
  * Schema for the admin "create member" form. Password is server-
  * generated (not user input), so it's not part of the request body.
@@ -11,6 +14,8 @@ export const adminCreateMemberSchema = z.object({
   name: nameSchema,
   email: emailSchema,
   role: userRoleSchema.default('MEMBER'),
+  /** Optional contact mobile (used for CRM lead-notification SMS). */
+  phone: phoneSchema,
   /** Optional category tier — only meaningful for MEMBER role. The API
    *  ignores it for ADMIN/TEAM (they bypass the category gate). */
   membershipId: z.string().uuid().nullable().optional(),
@@ -27,6 +32,8 @@ export const adminUpdateMemberSchema = z
   .object({
     name: nameSchema.optional(),
     role: userRoleSchema.optional(),
+    /** Contact mobile. Empty string clears it. */
+    phone: phoneSchema,
     isActive: z.boolean().optional(),
     /** New password — bypasses the user's own reset flow. Min 4 chars. */
     password: passwordSchema.optional(),

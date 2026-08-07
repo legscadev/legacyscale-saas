@@ -21,6 +21,7 @@ export interface CrmAssignableUser {
   id: string
   name: string | null
   email: string
+  phone: string | null
   avatarUrl: string | null
 }
 
@@ -62,7 +63,7 @@ export async function listAssignableSalesUsers(
 
   const scoped = await prisma.user.findMany({
     where: { ...baseWhere, ...salesRoleFilter },
-    select: { id: true, name: true, email: true, avatarUrl: true },
+    select: { id: true, name: true, email: true, phone: true, avatarUrl: true },
     orderBy: [{ name: 'asc' }, { email: 'asc' }],
   })
 
@@ -75,7 +76,7 @@ export async function listAssignableSalesUsers(
 
   return prisma.user.findMany({
     where: baseWhere,
-    select: { id: true, name: true, email: true, avatarUrl: true },
+    select: { id: true, name: true, email: true, phone: true, avatarUrl: true },
     orderBy: [{ name: 'asc' }, { email: 'asc' }],
   })
 }

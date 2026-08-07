@@ -28,7 +28,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  BarChart3,
+  Bell,
   Eye,
   EyeOff,
   GripVertical,
@@ -51,6 +51,8 @@ import { cn } from '@/lib/utils'
 
 import { createPipelineAction } from '@/app/(admin)/admin/crm/opportunities/actions'
 import type { PipelineSummary } from '@/lib/services/crm-pipeline-service'
+
+import { NotifyEmailInput } from './notify-email-input'
 
 const DEFAULT_STAGE_NAMES = [
   'New Lead',
@@ -92,6 +94,8 @@ export function CreatePipelineDialog({
 }: CreatePipelineDialogProps) {
   const [pending, startTransition] = useTransition()
   const [name, setName] = useState('')
+  const [notifyEmail, setNotifyEmail] = useState('')
+  const [notifyPhone, setNotifyPhone] = useState('')
   const [displayMode, setDisplayMode] = useState<DisplayMode>('default')
   const [stages, setStages] = useState<StageDraft[]>(() =>
     DEFAULT_STAGE_NAMES.map((n) => makeStage(n)),
@@ -122,6 +126,8 @@ export function CreatePipelineDialog({
 
   function reset() {
     setName('')
+    setNotifyEmail('')
+    setNotifyPhone('')
     setDisplayMode('default')
     setStages(DEFAULT_STAGE_NAMES.map((n) => makeStage(n)))
     setTouched(false)
@@ -167,7 +173,12 @@ export function CreatePipelineDialog({
     }
 
     startTransition(async () => {
-      const res = await createPipelineAction({ name: name.trim(), stageNames })
+      const res = await createPipelineAction({
+        name: name.trim(),
+        stageNames,
+        notifyEmail: notifyEmail.trim() || undefined,
+        notifyPhone: notifyPhone.trim() || undefined,
+      })
       if (!res.ok) {
         toast.error(res.error ?? 'Could not create pipeline')
         return
@@ -180,16 +191,16 @@ export function CreatePipelineDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <DialogHeader className="border-b p-4">
             <DialogTitle>Create pipeline</DialogTitle>
             <DialogDescription className="sr-only">
               Create a new pipeline with its own stages.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-4 space-y-5">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
             {/* Pipeline name */}
             <div className="space-y-1.5">
               <Label
@@ -217,6 +228,32 @@ export function CreatePipelineDialog({
                 </p>
               ) : null}
             </div>
+
+            {/* Owner alert (SMS) */}
+            <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
+              <div className="flex items-center gap-2">
+                <Bell className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Owner alert (SMS)</h3>
+              </div>
+              <p className="-mt-2 text-[11px] text-muted-foreground">
+                Text this teammate the moment a new lead lands here. Optional.
+              </p>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="pipeline-notify-phone"
+                  className="text-xs font-medium"
+                >
+                  Owner mobile
+                </Label>
+                <NotifyEmailInput
+                  id="pipeline-notify-phone"
+                  pickFills="phone"
+                  value={notifyPhone}
+                  onChange={setNotifyPhone}
+                  placeholder="Search a teammate or type a mobile number"
+                />
+              </div>
+            </section>
 
             {/* Display-mode picker */}
             <section className="space-y-2">
@@ -300,7 +337,7 @@ export function CreatePipelineDialog({
                 <span className="w-8" aria-hidden />
               </div>
 
-              <div className="max-h-[40vh] space-y-1.5 overflow-y-auto pr-1">
+              <div className="space-y-1.5">
                 {stages.length === 0 ? (
                   <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                     No stages yet — click “Add stage” to start.
@@ -338,7 +375,7 @@ export function CreatePipelineDialog({
             </section>
           </div>
 
-          <div className="mt-6 flex justify-end gap-2 border-t pt-4">
+          <div className="flex justify-end gap-2 border-t p-4">
             <Button
               type="button"
               variant="outline"
@@ -450,40 +487,22 @@ function StageRow({
           isLost && 'border-rose-300 focus-visible:border-rose-400',
         )}
       />
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center justify-end">
         <Button
           type="button"
           variant="ghost"
           size="icon"
           onClick={onToggleReports}
-          aria-label={
-            showInReports
-              ? 'Hide from reports'
-              : 'Show in reports'
-          }
+          aria-pressed={showInReports}
+          aria-label={showInReports ? 'Shown in reports' : 'Hidden from reports'}
           title={
             showInReports
-              ? 'Included in reports — click to exclude'
-              : 'Excluded from reports — click to include'
+              ? 'Shown in reports — click to hide'
+              : 'Hidden from reports — click to show'
           }
           className={cn(
             'size-8',
-            showInReports ? 'text-foreground' : 'text-muted-foreground',
-          )}
-        >
-          <BarChart3 className="size-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onToggleReports}
-          aria-label={
-            showInReports ? 'Hide from reports' : 'Show in reports'
-          }
-          className={cn(
-            'size-8',
-            showInReports ? 'text-foreground' : 'text-muted-foreground',
+            showInReports ? 'text-primary' : 'text-muted-foreground',
           )}
         >
           {showInReports ? (

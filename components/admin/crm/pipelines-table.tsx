@@ -293,6 +293,7 @@ export function PipelinesTable({
       ) : (
         <div className="rounded-xl border bg-card">
           <DndContext
+            id="pipelines-reorder"
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
@@ -350,6 +351,8 @@ export function PipelinesTable({
         open={manageStagesFor !== null}
         pipelineId={manageStagesFor?.id ?? null}
         pipelineName={manageStagesFor?.name ?? 'Pipeline'}
+        initialNotifyEmail={manageStagesFor?.notifyEmail ?? null}
+        initialNotifyPhone={manageStagesFor?.notifyPhone ?? null}
         onOpenChange={(open) => !open && setManageStagesFor(null)}
         onChanged={() => router.refresh()}
       />

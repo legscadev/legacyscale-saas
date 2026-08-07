@@ -90,6 +90,7 @@ async function listMembers(options: ListMembersOptions) {
         id: true,
         email: true,
         name: true,
+        phone: true,
         avatarUrl: true,
         role: true,
         isActive: true,

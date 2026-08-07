@@ -41,6 +41,7 @@ interface MemberActionsMenuProps {
   memberId: string
   memberName: string
   memberEmail: string
+  memberPhone: string | null
   memberRole: 'ADMIN' | 'TEAM' | 'MEMBER'
   memberMembershipId: string | null
   memberships: MembershipOption[]
@@ -57,6 +58,7 @@ export function MemberActionsMenu({
   memberId,
   memberName,
   memberEmail,
+  memberPhone,
   memberRole,
   memberMembershipId,
   memberships,
@@ -327,6 +329,7 @@ export function MemberActionsMenu({
           id: memberId,
           name: memberName,
           email: memberEmail,
+          phone: memberPhone,
           role: memberRole,
           membershipId: memberMembershipId,
         }}
