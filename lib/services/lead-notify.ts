@@ -49,12 +49,6 @@ function ownerAlertBody(input: NotifyLeadInput): string {
   return `${head}${extra ? ` · ${extra}` : ''}. Reach out fast.`
 }
 
-/** True when the lead ticked the SMS-consent box on the funnel. */
-function hasSmsConsent(answers: Record<string, unknown> | undefined): boolean {
-  const v = answers?.sms_consent
-  return v === true || v === 'true'
-}
-
 export async function notifyLead(input: NotifyLeadInput): Promise<void> {
   // 1) Lead confirmation — email.
   if (input.email) {
@@ -68,8 +62,10 @@ export async function notifyLead(input: NotifyLeadInput): Promise<void> {
     }
   }
 
-  // 2) Lead confirmation — SMS (only with consent; no-ops until Twilio).
-  if (input.phone && hasSmsConsent(input.answers)) {
+  // 2) Lead confirmation — SMS. Consent is implied: the funnel's submit
+  //    is gated on the SMS-consent checkbox, so every lead consented.
+  //    No-ops until Twilio is configured.
+  if (input.phone) {
     await sendSms(
       input.phone,
       `Hey ${firstName(input.name)} — thanks for applying to ${PRODUCT_NAME}! ` +
