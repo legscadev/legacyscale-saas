@@ -66,10 +66,6 @@ export const OpportunityCard = forwardRef<HTMLDivElement, OpportunityCardProps>(
           className,
         )}
       >
-        {opportunity.qualified !== null ? (
-          <QualifiedBadge qualified={opportunity.qualified} />
-        ) : null}
-
         <div className="flex items-start justify-between gap-2">
           <p className="line-clamp-2 text-sm font-medium leading-snug">
             {opportunity.name}
@@ -130,48 +126,52 @@ export const OpportunityCard = forwardRef<HTMLDivElement, OpportunityCardProps>(
               </span>
             ) : null}
           </div>
-          {opportunity.assignedCloser ? (
-            <AvatarGroup
-              users={[
-                {
-                  name:
-                    opportunity.assignedCloser.name ??
-                    opportunity.assignedCloser.email,
-                  avatarUrl: opportunity.assignedCloser.avatarUrl,
-                },
-              ]}
-              size="sm"
-              max={1}
-            />
-          ) : null}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {opportunity.assignedCloser ? (
+              <AvatarGroup
+                users={[
+                  {
+                    name:
+                      opportunity.assignedCloser.name ??
+                      opportunity.assignedCloser.email,
+                    avatarUrl: opportunity.assignedCloser.avatarUrl,
+                  },
+                ]}
+                size="sm"
+                max={1}
+              />
+            ) : null}
+            {opportunity.qualified !== null ? (
+              <QualifiedIcon qualified={opportunity.qualified} />
+            ) : null}
+          </div>
         </div>
       </div>
     )
   },
 )
 
-/** Sticky qualified/unqualified pill. Driven by the deal's durable
- *  `qualified` flag (set at application completion), so it tracks the
- *  lead across every stage — not just the Qualified/Unqualified columns. */
-function QualifiedBadge({ qualified }: { qualified: boolean }) {
+/** Sticky qualified/unqualified symbol shown at the card's bottom-right.
+ *  Driven by the deal's durable `qualified` flag (set at application
+ *  completion), so it tracks the lead across every stage. Icon-only to
+ *  stay compact; the label lives in the tooltip / aria-label. */
+function QualifiedIcon({ qualified }: { qualified: boolean }) {
   return (
     <span
       aria-label={qualified ? 'Qualified lead' : 'Unqualified lead'}
       title={qualified ? 'Qualified' : 'Unqualified'}
       className={cn(
-        'inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5',
-        'text-[10px] font-semibold uppercase tracking-wide',
+        'inline-flex shrink-0 items-center justify-center',
         qualified
-          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
-          : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
+          ? 'text-emerald-600 dark:text-emerald-400'
+          : 'text-amber-500 dark:text-amber-400',
       )}
     >
       {qualified ? (
-        <BadgeCheck className="size-3" aria-hidden />
+        <BadgeCheck className="size-4" aria-hidden />
       ) : (
-        <BadgeX className="size-3" aria-hidden />
+        <BadgeX className="size-4" aria-hidden />
       )}
-      {qualified ? 'Qualified' : 'Unqualified'}
     </span>
   )
 }
