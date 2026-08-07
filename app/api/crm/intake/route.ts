@@ -131,6 +131,7 @@ async function promoteOpportunity(args: {
   stageName?: string
   notes: string
   campaign?: string
+  qualified?: boolean
 }): Promise<{
   contactId: string | null
   opportunityId: string
@@ -151,6 +152,9 @@ async function promoteOpportunity(args: {
       stageId: stage.id,
       probability: stage.probability,
       notes: args.notes || null,
+      // Stamp the qualification captured at completion, so the badge
+      // sticks to the card through every later stage.
+      ...(args.qualified !== undefined ? { qualified: args.qualified } : {}),
     },
   })
   if (opp.contactId) {
@@ -252,6 +256,7 @@ export async function POST(req: Request) {
           stageName: input.stage,
           notes,
           campaign: input.campaign,
+          qualified: input.qualified,
         })
         if (promoted) return promoted
       }
@@ -320,6 +325,7 @@ export async function POST(req: Request) {
           probability: stage.probability,
           source,
           notes: notes || null,
+          qualified: input.qualified ?? null,
           companyId,
         },
         select: { id: true },

@@ -6,6 +6,8 @@
 
 import { forwardRef } from 'react'
 import {
+  BadgeCheck,
+  BadgeX,
   Building2,
   CalendarDays,
   CheckSquare,
@@ -64,6 +66,10 @@ export const OpportunityCard = forwardRef<HTMLDivElement, OpportunityCardProps>(
           className,
         )}
       >
+        {opportunity.qualified !== null ? (
+          <QualifiedBadge qualified={opportunity.qualified} />
+        ) : null}
+
         <div className="flex items-start justify-between gap-2">
           <p className="line-clamp-2 text-sm font-medium leading-snug">
             {opportunity.name}
@@ -143,6 +149,32 @@ export const OpportunityCard = forwardRef<HTMLDivElement, OpportunityCardProps>(
     )
   },
 )
+
+/** Sticky qualified/unqualified pill. Driven by the deal's durable
+ *  `qualified` flag (set at application completion), so it tracks the
+ *  lead across every stage — not just the Qualified/Unqualified columns. */
+function QualifiedBadge({ qualified }: { qualified: boolean }) {
+  return (
+    <span
+      aria-label={qualified ? 'Qualified lead' : 'Unqualified lead'}
+      title={qualified ? 'Qualified' : 'Unqualified'}
+      className={cn(
+        'inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5',
+        'text-[10px] font-semibold uppercase tracking-wide',
+        qualified
+          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+          : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
+      )}
+    >
+      {qualified ? (
+        <BadgeCheck className="size-3" aria-hidden />
+      ) : (
+        <BadgeX className="size-3" aria-hidden />
+      )}
+      {qualified ? 'Qualified' : 'Unqualified'}
+    </span>
+  )
+}
 
 /** Icon + numeric badge shown only when count > 0 — keeps the card
  *  tidy for brand-new deals that have no activity yet. */
